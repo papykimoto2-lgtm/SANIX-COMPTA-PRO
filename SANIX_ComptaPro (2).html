@@ -1,0 +1,2006 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1C1C2E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ComptaPro">
+<link rel="manifest" href='data:application/manifest+json,{"name":"SANIX ComptaPro","short_name":"ComptaPro","start_url":".","display":"standalone","background_color":"%231C1C2E","theme_color":"%23B87333","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231C1C2E%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22%23B87333%22 text-anchor=%22middle%22%3ESX%3C/text%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml"}]}'>
+<meta name="theme-color" content="#1C1C2E">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ComptaPro">
+<link rel="manifest" href='data:application/manifest+json,{"name":"SANIX ComptaPro","short_name":"ComptaPro","start_url":".","display":"standalone","background_color":"%231C1C2E","theme_color":"%23B87333","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231C1C2E%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22%23B87333%22 text-anchor=%22middle%22%3ESX%3C/text%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml"}]}'>
+<title>SANIX ComptaPro — Expertise comptable SYSCOHADA</title>
+<style>
+:root{
+  --cuivre:#B87333; --cuivre-d:#9c5f28; --cuivre-l:#e8c9a8;
+  --noir:#1C1C2E; --noir-2:#26263a; --noir-3:#32324a;
+  --bg:#f4f5f8; --card:#ffffff; --line:#e3e6ee; --txt:#1f2233;
+  --mut:#6c7086; --green:#1a8a5a; --red:#c0392b; --blue:#2c6fb5;
+  --amber:#c98a10; --radius:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Segoe UI',system-ui,-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--txt);font-size:14px;-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+button{font-family:inherit;cursor:pointer;border:none}
+input,select,textarea{font-family:inherit;font-size:14px}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#c3c8d6;border-radius:6px}
+
+/* ---------- LOGIN ---------- */
+#login{position:fixed;inset:0;background:linear-gradient(135deg,var(--noir),#101020);display:flex;align-items:center;justify-content:center;z-index:100}
+.lcard{background:var(--card);width:380px;max-width:92vw;border-radius:16px;padding:34px 30px;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.logo{width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,var(--cuivre),var(--cuivre-d));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:20px;letter-spacing:-1px}
+.brand h1{font-size:19px;letter-spacing:-.4px}.brand span{color:var(--cuivre)}
+.tag{color:var(--mut);font-size:12px;margin-bottom:22px}
+.fld{margin-bottom:14px}.fld label{display:block;font-size:12px;color:var(--mut);margin-bottom:5px;font-weight:600}
+.fld input,.fld select{width:100%;padding:11px 12px;border:1.5px solid var(--line);border-radius:9px;outline:none;transition:.15s}
+.fld input:focus,.fld select:focus{border-color:var(--cuivre)}
+.btn{background:var(--cuivre);color:#fff;padding:11px 16px;border-radius:9px;font-weight:700;font-size:14px;transition:.15s}
+.btn:hover{background:var(--cuivre-d)}.btn.full{width:100%}
+.btn.gh{background:transparent;color:var(--cuivre);border:1.5px solid var(--cuivre)}
+.btn.gh:hover{background:#fbf3ea}
+.btn.sm{padding:7px 12px;font-size:12.5px;border-radius:8px}
+.btn.dark{background:var(--noir-2)}.btn.dark:hover{background:var(--noir-3)}
+.err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:16px}
+
+/* ---------- LAYOUT ---------- */
+#app{display:none;height:100vh}
+.shell{display:flex;height:100vh}
+.side{width:236px;background:var(--noir);color:#c9ccdb;display:flex;flex-direction:column;flex-shrink:0}
+.side .top{padding:16px 16px 12px;border-bottom:1px solid #2c2c42}
+.side .brand h1{font-size:16px;color:#fff}.side .tag{margin:0;font-size:10.5px}
+.exbar{padding:9px 16px;font-size:11px;color:#8a8ea6;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2c2c42}
+.exbar b{color:var(--cuivre-l)}
+.nav{flex:1;overflow-y:auto;padding:8px 0}
+.nav .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#5c6079;padding:12px 18px 5px;font-weight:700}
+.nav a{display:flex;align-items:center;gap:10px;padding:9px 18px;color:#c2c6d6;font-size:13.5px;text-decoration:none;border-left:3px solid transparent;transition:.12s}
+.nav a:hover{background:#23233a;color:#fff}
+.nav a.on{background:#23233a;color:#fff;border-left-color:var(--cuivre)}
+.nav a .ic{width:18px;text-align:center;opacity:.85}
+.side .foot{padding:12px 16px;border-top:1px solid #2c2c42;font-size:11.5px;color:#8a8ea6;display:flex;justify-content:space-between;align-items:center}
+.side .foot b{color:#fff;font-weight:600}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.hd{height:56px;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px;flex-shrink:0}
+.hd h2{font-size:17px;font-weight:700;letter-spacing:-.3px}
+.hd .sub{color:var(--mut);font-size:12px}
+.hd .r{display:flex;gap:8px;align-items:center}
+.content{flex:1;overflow-y:auto;padding:22px}
+.page{display:none}.page.on{display:block;animation:fade .2s}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* ---------- CARDS / KPI ---------- */
+.grid{display:grid;gap:14px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.kpi{position:relative;overflow:hidden}
+.kpi .lb{font-size:12px;color:var(--mut);font-weight:600}
+.kpi .v{font-size:24px;font-weight:800;letter-spacing:-.6px;margin-top:6px}
+.kpi .f{font-size:11.5px;color:var(--mut);margin-top:3px}
+.kpi::after{content:"";position:absolute;right:-14px;top:-14px;width:56px;height:56px;border-radius:14px;opacity:.10;background:var(--cuivre)}
+.kpi.g .v{color:var(--green)}.kpi.r .v{color:var(--red)}.kpi.b .v{color:var(--blue)}.kpi.o .v{color:var(--cuivre)}
+.sect-h{display:flex;justify-content:space-between;align-items:center;margin:18px 0 12px}
+.sect-h h3{font-size:15px;font-weight:700}
+.two{grid-template-columns:1.4fr 1fr}
+@media(max-width:900px){.two{grid-template-columns:1fr}}
+
+/* ---------- TABLES ---------- */
+.tbl-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+table{width:100%;border-collapse:collapse}
+th{background:#fafbfd;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);padding:10px 12px;border-bottom:1.5px solid var(--line);font-weight:700;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid #eef0f5;font-size:13px}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fbfcfe}
+.ta-r{text-align:right}.ta-c{text-align:center}
+.mono{font-variant-numeric:tabular-nums}
+.pos{color:var(--green);font-weight:600}.neg{color:var(--red);font-weight:600}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.b-cuivre{background:#fbeede;color:var(--cuivre-d)}.b-green{background:#e2f4ec;color:var(--green)}
+.b-red{background:#fbe6e3;color:var(--red)}.b-gray{background:#eef0f5;color:var(--mut)}.b-blue{background:#e5eff9;color:var(--blue)}
+.foot-tr td{background:var(--noir);color:#fff;font-weight:700;border:none}
+.foot-tr td.pos{color:#7be0af}.foot-tr td.neg{color:#ff9a8f}
+
+/* ---------- FORMS / TOOLBAR ---------- */
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.toolbar input,.toolbar select{padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;outline:none}
+.toolbar input:focus,.toolbar select:focus{border-color:var(--cuivre)}
+.search{flex:1;min-width:160px}
+.frow{display:grid;gap:12px;margin-bottom:12px}
+.frow.c2{grid-template-columns:1fr 1fr}.frow.c3{grid-template-columns:1fr 1fr 1fr}
+.frow label{display:block;font-size:12px;color:var(--mut);font-weight:600;margin-bottom:5px}
+.frow input,.frow select,.frow textarea{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:8px;outline:none}
+.frow input:focus,.frow select:focus,.frow textarea:focus{border-color:var(--cuivre)}
+
+/* ---------- MODAL ---------- */
+.ov{position:fixed;inset:0;background:rgba(15,15,25,.55);display:none;align-items:flex-start;justify-content:center;z-index:60;padding:34px 16px;overflow-y:auto}
+.ov.on{display:flex}
+.modal{background:var(--card);border-radius:14px;width:760px;max-width:96vw;box-shadow:0 30px 80px rgba(0,0,0,.35)}
+.modal.wide{width:960px}
+.mh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.mh h3{font-size:16px}.mh .x{background:none;font-size:22px;color:var(--mut);line-height:1}
+.mb{padding:20px}
+.mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px}
+
+/* écriture lines */
+.lines th{font-size:10.5px}
+.lines td{padding:5px 6px}
+.lines input,.lines select{width:100%;padding:7px 8px;border:1px solid var(--line);border-radius:6px;outline:none}
+.lines input:focus,.lines select:focus{border-color:var(--cuivre)}
+.lines .amt{text-align:right;font-variant-numeric:tabular-nums}
+.balbar{display:flex;gap:18px;justify-content:flex-end;align-items:center;padding:10px 0;font-size:13px}
+.balbar b{font-variant-numeric:tabular-nums}
+.chip{padding:3px 10px;border-radius:20px;font-weight:700;font-size:12px}
+.chip.ok{background:#e2f4ec;color:var(--green)}.chip.no{background:#fbe6e3;color:var(--red)}
+
+.empty{text-align:center;padding:46px 20px;color:var(--mut)}
+.empty .ic{font-size:34px;opacity:.35;margin-bottom:8px}
+.toast{position:fixed;bottom:20px;right:20px;background:var(--noir);color:#fff;padding:12px 18px;border-radius:10px;font-size:13.5px;z-index:200;box-shadow:0 10px 30px rgba(0,0,0,.3);display:none;border-left:3px solid var(--cuivre)}
+.pill{cursor:pointer}
+.linkbtn{background:none;color:var(--cuivre);font-weight:600;font-size:12.5px;padding:2px 4px}
+@media print{.side,.hd,.toolbar,.no-print{display:none!important}.content{padding:0}.main{overflow:visible}.page{display:block!important}.page:not(.on){display:none!important}body{background:#fff}}
+.burger{display:none;background:none;font-size:22px;color:var(--noir);padding:4px 10px 4px 0;line-height:1}
+.nav-backdrop{display:none;position:fixed;inset:0;background:rgba(10,10,20,.5);z-index:39}
+@media(max-width:820px){
+  .side{position:fixed;left:0;top:0;bottom:0;z-index:40;transform:translateX(-100%);transition:transform .25s ease;box-shadow:0 0 40px rgba(0,0,0,.4)}
+  .shell.navopen .side{transform:none}
+  .shell.navopen .nav-backdrop{display:block}
+  .burger{display:block}
+  .hd{padding:0 14px;gap:8px}
+  .hd h2{font-size:15px}.hd .sub{display:none}
+  .hdt{flex:1;min-width:0}.hd h2{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .content{padding:14px 12px}
+  #pgActions{gap:6px}#pgActions .btn.sm{padding:7px 9px;font-size:11.5px}
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpi .v{font-size:19px}
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table{min-width:520px}
+  .two{grid-template-columns:1fr}
+  .toolbar{gap:6px}.toolbar .search{min-width:120px}
+  .modal,.modal.wide{width:100%;max-width:100%;min-height:100vh;border-radius:0}
+  .ov{padding:0}
+  .mb{padding:14px}
+  .frow.c2,.frow.c3{grid-template-columns:1fr}
+  .lines table{min-width:460px}
+  .budget-tot .v{font-size:20px}
+}
+@media(max-width:420px){.kpis{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <div class="lcard">
+    <div class="brand"><div class="logo">SX</div><div><h1>SANIX <span>ComptaPro</span></h1></div></div>
+    <div class="tag">Progiciel d'expertise comptable · SYSCOHADA révisé · FCFA</div>
+    <div class="fld"><label>Identifiant</label><input id="lu" value="KESSIE" autocomplete="off"></div>
+    <div class="fld"><label>Mot de passe</label><input id="lp" type="password" value="Azerty@2026"></div>
+    <button class="btn full" onclick="doLogin()">Se connecter</button>
+    <div class="err" id="lerr"></div>
+    <div class="tag" style="margin-top:14px;margin-bottom:0">Démo : KESSIE / Azerty@2026 · Comptable : COMPTA / compta</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app"><div class="shell">
+  <div class="nav-backdrop" id="navBack" onclick="toggleNav()"></div>
+  <aside class="side">
+    <div class="top"><div class="brand"><div class="logo">SX</div><div><h1>ComptaPro</h1><div class="tag">SYSCOHADA · FCFA</div></div></div></div>
+    <div class="exbar"><span>Exercice</span><b id="exLabel">—</b></div>
+    <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span></div>
+    <nav class="nav" id="nav">
+      <div class="grp">Pilotage</div>
+      <a data-p="dash" class="on"><span class="ic">▚</span>Tableau de bord</a>
+      <a data-p="analyse360"><span class="ic">◎</span>Analyse 360°</a>
+      <div class="grp">Saisie</div>
+      <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
+      <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
+      <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
+      <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
+      <a data-p="lettrage"><span class="ic">⇄</span>Lettrage</a>
+      <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
+      <div class="grp">États comptables</div>
+      <a data-p="grandlivre"><span class="ic">≣</span>Grand livre</a>
+      <a data-p="balance"><span class="ic">⚖</span>Balance générale</a>
+      <a data-p="resultat"><span class="ic">∑</span>Compte de résultat</a>
+      <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
+      <a data-p="flux"><span class="ic">≈</span>Flux de trésorerie</a>
+      <a data-p="annexes"><span class="ic">▣</span>Notes annexes</a>
+      <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
+      <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
+      <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
+      <div class="grp">Paramètres</div>
+      <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
+      <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture</a>
+      <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
+    </nav>
+    <div class="foot"><span>Connecté <b id="who">—</b></span><button class="linkbtn" onclick="logout()">Quitter</button></div>
+  </aside>
+
+  <main class="main">
+    <div class="hd">
+      <button class="burger" onclick="toggleNav()" aria-label="Menu">☰</button>
+      <div class="hdt"><h2 id="pgTitle">Tableau de bord</h2><div class="sub" id="pgSub">Vue d'ensemble de l'exercice</div></div>
+      <input id="globalSearch" placeholder="🔍 Rechercher…" oninput="globalSearch(this.value)" onfocus="globalSearch(this.value)" style="max-width:220px;margin-right:10px" autocomplete="off">
+      <div id="searchPop" style="display:none;position:absolute;top:54px;right:16px;width:min(420px,90vw);max-height:60vh;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.18);z-index:50"></div>
+      <div class="r" id="pgActions"></div>
+    </div>
+    <div class="content">
+      <div class="page on" id="p-dash"></div>
+      <div class="page" id="p-analyse360"></div>
+      <div class="page" id="p-ecritures"></div>
+      <div class="page" id="p-facturation"></div>
+      <div class="page" id="p-tiers"></div>
+      <div class="page" id="p-tierscompta"></div>
+      <div class="page" id="p-lettrage"></div>
+      <div class="page" id="p-rappro"></div>
+      <div class="page" id="p-grandlivre"></div>
+      <div class="page" id="p-balance"></div>
+      <div class="page" id="p-resultat"></div>
+      <div class="page" id="p-bilan"></div>
+      <div class="page" id="p-flux"></div>
+      <div class="page" id="p-annexes"></div>
+      <div class="page" id="p-ged"></div>
+      <div class="page" id="p-tva"></div>
+      <div class="page" id="p-teledec"></div>
+      <div class="page" id="p-plan"></div>
+      <div class="page" id="p-immo"></div>
+      <div class="page" id="p-analytique"></div>
+      <div class="page" id="p-budget"></div>
+      <div class="page" id="p-exercices"></div>
+      <div class="page" id="p-parametrage"></div>
+    </div>
+  </main>
+</div></div>
+
+<div class="ov" id="ov"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
+   Stockage IndexedDB · offline-first
+============================================================ */
+const DB_NAME='sanix_comptapro', DB_VER=3;
+let DB=null;
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','users','meta'];
+
+function idb(){return new Promise((res,rej)=>{
+  const r=indexedDB.open(DB_NAME,DB_VER);
+  r.onupgradeneeded=e=>{const d=e.target.result;
+    STORES.forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});});};
+  r.onsuccess=e=>{DB=e.target.result;res(DB);};
+  r.onerror=e=>rej(e);
+});}
+function tx(store,mode='readonly'){return DB.transaction(store,mode).objectStore(store);}
+function put(store,obj){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(obj);r.onsuccess=()=>res(obj);r.onerror=rej;});}
+function del(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(id);r.onsuccess=res;r.onerror=rej;});}
+function all(store){return new Promise((res,rej)=>{const r=tx(store).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=rej;});}
+function getOne(store,id){return new Promise((res,rej)=>{const r=tx(store).get(id);r.onsuccess=()=>res(r.result);r.onerror=rej;});}
+const uid=(p='id')=>p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---- état ---- */
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],immos:[],centres:[],budgets:[],pieces:[],users:[],user:null,exId:null};
+
+/* ---- format ---- */
+const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
+const F0=n=>Math.round(n||0).toLocaleString('fr-FR').replace(/\u202f/g,' ');
+const dfr=d=>{if(!d)return'';const[y,m,j]=d.split('-');return j+'/'+m+'/'+y;};
+const today=()=>new Date().toISOString().slice(0,10);
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2600);}
+
+/* ---- plan comptable SYSCOHADA (noyau) ---- */
+const PLAN=[
+  // Classe 1 — ressources durables
+  ['101','Capital social','P'],['106','Réserves','P'],['110','Report à nouveau','P'],['120','Résultat net de l\'exercice','P'],
+  ['131','Subventions d\'équipement','P'],['162','Emprunts établissements de crédit','P'],['165','Dépôts et cautionnements reçus','P'],
+  // Classe 2 — actif immobilisé
+  ['211','Terrains','A'],['213','Bâtiments','A'],['2181','Matériel de bureau','A'],['2182','Matériel informatique','A'],
+  ['2441','Matériel et outillage','A'],['245','Matériel de transport','A'],['2813','Amort. bâtiments','A'],['2818','Amort. matériel','A'],
+  // Classe 3 — stocks
+  ['311','Marchandises','A'],['321','Matières premières','A'],['331','Produits en cours','A'],['371','Stocks marchandises','A'],
+  // Classe 4 — tiers
+  ['401','Fournisseurs','P'],['4011','Fournisseurs — achats de biens','P'],['409','Fournisseurs débiteurs (avances)','A'],
+  ['411','Clients','A'],['4111','Clients — ventes de biens','A'],['419','Clients créditeurs (avances)','P'],
+  ['421','Personnel — rémunérations dues','P'],['431','CNPS','P'],['4471','Impôts sur salaires (ITS)','P'],
+  ['4431','TVA facturée (collectée)','P'],['4452','TVA récupérable / déductible','A'],['4441','État — impôt BIC','P'],['447','État — autres impôts','P'],['4499','État — AIB acompte BIC','P'],
+  // Classe 5 — trésorerie
+  ['521','Banque','A'],['5211','Banque — compte principal','A'],['531','Chèques postaux','A'],['571','Caisse','A'],['5711','Caisse centrale','A'],
+  // Classe 6 — charges
+  ['601','Achats de marchandises','C'],['602','Achats matières premières','C'],['605','Autres achats (eau, énergie)','C'],
+  ['6055','Fournitures d\'entretien','C'],['611','Transports','C'],['622','Locations','C'],['624','Entretien et réparations','C'],
+  ['625','Primes d\'assurance','C'],['627','Publicité et communication','C'],['6312','Frais bancaires','C'],
+  ['641','Impôts et taxes','C'],['661','Rémunérations du personnel','C'],['664','Charges sociales','C'],['681','Dotations aux amortissements','C'],
+  // Classe 7 — produits
+  ['701','Ventes de marchandises','R'],['702','Ventes de produits finis','R'],['706','Services vendus','R'],
+  ['707','Produits accessoires','R'],['771','Produits financiers','R'],['775','Produits de cessions','R'],
+];
+const CLASS_LABEL={'1':'Ressources durables','2':'Actif immobilisé','3':'Stocks','4':'Tiers','5':'Trésorerie','6':'Charges','7':'Produits','8':'Autres'};
+
+/* journaux */
+const JX=[['AC','Achats'],['VT','Ventes'],['BQ','Banque'],['CA','Caisse'],['OD','Opérations diverses'],['AN','À-nouveaux']];
+
+/* ============ SEED ============ */
+async function seed(){
+  const metaSeed=await getOne('meta','seeded');
+  if(metaSeed)return;
+  for(const[num,lib,t]of PLAN)await put('comptes',{id:'c_'+num,numero:num,libelle:lib,type:t,classe:num[0]});
+  for(const[code,lib]of JX)await put('journaux',{id:'j_'+code,code,libelle:lib});
+  const ex={id:uid('ex'),libelle:'Exercice 2026',debut:'2026-01-01',fin:'2026-12-31',statut:'ouvert'};
+  await put('exercices',ex);
+  await put('meta',{id:'exCourant',value:ex.id});
+  // tiers démo
+  const cl={id:uid('t'),type:'client',nom:'ETS KOUAME NEGOCE','compte':'4111'+'001',tel:'+225 07 00 00 00 01'};
+  const fo={id:uid('t'),type:'fournisseur',nom:'SGMT SARL',compte:'4011'+'001',tel:'+225 27 00 00 00 02'};
+  await put('tiers',cl);await put('tiers',fo);
+  await put('comptes',{id:'c_'+cl.compte,numero:cl.compte,libelle:'Client — '+cl.nom,type:'A',classe:'4',aux:cl.id});
+  await put('comptes',{id:'c_'+fo.compte,numero:fo.compte,libelle:'Fournisseur — '+fo.nom,type:'P',classe:'4',aux:fo.id});
+  // écritures démo (équilibrées)
+  const jVT='j_VT',jAC='j_AC',jBQ='j_BQ';
+  const mkE=(jr,date,lib,lines)=>({id:uid('e'),exId:ex.id,journal:jr,date,piece:lib,libelle:lib,lignes:lines,created:Date.now()});
+  await put('ecritures',mkE('VT','2026-01-15','Facture V001 — '+cl.nom,[
+    {compte:cl.compte,tiers:cl.id,libelle:'Client',debit:2360000,credit:0,lettre:''},
+    {compte:'701',libelle:'Ventes',debit:0,credit:2000000,lettre:''},
+    {compte:'4431',libelle:'TVA 18%',debit:0,credit:360000,lettre:''}]));
+  await put('ecritures',mkE('AC','2026-01-18','Facture A012 — '+fo.nom,[
+    {compte:'602',libelle:'Achat matières',debit:1200000,credit:0,lettre:''},
+    {compte:'4452',libelle:'TVA déductible',debit:216000,credit:0,lettre:''},
+    {compte:fo.compte,tiers:fo.id,libelle:'Fournisseur',debit:0,credit:1416000,lettre:''}]));
+  await put('ecritures',mkE('BQ','2026-01-25','Règlement client '+cl.nom,[
+    {compte:'5211',libelle:'Banque',debit:2360000,credit:0,lettre:''},
+    {compte:cl.compte,tiers:cl.id,libelle:'Client',debit:0,credit:2360000,lettre:''}]));
+  await put('ecritures',mkE('BQ','2026-02-02','Paiement fournisseur '+fo.nom,[
+    {compte:fo.compte,tiers:fo.id,libelle:'Fournisseur',debit:1416000,credit:0,lettre:''},
+    {compte:'5211',libelle:'Banque',debit:0,credit:1416000,lettre:''}]));
+  await put('ecritures',mkE('BQ','2026-02-10','Frais bancaires',[
+    {compte:'6312',libelle:'Frais',debit:35000,credit:0,lettre:''},
+    {compte:'5211',libelle:'Banque',debit:0,credit:35000,lettre:''}]));
+  await put('meta',{id:'seeded',value:true});
+}
+
+/* ============ CHARGEMENT ============ */
+async function loadAll(){
+  if(!(await getOne('comptes','c_4499')))await put('comptes',{id:'c_4499',numero:'4499',libelle:'État — AIB acompte BIC',type:'P',classe:'4'});
+  ST.comptes=(await all('comptes')).sort((a,b)=>a.numero.localeCompare(b.numero));
+  ST.tiers=await all('tiers');
+  ST.exercices=await all('exercices');
+  ST.journaux=await all('journaux');
+  ST.users=await all('users');
+  ST.immos=await all('immos');
+  ST.centres=await all('centres');
+  ST.budgets=await all('budgets');
+  ST.pieces=await all('pieces');
+  const cur=await getOne('meta','exCourant');
+  ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
+  ST.ecritures=(await all('ecritures')).filter(e=>e.exId===ST.exId).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
+  ST.factures=(await all('factures')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
+}
+const curEx=()=>ST.exercices.find(e=>e.id===ST.exId)||{};
+const cptLib=num=>{const c=ST.comptes.find(x=>x.numero===num);return c?c.libelle:'';};
+const jLib=id=>{const j=ST.journaux.find(x=>x.id===id||x.code===id);return j?j.code:id;};
+
+/* ---- moteur: mouvements par compte ---- */
+function mouvements(filterFn){
+  const rows=[];
+  ST.ecritures.forEach(e=>e.lignes.forEach((l,i)=>{
+    if(filterFn&&!filterFn(e,l))return;
+    rows.push({eid:e.id,li:i,date:e.date,journal:jLib(e.journal),piece:e.piece||'',libelle:l.libelle||e.libelle,
+      compte:l.compte,tiers:l.tiers,debit:+l.debit||0,credit:+l.credit||0,lettre:l.lettre||'',centre:l.centre||''});
+  }));
+  return rows;
+}
+function soldesParCompte(){
+  const m={};
+  mouvements().forEach(r=>{if(!m[r.compte])m[r.compte]={debit:0,credit:0};m[r.compte].debit+=r.debit;m[r.compte].credit+=r.credit;});
+  return m;
+}
+const classeSolde=cl=>{const m=soldesParCompte();let s=0;for(const n in m)if(n[0]===cl)s+=m[n].debit-m[n].credit;return s;};
+
+/* ============ AUTH ============ */
+const ROLES={
+  'Administrateur':{lb:'Accès complet',perm:'all'},
+  'Manager':{lb:'Lecture + validation, hors paramètres',perm:'manage'},
+  'Comptable':{lb:'Saisie et états, hors paramètres',perm:'write'},
+  'Lecture seule':{lb:'Consultation uniquement',perm:'read'}
+};
+function hashPwd(p){let h=5381;for(const c of p)h=((h<<5)+h+c.charCodeAt(0))>>>0;return 'h'+h.toString(36);}
+async function seedUsers(){
+  const u=await all('users');if(u.length)return;
+  await put('users',{id:'u_admin',login:'KESSIE',hash:hashPwd('Azerty@2026'),role:'Administrateur'});
+  await put('users',{id:'u_compta',login:'COMPTA',hash:hashPwd('compta'),role:'Comptable'});
+}
+const can=p=>{const r=ROLES[ST.user?.role];if(!r)return false;if(r.perm==='all')return true;
+  if(p==='admin')return false;if(p==='write')return r.perm==='write'||r.perm==='manage';if(p==='read')return true;return false;};
+async function doLogin(){
+  const u=document.getElementById('lu').value.trim().toUpperCase(),p=document.getElementById('lp').value;
+  await idb();await seedUsers();
+  const usr=(await all('users')).find(x=>x.login.toUpperCase()===u);
+  if(usr&&usr.hash===hashPwd(p)){ST.user={login:usr.login,role:usr.role};document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';await boot();}
+  else document.getElementById('lerr').textContent='Identifiants incorrects.';
+}
+function logout(){location.reload();}
+
+async function boot(){
+  await idb();await seed();await seedUsers();await loadAll();
+  document.getElementById('who').textContent=ST.user.login+' · '+ST.user.role;
+  document.getElementById('exLabel').textContent=curEx().libelle||'—';
+  // masquer Paramétrage hors admin
+  const pa=document.querySelector('#nav a[data-p="parametrage"]');if(pa)pa.style.display=can('admin')?'':'none';
+  window._autosync=(await getOne('meta','autosync'))?.value||false;
+  const ls=await getOne('meta','lastSync');window._lastSync=ls?ls.value:'';
+  updateNetBadge();startAutosync();
+  if(typeof window!=='undefined'){window.addEventListener('online',()=>{updateNetBadge();syncNow(true);});window.addEventListener('offline',updateNetBadge);}
+  bindNav();go('dash');
+}
+
+/* ============ NAV ============ */
+const TITLES={dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],ecritures:['Écritures / Journaux','Saisie en partie double'],
+facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
+tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
+tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
+rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
+balance:['Balance générale','Débit / Crédit / Solde'],resultat:['Compte de résultat','Charges & produits — SYSCOHADA'],
+bilan:['Bilan','Actif / Passif au ' ],flux:['Flux de trésorerie','Tableau des flux (TFT SYSCOHADA)'],annexes:['Notes annexes','États annexés SYSCOHADA'],ged:['Pièces & GED','Justificatifs numérisés · archivage'],tva:['Déclaration TVA','TVA collectée / déductible'],
+teledec:['Télédéclarations','Fiscal (DGI) & social (CNPS) — e-procédures'],
+plan:['Plan comptable','SYSCOHADA révisé'],immo:['Immobilisations','Amortissements · cessions · plan'],analytique:['Comptabilité analytique','Centres de coûts · axes · répartition'],budget:['Budget & réalisé','Prévisionnel · réalisé · écarts'],exercices:['Exercices & clôture','Gestion des périodes'],
+parametrage:['Paramétrage','Société · rôles · stockage · import']};
+function bindNav(){document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{go(a.dataset.p);closeNav();});}
+function toggleNav(){document.querySelector('.shell').classList.toggle('navopen');}
+function closeNav(){document.querySelector('.shell').classList.remove('navopen');}
+function go(p){
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
+  document.getElementById('p-'+p).classList.add('on');
+  const t=TITLES[p];document.getElementById('pgTitle').textContent=t[0];
+  document.getElementById('pgSub').textContent=t[1]+(p==='bilan'?dfr(curEx().fin):'');
+  document.getElementById('pgActions').innerHTML='';
+  RENDER[p]&&RENDER[p]();
+}
+
+/* ============ MODAL ============ */
+function openModal(html,wide){document.getElementById('modal').className='modal'+(wide?' wide':'');document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('on');}
+function closeModal(){document.getElementById('ov').classList.remove('on');}
+document.getElementById('ov').onclick=e=>{if(e.target.id==='ov')closeModal();};
+
+/* ============ RENDER ============ */
+const RENDER={};
+
+/* ---- Analyse 360° (pilotage financier) ---- */
+/* ---- BI : agrégats mensuels + graphiques SVG natifs (offline) ---- */
+function monthlyAgg(){
+  const map={};
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{const ym=(e.date||'').slice(0,7);if(!ym)return;
+    if(!map[ym])map[ym]={ca:0,charges:0,tres:0};
+    const c=l.compte;const d=+l.debit||0,cr=+l.credit||0;
+    if(c[0]==='7')map[ym].ca+=cr-d;
+    if(c[0]==='6')map[ym].charges+=d-cr;
+    if(c[0]==='5')map[ym].tres+=d-cr;
+  }));
+  const yms=Object.keys(map).sort();let cum=0;
+  return yms.map(ym=>{cum+=map[ym].tres;return{ym,ca:map[ym].ca,charges:map[ym].charges,resultat:map[ym].ca-map[ym].charges,treso:cum};});
+}
+const moisCourt=ym=>{const[y,m]=ym.split('-');return['','jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'][+m]+' '+y.slice(2);};
+function svgLineChart(data,series,opts={}){
+  const W=opts.w||520,H=opts.h||200,pl=44,pr=12,pt=14,pb=26;const iw=W-pl-pr,ih=H-pt-pb;
+  if(!data.length)return`<div class="empty">Aucune donnée</div>`;
+  const all=[];series.forEach(s=>data.forEach(d=>all.push(d[s.key])));
+  let max=Math.max(...all,0),min=Math.min(...all,0);if(max===min)max=min+1;
+  const x=i=>pl+(data.length<=1?iw/2:iw*i/(data.length-1));
+  const y=v=>pt+ih-(v-min)/(max-min)*ih;
+  const grid=[0,.25,.5,.75,1].map(f=>{const v=min+(max-min)*f;const yy=pt+ih-f*ih;
+    return`<line x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}" stroke="#eef0f5"/><text x="${pl-6}" y="${yy+3}" text-anchor="end" font-size="8.5" fill="#9aa0b4">${F0(v)}</text>`;}).join('');
+  const xlab=data.map((d,i)=>`<text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="8.5" fill="#9aa0b4">${moisCourt(d.ym)}</text>`).join('');
+  const lines=series.map(s=>{const pts=data.map((d,i)=>`${x(i)},${y(d[s.key])}`).join(' ');
+    const dots=data.map((d,i)=>`<circle cx="${x(i)}" cy="${y(d[s.key])}" r="2.4" fill="${s.col}"/>`).join('');
+    return`<polyline points="${pts}" fill="none" stroke="${s.col}" stroke-width="2"/>${dots}`;}).join('');
+  const leg=series.map(s=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;margin-right:12px"><span style="width:10px;height:10px;border-radius:2px;background:${s.col}"></span>${s.lb}</span>`).join('');
+  return`<div style="display:flex;gap:10px;margin-bottom:6px;flex-wrap:wrap">${leg}</div><svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${grid}${lines}${xlab}</svg>`;
+}
+function svgBarChart(data,key,col,opts={}){
+  const W=opts.w||520,H=opts.h||190,pl=44,pr=12,pt=14,pb=26;const iw=W-pl-pr,ih=H-pt-pb;
+  if(!data.length)return`<div class="empty">Aucune donnée</div>`;
+  const vals=data.map(d=>d[key]);let max=Math.max(...vals,0),min=Math.min(...vals,0);if(max===min)max=min+1;
+  const bw=iw/data.length*0.6,gap=iw/data.length;
+  const zero=pt+ih-(0-min)/(max-min)*ih;
+  const bars=data.map((d,i)=>{const v=d[key];const yv=pt+ih-(v-min)/(max-min)*ih;const x=pl+gap*i+(gap-bw)/2;
+    const top=Math.min(yv,zero),h=Math.abs(zero-yv);
+    return`<rect x="${x}" y="${top}" width="${bw}" height="${Math.max(h,1)}" rx="2" fill="${v<0?'#c0392b':col}"/><text x="${x+bw/2}" y="${H-8}" text-anchor="middle" font-size="8.5" fill="#9aa0b4">${moisCourt(d.ym)}</text>`;}).join('');
+  const gl=[0,.5,1].map(f=>{const yy=pt+ih-f*ih;const v=min+(max-min)*f;return`<line x1="${pl}" y1="${yy}" x2="${W-pr}" y2="${yy}" stroke="#eef0f5"/><text x="${pl-6}" y="${yy+3}" text-anchor="end" font-size="8.5" fill="#9aa0b4">${F0(v)}</text>`;}).join('');
+  return`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${gl}<line x1="${pl}" y1="${zero}" x2="${W-pr}" y2="${zero}" stroke="#c3c8d6"/>${bars}</svg>`;
+}
+
+function agg360(){
+  const m=soldesParCompte();
+  const cl=c=>{let s=0;for(const n in m)if(n[0]===c)s+=m[n].debit-m[n].credit;return s;};
+  const pref=(p,sens)=>{let s=0;for(const n in m)if(n.startsWith(p))s+=sens==='d'?m[n].debit-m[n].credit:m[n].credit-m[n].debit;return s;};
+  const produits=-cl('7'),charges=cl('6'),resultat=produits-charges;
+  const treso=cl('5'),clients=pref('41','d'),fourn=pref('40','c'),stocks=cl('3');
+  const capitaux=-cl('1')+resultat;
+  const tvaColl=(m['4431']||{debit:0,credit:0});const tvaDed=(m['4452']||{debit:0,credit:0});
+  const tvaNette=(tvaColl.credit-tvaColl.debit)-(tvaDed.debit-tvaDed.credit);
+  const bfr=clients+stocks-fourn;
+  return{produits,charges,resultat,treso,clients,fourn,stocks,capitaux,tvaNette,bfr,
+    margeNette:produits?resultat/produits:0,ratioCharges:produits?charges/produits:0};
+}
+const pct=x=>(x*100).toFixed(1)+' %';
+function alertBox(niv,txt){const c={ok:['#e2f4ec','var(--green)','✓'],warn:['#fbf0d8','var(--amber)','!'],bad:['#fdf0ed','var(--red)','⚠']}[niv];
+  return`<div style="display:flex;gap:9px;align-items:center;background:${c[0]};border-radius:9px;padding:9px 12px;margin-bottom:7px;font-size:13px"><b style="color:${c[1]}">${c[2]}</b><span>${txt}</span></div>`;}
+RENDER.analyse360=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-analyse360','Analyse 360')">⎙ Imprimer</button>`;
+  const a=agg360();
+  const strat=[
+    a.margeNette>=0.1?['ok',`Marge nette saine : ${pct(a.margeNette)}`]:a.margeNette>=0?['warn',`Marge nette faible : ${pct(a.margeNette)}`]:['bad',`Perte : marge ${pct(a.margeNette)}`],
+    a.treso>=0?['ok',`Trésorerie positive : ${F(a.treso)}`]:['bad',`Trésorerie négative : ${F(a.treso)}`],
+    a.capitaux>=0?['ok',`Capitaux propres positifs : ${F(a.capitaux)}`]:['bad',`Capitaux propres négatifs`],
+  ];
+  const tac=[
+    a.ratioCharges<=0.85?['ok',`Charges maîtrisées : ${pct(a.ratioCharges)} du CA`]:['warn',`Charges élevées : ${pct(a.ratioCharges)} du CA`],
+    a.bfr<=a.treso?['ok','BFR couvert par la trésorerie']:['warn',`BFR ${F(a.bfr)} > trésorerie : tension`],
+    a.tvaNette>0?['warn',`TVA à reverser : ${F(a.tvaNette)}`]:['ok','Pas de TVA nette due'],
+  ];
+  // opérationnel : top clients débiteurs + échéances
+  const m=soldesParCompte();
+  const topClients=ST.tiers.filter(t=>t.type==='client').map(t=>{const s=m[t.compte]||{debit:0,credit:0};return{nom:t.nom,solde:s.debit-s.credit};}).filter(x=>x.solde>0).sort((a,b)=>b.solde-a.solde).slice(0,5);
+  const op=[
+    a.clients>0?['warn',`Créances clients à recouvrer : ${F(a.clients)}`]:['ok','Aucune créance en cours'],
+    a.fourn>0?['warn',`Dettes fournisseurs à régler : ${F(a.fourn)}`]:['ok','Aucune dette fournisseur'],
+  ];
+  document.getElementById('p-analyse360').innerHTML=`
+  <div class="grid kpis">
+    <div class="card kpi o"><div class="lb">Chiffre d'affaires</div><div class="v mono">${F(a.produits)}</div></div>
+    <div class="card kpi ${a.resultat>=0?'g':'r'}"><div class="lb">Résultat net</div><div class="v mono">${F(a.resultat)}</div><div class="f">Marge ${pct(a.margeNette)}</div></div>
+    <div class="card kpi b"><div class="lb">Trésorerie</div><div class="v mono">${F(a.treso)}</div></div>
+    <div class="card kpi o"><div class="lb">BFR</div><div class="v mono">${F(a.bfr)}</div><div class="f">Créances + stocks − dettes</div></div>
+  </div>
+  <div class="card"><div class="sect-h" style="margin-top:0"><h3>Évolution CA · charges · résultat</h3></div>${svgLineChart(monthlyAgg(),[{key:'ca',col:'#B87333',lb:'CA'},{key:'charges',col:'#c0392b',lb:'Charges'},{key:'resultat',col:'#1a8a5a',lb:'Résultat'}],{h:210})}</div>
+  <div class="grid two">
+    <div class="card"><h3 style="margin-top:0;color:var(--blue)">◆ Stratégique — le cap</h3>${strat.map(x=>alertBox(x[0],x[1])).join('')}
+      <div style="font-size:12px;color:var(--mut);margin-top:6px">Rentabilité · solidité · pérennité</div></div>
+    <div class="card"><h3 style="margin-top:0;color:var(--cuivre-d)">◆ Tactique — les moyens</h3>${tac.map(x=>alertBox(x[0],x[1])).join('')}
+      <div style="font-size:12px;color:var(--mut);margin-top:6px">Charges · BFR · fiscalité</div></div>
+  </div>
+  <div class="card"><h3 style="color:var(--green)">◆ Opérationnel — le terrain</h3>
+    ${op.map(x=>alertBox(x[0],x[1])).join('')}
+    <div style="font-size:12px;font-weight:700;margin:10px 0 6px">Top clients débiteurs</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Client</th><th class="ta-r">Créance</th></tr></thead><tbody>
+    ${topClients.map(c=>`<tr><td>${c.nom}</td><td class="ta-r mono">${F(c.solde)}</td></tr>`).join('')||'<tr><td colspan=2 class="empty">Aucune créance</td></tr>'}
+    </tbody></table></div>
+  </div>
+  <div class="card"><h3>Cascade d'alignement</h3>
+    <div class="tbl-wrap"><table><thead><tr><th>Stratégique</th><th>Tactique</th><th>Opérationnel</th></tr></thead><tbody>
+    <tr><td>Améliorer la marge</td><td>Réduire ratio charges</td><td>Suivre les charges 6xx</td></tr>
+    <tr><td>Sécuriser le cash</td><td>Réduire le BFR</td><td>Recouvrer clients · lettrer</td></tr>
+    <tr><td>Solidité financière</td><td>Renforcer capitaux</td><td>Affecter le résultat</td></tr>
+    <tr><td>Conformité</td><td>Piloter la TVA</td><td>Télédéclarer à échéance</td></tr>
+    </tbody></table></div>
+  </div>`;
+};
+
+/* ---- Dashboard ---- */
+RENDER.dash=()=>{  const produits=-classeSolde('7'), charges=classeSolde('6'), resultat=produits-charges;
+  const treso=classeSolde('5');
+  const clients=(()=>{const m=soldesParCompte();let s=0;for(const n in m)if(n.startsWith('41'))s+=m[n].debit-m[n].credit;return s;})();
+  const fourn=(()=>{const m=soldesParCompte();let s=0;for(const n in m)if(n.startsWith('40'))s+=m[n].credit-m[n].debit;return s;})();
+  const tvaC=-classeSolde('4')&&0; // placeholder
+  const tvaCol=(soldesParCompte()['4431']||{debit:0,credit:0});const tvaDed=(soldesParCompte()['4452']||{debit:0,credit:0});
+  const tvaDue=(tvaCol.credit-tvaCol.debit)-(tvaDed.debit-tvaDed.credit);
+  document.getElementById('p-dash').innerHTML=`
+  <div class="grid kpis">
+    <div class="card kpi o"><div class="lb">Chiffre d'affaires (produits)</div><div class="v mono">${F(produits)}</div><div class="f">Classe 7 · ${ST.ecritures.length} écritures</div></div>
+    <div class="card kpi r"><div class="lb">Charges d'exploitation</div><div class="v mono">${F(charges)}</div><div class="f">Classe 6</div></div>
+    <div class="card kpi ${resultat>=0?'g':'r'}"><div class="lb">Résultat net</div><div class="v mono">${F(resultat)}</div><div class="f">${resultat>=0?'Bénéfice':'Perte'}</div></div>
+    <div class="card kpi b"><div class="lb">Trésorerie</div><div class="v mono">${F(treso)}</div><div class="f">Banque + caisse</div></div>
+  </div>
+  <div class="grid two">
+    <div class="card"><div class="sect-h" style="margin-top:0"><h3>Évolution mensuelle</h3></div>${svgLineChart(monthlyAgg(),[{key:'ca',col:'#B87333',lb:'CA'},{key:'charges',col:'#c0392b',lb:'Charges'},{key:'resultat',col:'#1a8a5a',lb:'Résultat'}])}</div>
+    <div class="card"><div class="sect-h" style="margin-top:0"><h3>Trésorerie cumulée</h3></div>${svgBarChart(monthlyAgg(),'treso','#2c6fb5')}</div>
+  </div>
+  <div class="grid two">
+    <div class="card">
+      <div class="sect-h" style="margin-top:0"><h3>Dernières écritures</h3><button class="linkbtn" onclick="go('ecritures')">Tout voir →</button></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Jrnl</th><th>Libellé</th><th class="ta-r">Montant</th></tr></thead><tbody>
+      ${ST.ecritures.slice(-6).reverse().map(e=>{const tot=e.lignes.reduce((s,l)=>s+(+l.debit||0),0);return`<tr><td class="mono">${dfr(e.date)}</td><td><span class="badge b-cuivre">${jLib(e.journal)}</span></td><td>${e.libelle||''}</td><td class="ta-r mono">${F(tot)}</td></tr>`;}).join('')||'<tr><td colspan=4 class="empty">Aucune écriture</td></tr>'}
+      </tbody></table></div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:14px"><div class="lb" style="font-size:12px;color:var(--mut);font-weight:600">Créances clients</div><div class="v mono" style="font-size:21px;font-weight:800;color:var(--blue);margin-top:5px">${F(clients)}</div></div>
+      <div class="card" style="margin-bottom:14px"><div class="lb" style="font-size:12px;color:var(--mut);font-weight:600">Dettes fournisseurs</div><div class="v mono" style="font-size:21px;font-weight:800;color:var(--cuivre);margin-top:5px">${F(fourn)}</div></div>
+      <div class="card"><div class="lb" style="font-size:12px;color:var(--mut);font-weight:600">TVA nette due</div><div class="v mono" style="font-size:21px;font-weight:800;color:${tvaDue>=0?'var(--red)':'var(--green)'};margin-top:5px">${F(tvaDue)}</div><div class="f" style="font-size:11.5px;color:var(--mut);margin-top:3px">${tvaDue>=0?'À reverser à la DGI':'Crédit de TVA'}</div></div>
+    </div>
+  </div>`;
+};
+
+/* ---- Écritures ---- */
+RENDER.ecritures=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newEcriture()">+ Nouvelle écriture</button>`;
+  const jf=window._jf||'';
+  document.getElementById('p-ecritures').innerHTML=`
+  <div class="toolbar">
+    <input class="search" id="ecSearch" placeholder="Rechercher libellé, pièce, compte…" oninput="RENDER.ecritures()" value="${window._ecq||''}">
+    <select id="ecJ" onchange="window._jf=this.value;RENDER.ecritures()">
+      <option value="">Tous journaux</option>${ST.journaux.map(j=>`<option value="${j.code}" ${jf===j.code?'selected':''}>${j.code} — ${j.libelle}</option>`).join('')}
+    </select>
+    <button class="btn sm gh" onclick="exportEcrituresCSV()">⭳ Export CSV</button>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Compte</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-c">Action</th></tr></thead><tbody id="ecBody"></tbody></table></div>`;
+  const q=(document.getElementById('ecSearch').value||'').toLowerCase();window._ecq=q;
+  const rows=[];
+  ST.ecritures.forEach(e=>{
+    if(jf&&jLib(e.journal)!==jf)return;
+    const hay=(e.libelle+' '+e.piece+' '+e.lignes.map(l=>l.compte).join(' ')).toLowerCase();
+    if(q&&!hay.includes(q))return;
+    e.lignes.forEach((l,i)=>{
+      rows.push(`<tr>
+        ${i===0?`<td class="mono" rowspan="${e.lignes.length}">${dfr(e.date)}</td><td rowspan="${e.lignes.length}"><span class="badge b-cuivre">${jLib(e.journal)}</span></td><td rowspan="${e.lignes.length}">${e.piece||''}</td>`:''}
+        <td class="mono"><b>${l.compte}</b> ${cptLib(l.compte)}</td>
+        <td>${l.libelle||''} ${l.lettre?`<span class="badge b-green">${l.lettre}</span>`:''}</td>
+        <td class="ta-r mono">${l.debit?F0(l.debit):''}</td>
+        <td class="ta-r mono">${l.credit?F0(l.credit):''}</td>
+        ${i===0?`<td class="ta-c" rowspan="${e.lignes.length}"><button class="linkbtn" onclick="editEcriture('${e.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delEcriture('${e.id}')">✕</button></td>`:''}
+      </tr>`);
+    });
+  });
+  document.getElementById('ecBody').innerHTML=rows.join('')||'<tr><td colspan=8 class="empty"><div class="ic">✎</div>Aucune écriture. Cliquez sur « Nouvelle écriture ».</td></tr>';
+};
+
+let EL=[]; // lignes en cours
+function newEcriture(){editEcriture(null);}
+function editEcriture(id){
+  const e=id?ST.ecritures.find(x=>x.id===id):null;
+  EL=e?JSON.parse(JSON.stringify(e.lignes)):[{compte:'',libelle:'',debit:0,credit:0,tiers:'',lettre:''},{compte:'',libelle:'',debit:0,credit:0,tiers:'',lettre:''}];
+  const opts=ST.journaux.map(j=>`<option value="${j.code}" ${e&&jLib(e.journal)===j.code?'selected':''}>${j.code} — ${j.libelle}</option>`).join('');
+  openModal(`
+    <div class="mh"><h3>${e?'Modifier':'Nouvelle'} écriture</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="frow c3">
+        <div><label>Journal</label><select id="eJ">${opts}</select></div>
+        <div><label>Date</label><input type="date" id="eD" value="${e?e.date:today()}"></div>
+        <div><label>N° pièce / libellé</label><input id="eP" value="${e?(e.piece||''):''}" placeholder="Fact. V001"></div>
+      </div>
+      <div class="tbl-wrap"><table class="lines"><thead><tr><th style="width:140px">Compte</th><th>Libellé</th><th style="width:120px">Centre</th><th style="width:115px">Débit</th><th style="width:115px">Crédit</th><th style="width:34px"></th></tr></thead><tbody id="elBody"></tbody></table></div>
+      <div style="margin-top:8px"><button class="btn sm gh" onclick="addLine()">+ Ligne</button></div>
+      <div class="balbar">
+        <span>Total débit <b id="tD" class="mono">0</b></span>
+        <span>Total crédit <b id="tC" class="mono">0</b></span>
+        <span id="balChip" class="chip no">Déséquilibre</span>
+      </div>
+    </div>
+    <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" id="saveBtn" onclick="saveEcriture('${id||''}')">Enregistrer</button></div>
+  `,true);
+  renderLines();
+}
+function cptOptions(v){
+  return `<option value="">—</option>`+ST.comptes.map(c=>`<option value="${c.numero}" ${c.numero===v?'selected':''}>${c.numero} · ${c.libelle}</option>`).join('');
+}
+function renderLines(){
+  document.getElementById('elBody').innerHTML=EL.map((l,i)=>`<tr>
+    <td><select onchange="EL[${i}].compte=this.value;lineCptPick(${i})">${cptOptions(l.compte)}</select></td>
+    <td><input value="${l.libelle||''}" oninput="EL[${i}].libelle=this.value"></td>
+    <td><select onchange="EL[${i}].centre=this.value"><option value="">—</option>${ST.centres.map(c=>`<option value="${c.code}" ${l.centre===c.code?'selected':''}>${c.code}</option>`).join('')}</select></td>
+    <td><input class="amt" value="${l.debit||''}" oninput="EL[${i}].debit=+this.value||0;EL[${i}].credit=0;refreshBal()"></td>
+    <td><input class="amt" value="${l.credit||''}" oninput="EL[${i}].credit=+this.value||0;EL[${i}].debit=0;refreshBal()"></td>
+    <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="EL.splice(${i},1);renderLines()">✕</button></td>
+  </tr>`).join('');
+  refreshBal();
+}
+function lineCptPick(i){const c=ST.comptes.find(x=>x.numero===EL[i].compte);if(c&&!EL[i].libelle){EL[i].libelle=c.libelle;renderLines();}}
+function addLine(){EL.push({compte:'',libelle:'',debit:0,credit:0,tiers:'',lettre:'',centre:''});renderLines();}
+function refreshBal(){
+  const d=EL.reduce((s,l)=>s+(+l.debit||0),0),c=EL.reduce((s,l)=>s+(+l.credit||0),0);
+  document.getElementById('tD').textContent=F0(d);document.getElementById('tC').textContent=F0(c);
+  const ok=d===c&&d>0;const chip=document.getElementById('balChip');
+  chip.className='chip '+(ok?'ok':'no');chip.textContent=ok?'Équilibré ✓':'Écart : '+F0(d-c);
+}
+async function saveEcriture(id){
+  const d=EL.reduce((s,l)=>s+(+l.debit||0),0),c=EL.reduce((s,l)=>s+(+l.credit||0),0);
+  if(d!==c||d===0){toast('Écriture non équilibrée — débit doit égaler crédit.');return;}
+  if(EL.some(l=>!l.compte)){toast('Chaque ligne doit avoir un compte.');return;}
+  // tiers auto
+  EL.forEach(l=>{const c2=ST.comptes.find(x=>x.numero===l.compte);if(c2&&c2.aux)l.tiers=c2.aux;});
+  const obj={id:id||uid('e'),exId:ST.exId,journal:document.getElementById('eJ').value,date:document.getElementById('eD').value,
+    piece:document.getElementById('eP').value,libelle:document.getElementById('eP').value||EL[0].libelle,lignes:EL,created:Date.now()};
+  await put('ecritures',obj);await loadAll();closeModal();RENDER.ecritures();toast('Écriture enregistrée.');
+}
+async function delEcriture(id){if(!confirm('Supprimer cette écriture ?'))return;await del('ecritures',id);await loadAll();RENDER.ecritures();toast('Écriture supprimée.');}
+
+/* ---- Tiers ---- */
+const REGIMES=['RNI — Réel Normal','RSI — Réel Simplifié','Micro-entreprise','Exonéré','Particulier'];
+RENDER.tiers=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="exportTiersCSV()">⭳ CSV</button> <button class="btn sm" onclick="newTiers()">+ Nouveau tiers</button>`;
+  const f=window._tf||'tous';
+  const m=soldesParCompte();
+  const list=ST.tiers.filter(t=>f==='tous'||t.type===f);
+  const rows=list.map(t=>{const s=(m[t.compte]||{debit:0,credit:0});const solde=t.type==='client'?s.debit-s.credit:s.credit-s.debit;
+    const depasse=t.type==='client'&&t.plafond>0&&solde>t.plafond;
+    return`<tr>
+    <td class="mono"><b>${t.compte}</b></td>
+    <td><b>${t.nom}</b>${t.ncc?`<div style="font-size:11px;color:var(--mut)">NCC ${t.ncc}</div>`:''}</td>
+    <td><span class="badge ${t.type==='client'?'b-blue':'b-cuivre'}">${t.type}</span></td>
+    <td style="font-size:12px">${t.tel||''}${t.email?`<div style="color:var(--mut)">${t.email}</div>`:''}</td>
+    <td class="ta-c">${t.delai?t.delai+' j':'—'}</td>
+    <td class="ta-r mono ${depasse?'neg':''}">${F(solde)}${depasse?' ⚠':''}</td>
+    <td class="ta-c"><button class="linkbtn" onclick="viewTiers('${t.id}')">👁</button> <button class="linkbtn" onclick="editTiers('${t.id}')">✎</button> <button class="linkbtn" onclick="delTiers('${t.id}')" style="color:var(--red)">✕</button></td></tr>`;}).join('');
+  const nbC=ST.tiers.filter(t=>t.type==='client').length,nbF=ST.tiers.filter(t=>t.type==='fournisseur').length;
+  document.getElementById('p-tiers').innerHTML=`
+  <div class="toolbar">
+    <select onchange="window._tf=this.value;RENDER.tiers()">
+      <option value="tous" ${f==='tous'?'selected':''}>Tous (${ST.tiers.length})</option>
+      <option value="client" ${f==='client'?'selected':''}>Clients (${nbC})</option>
+      <option value="fournisseur" ${f==='fournisseur'?'selected':''}>Fournisseurs (${nbF})</option>
+    </select>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Raison sociale</th><th>Type</th><th>Contact</th><th class="ta-c">Délai</th><th class="ta-r">Solde</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=7 class="empty"><div class="ic">◔</div>Aucun tiers</td></tr>'}</tbody></table></div>`;
+};
+function newTiers(){editTiers(null);}
+function editTiers(id){
+  const t=id?ST.tiers.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${t?'Modifier':'Nouveau'} tiers ${t?`<span class="badge b-gray">${t.compte}</span>`:''}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--cuivre-d);font-weight:700;margin-bottom:8px">Identité</div>
+    <div class="frow c2"><div><label>Type</label><select id="tType" ${t?'disabled':''}><option value="client" ${t&&t.type==='client'?'selected':''}>Client (compte 411)</option><option value="fournisseur" ${t&&t.type==='fournisseur'?'selected':''}>Fournisseur (compte 401)</option></select></div>
+    <div><label>Raison sociale / nom</label><input id="tNom" value="${t?t.nom:''}" placeholder="Ex : ETS ABC SARL"></div></div>
+    <div class="frow c3"><div><label>NCC</label><input id="tNcc" value="${t?(t.ncc||''):''}" placeholder="CI-XXXXXXX-X"></div>
+    <div><label>RCCM</label><input id="tRccm" value="${t?(t.rccm||''):''}" placeholder="CI-ABJ-…"></div>
+    <div><label>Régime fiscal</label><select id="tReg">${REGIMES.map(r=>`<option ${t&&t.regime===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--cuivre-d);font-weight:700;margin:12px 0 8px">Coordonnées</div>
+    <div class="frow c3"><div><label>Téléphone</label><input id="tTel" value="${t?(t.tel||''):''}" placeholder="+225…"></div>
+    <div><label>Email</label><input id="tEmail" value="${t?(t.email||''):''}" placeholder="contact@…"></div>
+    <div><label>Interlocuteur</label><input id="tContact" value="${t?(t.contact||''):''}" placeholder="Nom prénom"></div></div>
+    <div class="frow"><div><label>Adresse</label><input id="tAdr" value="${t?(t.adresse||''):''}" placeholder="Ville, commune, BP"></div></div>
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--cuivre-d);font-weight:700;margin:12px 0 8px">Conditions comptables</div>
+    <div class="frow c3"><div><label>Délai de règlement (jours)</label><input type="number" id="tDelai" value="${t?(t.delai||0):0}"></div>
+    <div><label>Plafond de crédit (FCFA)</label><input type="number" id="tPlafond" value="${t?(t.plafond||0):0}"></div>
+    <div><label>Mode de règlement</label><select id="tMode"><option value="">—</option>${['Espèces','Virement','Chèque','Wave','Orange Money','MTN MoMo'].map(o=>`<option ${t&&t.mode===o?'selected':''}>${o}</option>`).join('')}</select></div></div>
+    <div class="frow c2"><div><label>Banque</label><input id="tBanque" value="${t?(t.banque||''):''}" placeholder="Ex : SGBCI"></div>
+    <div><label>RIB / IBAN</label><input id="tRib" value="${t?(t.rib||''):''}" placeholder="CI…"></div></div>
+    ${t?`<div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:10px">Compte auxiliaire ${t.compte} conservé. Type non modifiable.</div>`:''}
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveTiers('${id||''}')">${t?'Enregistrer':'Créer'}</button></div>`,true);
+}
+async function saveTiers(id){
+  const nom=document.getElementById('tNom').value.trim();
+  if(!nom){toast('Nom obligatoire.');return;}
+  const g=x=>document.getElementById(x).value;
+  const fields={nom,ncc:g('tNcc').trim(),rccm:g('tRccm').trim(),regime:g('tReg'),tel:g('tTel'),email:g('tEmail'),contact:g('tContact'),adresse:g('tAdr'),delai:+g('tDelai')||0,plafond:+g('tPlafond')||0,mode:g('tMode'),banque:g('tBanque'),rib:g('tRib')};
+  if(id){const t=ST.tiers.find(x=>x.id===id);Object.assign(t,fields);await put('tiers',t);
+    const c=ST.comptes.find(x=>x.numero===t.compte);if(c){c.libelle=(t.type==='client'?'Client — ':'Fournisseur — ')+nom;await put('comptes',c);}
+    await loadAll();closeModal();RENDER.tiers();toast('Tiers modifié.');return;}
+  const type=document.getElementById('tType').value,base=type==='client'?'4111':'4011';
+  const n=ST.tiers.filter(t=>t.type===type).length+1;const compte=base+String(n).padStart(3,'0');
+  const t=Object.assign({id:uid('t'),type,compte},fields);
+  await put('tiers',t);
+  await put('comptes',{id:'c_'+compte,numero:compte,libelle:(type==='client'?'Client — ':'Fournisseur — ')+nom,type:type==='client'?'A':'P',classe:'4',aux:t.id});
+  await loadAll();closeModal();RENDER.tiers();toast('Tiers créé — compte '+compte);
+}
+function viewTiers(id){
+  const t=ST.tiers.find(x=>x.id===id);const m=soldesParCompte();const s=m[t.compte]||{debit:0,credit:0};
+  const solde=t.type==='client'?s.debit-s.credit:s.credit-s.debit;
+  const mv=mouvements((e,l)=>l.compte===t.compte).slice(-8).reverse();
+  const row=(lb,v)=>v?`<tr><td style="color:var(--mut);width:150px">${lb}</td><td><b>${v}</b></td></tr>`:'';
+  openModal(`<div class="mh"><h3>Fiche ${t.type} — ${t.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="grid kpis" style="margin-bottom:14px">
+      <div class="card kpi ${solde>=0?'b':'g'}"><div class="lb">Solde comptable</div><div class="v mono">${F(solde)}</div><div class="f">Compte ${t.compte}</div></div>
+      <div class="card kpi o"><div class="lb">${t.type==='client'?'Plafond crédit':'Encours'}</div><div class="v mono">${t.plafond?F(t.plafond):'—'}</div><div class="f">Délai ${t.delai||0} j</div></div>
+    </div>
+    <div class="tbl-wrap" style="margin-bottom:14px"><table><tbody>
+      ${row('NCC',t.ncc)}${row('RCCM',t.rccm)}${row('Régime fiscal',t.regime)}${row('Téléphone',t.tel)}${row('Email',t.email)}${row('Interlocuteur',t.contact)}${row('Adresse',t.adresse)}${row('Mode règlement',t.mode)}${row('Banque',t.banque)}${row('RIB / IBAN',t.rib)}
+    </tbody></table></div>
+    <div style="font-size:12px;font-weight:700;color:var(--cuivre-d);margin-bottom:6px">Derniers mouvements</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th></tr></thead><tbody>
+      ${mv.map(r=>`<tr><td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle} ${r.lettre?`<span class="badge b-green">${r.lettre}</span>`:''}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td></tr>`).join('')||'<tr><td colspan=5 class="empty">Aucun mouvement</td></tr>'}
+    </tbody></table></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="closeModal();editTiers('${t.id}')">Modifier</button></div>`,true);
+}
+function exportTiersCSV(){
+  let c='Compte;Type;Nom;NCC;RCCM;Regime;Tel;Email;Adresse;Delai;Plafond;Mode;Banque;RIB\n';
+  ST.tiers.forEach(t=>c+=[t.compte,t.type,t.nom,t.ncc,t.rccm,t.regime,t.tel,t.email,t.adresse,t.delai,t.plafond,t.mode,t.banque,t.rib].map(x=>(x||'').toString().replace(/;/g,',')).join(';')+'\n');
+  dl('tiers.csv',c);toast('Export tiers généré.');
+}
+function tiersMouvemente(t){return mouvements((e,l)=>l.compte===t.compte).length>0;}
+async function delTiers(id){const t=ST.tiers.find(x=>x.id===id);
+  if(tiersMouvemente(t)){toast('Impossible : tiers mouvementé (écritures liées).');return;}
+  if(!confirm('Supprimer '+t.nom+' ?'))return;await del('tiers',id);await del('comptes','c_'+t.compte);await loadAll();RENDER.tiers();toast('Tiers supprimé.');}
+
+/* ---- Comptabilité tiers (auxiliaire) ---- */
+function tiersSolde(t){const m=soldesParCompte();const s=m[t.compte]||{debit:0,credit:0};return{debit:s.debit,credit:s.credit,solde:t.type==='client'?s.debit-s.credit:s.credit-s.debit};}
+function agingLignes(t){
+  // items non lettrés du tiers -> échéance = date + délai
+  const open=mouvements((e,l)=>l.compte===t.compte&&!l.lettre);
+  const ref=new Date();const buckets={nonEchu:0,b30:0,b60:0,b90:0,b90p:0};const details=[];
+  open.forEach(r=>{
+    const mont=t.type==='client'?(r.debit-r.credit):(r.credit-r.debit);
+    if(mont<=0)return;
+    const d=new Date(r.date);d.setDate(d.getDate()+(t.delai||0));
+    const late=Math.floor((ref-d)/86400000);
+    let b;if(late<=0)b='nonEchu';else if(late<=30)b='b30';else if(late<=60)b='b60';else if(late<=90)b='b90';else b='b90p';
+    buckets[b]+=mont;details.push({date:r.date,piece:r.piece,ech:d.toISOString().slice(0,10),late,mont,b});
+  });
+  return{buckets,details};
+}
+RENDER.tierscompta=()=>{
+  const tab=window._tcTab||'balance';const typ=window._tcTyp||'client';
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-tierscompta','Comptabilité tiers')">⎙ Imprimer</button>`;
+  const tabBtn=(k,l)=>`<button class="btn sm ${tab===k?'':'gh'}" onclick="window._tcTab='${k}';RENDER.tierscompta()">${l}</button>`;
+  const typBtn=(k,l)=>`<button class="btn sm ${typ===k?'dark':'gh'}" onclick="window._tcTyp='${k}';RENDER.tierscompta()">${l}</button>`;
+  let body='';
+  const list=ST.tiers.filter(t=>t.type===typ);
+  if(tab==='balance'){
+    let tD=0,tC=0,tS=0;
+    const rows=list.map(t=>{const s=tiersSolde(t);tD+=s.debit;tC+=s.credit;tS+=s.solde;
+      return`<tr><td class="mono"><b>${t.compte}</b></td><td>${t.nom}</td><td class="ta-r mono">${F0(s.debit)}</td><td class="ta-r mono">${F0(s.credit)}</td><td class="ta-r mono ${s.solde<0?'neg':'pos'}">${F0(s.solde)}</td>
+      <td class="ta-c"><button class="linkbtn" onclick="grandLivreTiers('${t.id}')">Grand livre</button></td></tr>`;}).join('');
+    body=`<div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>${typ==='client'?'Client':'Fournisseur'}</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Solde</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan=6 class="empty">Aucun tiers</td></tr>'}</tbody>
+    <tfoot><tr class="foot-tr"><td colspan=2>TOTAL ${typ==='client'?'CLIENTS':'FOURNISSEURS'}</td><td class="ta-r mono">${F0(tD)}</td><td class="ta-r mono">${F0(tC)}</td><td class="ta-r mono">${F0(tS)}</td><td></td></tr></tfoot></table></div>`;
+  } else {
+    let T={nonEchu:0,b30:0,b60:0,b90:0,b90p:0};
+    const rows=list.map(t=>{const{buckets}=agingLignes(t);const tot=buckets.nonEchu+buckets.b30+buckets.b60+buckets.b90+buckets.b90p;
+      if(tot===0)return'';['nonEchu','b30','b60','b90','b90p'].forEach(k=>T[k]+=buckets[k]);
+      const retard=buckets.b30+buckets.b60+buckets.b90+buckets.b90p;
+      return`<tr><td class="mono"><b>${t.compte}</b></td><td>${t.nom}${retard>0?' <span class="badge b-red">retard</span>':''}</td>
+      <td class="ta-r mono">${buckets.nonEchu?F0(buckets.nonEchu):''}</td><td class="ta-r mono">${buckets.b30?F0(buckets.b30):''}</td><td class="ta-r mono">${buckets.b60?F0(buckets.b60):''}</td><td class="ta-r mono">${buckets.b90?F0(buckets.b90):''}</td><td class="ta-r mono ${buckets.b90p?'neg':''}">${buckets.b90p?F0(buckets.b90p):''}</td>
+      <td class="ta-r mono"><b>${F0(tot)}</b></td>
+      <td class="ta-c">${retard>0?`<button class="linkbtn" onclick="relanceTiers('${t.id}')">Relance</button>`:''}</td></tr>`;}).join('');
+    const grand=T.nonEchu+T.b30+T.b60+T.b90+T.b90p;
+    body=`<div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Tiers</th><th class="ta-r">Non échu</th><th class="ta-r">0-30 j</th><th class="ta-r">31-60 j</th><th class="ta-r">61-90 j</th><th class="ta-r">+90 j</th><th class="ta-r">Total</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan=9 class="empty">Aucun encours</td></tr>'}</tbody>
+    <tfoot><tr class="foot-tr"><td colspan=2>TOTAL</td><td class="ta-r mono">${F0(T.nonEchu)}</td><td class="ta-r mono">${F0(T.b30)}</td><td class="ta-r mono">${F0(T.b60)}</td><td class="ta-r mono">${F0(T.b90)}</td><td class="ta-r mono">${F0(T.b90p)}</td><td class="ta-r mono">${F0(grand)}</td><td></td></tr></tfoot></table></div>
+    <p style="margin-top:8px;color:var(--mut);font-size:12px">Échéance = date pièce + délai de règlement du tiers. Items non lettrés uniquement.</p>`;
+  }
+  document.getElementById('p-tierscompta').innerHTML=`
+  <div class="toolbar"><div style="display:flex;gap:6px">${tabBtn('balance','Balance auxiliaire')}${tabBtn('aging','Balance âgée')}</div>
+  <div style="display:flex;gap:6px;margin-left:auto">${typBtn('client','Clients')}${typBtn('fournisseur','Fournisseurs')}</div></div>
+  ${body}`;
+};
+function grandLivreTiers(id){
+  const t=ST.tiers.find(x=>x.id===id);const rows=mouvements((e,l)=>l.compte===t.compte);let solde=0;
+  const body=rows.map(r=>{solde+=t.type==='client'?(r.debit-r.credit):(r.credit-r.debit);
+    return`<tr><td class="mono">${dfr(r.date)}</td><td>${r.journal}</td><td>${r.piece}</td><td>${r.libelle} ${r.lettre?`<span class="badge b-green">${r.lettre}</span>`:'<span class="badge b-gray">non lettré</span>'}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td><td class="ta-r mono ${solde<0?'neg':'pos'}">${F0(solde)}</td></tr>`;}).join('');
+  openModal(`<div class="mh"><h3>Grand livre — ${t.nom} <span class="badge b-gray">${t.compte}</span></h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Jr</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Solde</th></tr></thead><tbody>${body||'<tr><td colspan=7 class="empty">Aucun mouvement</td></tr>'}</tbody></table></div></div>
+  <div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button></div>`,true);
+}
+function relanceTiers(id){
+  const t=ST.tiers.find(x=>x.id===id);const{details,buckets}=agingLignes(t);
+  const retard=details.filter(d=>d.late>0).sort((a,b)=>b.late-a.late);
+  const du=buckets.b30+buckets.b60+buckets.b90+buckets.b90p;
+  const lignes=retard.map(d=>`  • Pièce ${d.piece||'-'} du ${dfr(d.date)} — échéance ${dfr(d.ech)} (${d.late} j de retard) : ${F(d.mont)}`).join('\n');
+  const txt=`Objet : Relance règlement — ${t.nom}\n\nBonjour,\n\nSauf erreur, les échéances suivantes restent impayées :\n${lignes}\n\nMontant total échu : ${F(du)}.\nMerci de régulariser sous meilleurs délais.\n\n${t.email?'À : '+t.email+'\n':''}${t.tel?'Tél : '+t.tel:''}`;
+  openModal(`<div class="mh"><h3>Relance — ${t.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="hl" style="background:#fdf0ed;border-left:3px solid var(--red);padding:10px 12px;border-radius:0 8px 8px 0;font-size:13px;margin-bottom:12px">Montant échu <b>${F(du)}</b> · ${retard.length} pièce(s) en retard</div>
+  <textarea id="relTxt" style="width:100%;min-height:220px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:12.5px">${txt}</textarea></div>
+  <div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('relTxt').value);toast('Relance copiée.')">Copier</button></div>`,true);
+}
+
+/* ---- Grand livre ---- */
+RENDER.grandlivre=()=>{
+  const sel=window._glCpt||'';
+  const comptesMouv=[...new Set(mouvements().map(r=>r.compte))].sort();
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-grandlivre','Grand livre')">⎙ Imprimer</button>`;
+  document.getElementById('p-grandlivre').innerHTML=`
+  <div class="toolbar"><select id="glSel" onchange="window._glCpt=this.value;RENDER.grandlivre()">
+    <option value="">— Tous les comptes mouvementés —</option>
+    ${comptesMouv.map(n=>`<option value="${n}" ${n===sel?'selected':''}>${n} · ${cptLib(n)}</option>`).join('')}
+  </select></div>
+  <div id="glOut"></div>`;
+  const targets=sel?[sel]:comptesMouv;
+  let html='';
+  targets.forEach(n=>{
+    const rows=mouvements((e,l)=>l.compte===n);let solde=0;
+    if(!rows.length)return;
+    html+=`<div class="card" style="padding:0;margin-bottom:16px;overflow:hidden">
+      <div style="padding:12px 16px;background:var(--noir);color:#fff;display:flex;justify-content:space-between"><b>${n} — ${cptLib(n)}</b><span class="badge b-cuivre">Classe ${n[0]}</span></div>
+      <table><thead><tr><th>Date</th><th>Jrnl</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Solde</th></tr></thead><tbody>`;
+    rows.forEach(r=>{solde+=r.debit-r.credit;html+=`<tr><td class="mono">${dfr(r.date)}</td><td>${r.journal}</td><td>${r.piece}</td><td>${r.libelle} ${r.lettre?`<span class="badge b-green">${r.lettre}</span>`:''}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td><td class="ta-r mono ${solde<0?'neg':'pos'}">${F0(solde)}</td></tr>`;});
+    const td=rows.reduce((s,r)=>s+r.debit,0),tc=rows.reduce((s,r)=>s+r.credit,0);
+    html+=`</tbody><tfoot><tr class="foot-tr"><td colspan=4>Totaux — solde ${td-tc<0?'créditeur':'débiteur'}</td><td class="ta-r mono">${F0(td)}</td><td class="ta-r mono">${F0(tc)}</td><td class="ta-r mono ${td-tc<0?'neg':'pos'}">${F0(td-tc)}</td></tr></tfoot></table></div>`;
+  });
+  document.getElementById('glOut').innerHTML=html||'<div class="empty">Aucun mouvement.</div>';
+};
+
+/* ---- Balance ---- */
+RENDER.balance=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="exportBalanceCSV()">⭳ CSV</button><button class="btn sm gh" onclick="printReport('p-balance','Balance générale')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const nums=Object.keys(m).sort();
+  let tD=0,tC=0,tSd=0,tSc=0;
+  const rows=nums.map(n=>{const{debit,credit}=m[n];const s=debit-credit;tD+=debit;tC+=credit;const sd=s>0?s:0,sc=s<0?-s:0;tSd+=sd;tSc+=sc;
+    return`<tr><td class="mono"><b>${n}</b></td><td>${cptLib(n)}</td><td class="ta-r mono">${F0(debit)}</td><td class="ta-r mono">${F0(credit)}</td><td class="ta-r mono">${sd?F0(sd):''}</td><td class="ta-r mono">${sc?F0(sc):''}</td></tr>`;}).join('');
+  document.getElementById('p-balance').innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Intitulé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Solde débit</th><th class="ta-r">Solde crédit</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=6 class="empty">Aucun mouvement</td></tr>'}</tbody>
+  <tfoot><tr class="foot-tr"><td colspan=2>TOTAUX</td><td class="ta-r mono">${F0(tD)}</td><td class="ta-r mono">${F0(tC)}</td><td class="ta-r mono">${F0(tSd)}</td><td class="ta-r mono">${F0(tSc)}</td></tr></tfoot></table></div>
+  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Contrôle partie double : total débit = total crédit ${tD===tC?'<span class="badge b-green">équilibré ✓</span>':'<span class="badge b-red">écart '+F0(tD-tC)+'</span>'}</p>`;
+};
+
+/* ---- Compte de résultat ---- */
+RENDER.resultat=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-resultat','Compte de résultat')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const charges=Object.keys(m).filter(n=>n[0]==='6').sort().map(n=>({n,v:m[n].debit-m[n].credit}));
+  const produits=Object.keys(m).filter(n=>n[0]==='7').sort().map(n=>({n,v:m[n].credit-m[n].debit}));
+  const tCh=charges.reduce((s,x)=>s+x.v,0),tPr=produits.reduce((s,x)=>s+x.v,0),res=tPr-tCh;
+  const col=arr=>arr.map(x=>`<tr><td class="mono">${x.n}</td><td>${cptLib(x.n)}</td><td class="ta-r mono">${F0(x.v)}</td></tr>`).join('');
+  document.getElementById('p-resultat').innerHTML=`<div class="grid two">
+    <div class="tbl-wrap"><table><thead><tr><th colspan=3 style="background:var(--noir);color:#fff">CHARGES (classe 6)</th></tr><tr><th>Cpt</th><th>Intitulé</th><th class="ta-r">Montant</th></tr></thead><tbody>${col(charges)||'<tr><td colspan=3 class="empty">—</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td colspan=2>Total charges</td><td class="ta-r mono">${F0(tCh)}</td></tr></tfoot></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th colspan=3 style="background:var(--cuivre);color:#fff">PRODUITS (classe 7)</th></tr><tr><th>Cpt</th><th>Intitulé</th><th class="ta-r">Montant</th></tr></thead><tbody>${col(produits)||'<tr><td colspan=3 class="empty">—</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td colspan=2>Total produits</td><td class="ta-r mono">${F0(tPr)}</td></tr></tfoot></table></div>
+  </div>
+  <div class="card" style="margin-top:16px;text-align:center;background:${res>=0?'#eef8f2':'#fdeeec'}">
+    <div class="lb" style="color:var(--mut);font-weight:600">RÉSULTAT NET DE L'EXERCICE</div>
+    <div class="mono" style="font-size:30px;font-weight:800;color:${res>=0?'var(--green)':'var(--red)'};margin-top:6px">${F(res)}</div>
+    <div style="color:var(--mut);font-size:12.5px;margin-top:3px">${res>=0?'Bénéfice — compte 120 créditeur':'Perte — compte 120 débiteur'}</div>
+  </div>`;
+};
+
+/* ---- Bilan ---- */
+RENDER.bilan=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-bilan','Bilan')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const res=(-classeSolde('7'))-classeSolde('6');
+  const actif=[],passif=[];
+  Object.keys(m).sort().forEach(n=>{const s=m[n].debit-m[n].credit;const cl=n[0];
+    if(cl==='2'||cl==='3'){if(s!==0)actif.push({n,v:s,g:'Actif immobilisé / stocks'});}
+    else if(cl==='4'){if(s>0)actif.push({n,v:s,g:'Créances'});else if(s<0)passif.push({n,v:-s,g:'Dettes'});}
+    else if(cl==='5'){if(s>0)actif.push({n,v:s,g:'Trésorerie-Actif'});else if(s<0)passif.push({n,v:-s,g:'Trésorerie-Passif'});}
+    else if(cl==='1'){if(-s!==0)passif.push({n,v:-s,g:'Ressources durables'});}
+  });
+  passif.push({n:'120',v:res,g:'Résultat'});
+  const tA=actif.reduce((s,x)=>s+x.v,0),tP=passif.reduce((s,x)=>s+x.v,0);
+  const col=arr=>arr.map(x=>`<tr><td class="mono">${x.n}</td><td>${cptLib(x.n)||x.g}</td><td class="ta-r mono">${F0(x.v)}</td></tr>`).join('');
+  document.getElementById('p-bilan').innerHTML=`<div class="grid two">
+    <div class="tbl-wrap"><table><thead><tr><th colspan=3 style="background:var(--noir);color:#fff">ACTIF</th></tr><tr><th>Cpt</th><th>Poste</th><th class="ta-r">Net</th></tr></thead><tbody>${col(actif)||'<tr><td colspan=3 class="empty">—</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td colspan=2>TOTAL ACTIF</td><td class="ta-r mono">${F0(tA)}</td></tr></tfoot></table></div>
+    <div class="tbl-wrap"><table><thead><tr><th colspan=3 style="background:var(--cuivre);color:#fff">PASSIF</th></tr><tr><th>Cpt</th><th>Poste</th><th class="ta-r">Net</th></tr></thead><tbody>${col(passif)||'<tr><td colspan=3 class="empty">—</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td colspan=2>TOTAL PASSIF</td><td class="ta-r mono">${F0(tP)}</td></tr></tfoot></table></div>
+  </div>
+  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Équilibre du bilan : Actif ${F0(tA)} / Passif ${F0(tP)} ${Math.abs(tA-tP)<1?'<span class="badge b-green">équilibré ✓</span>':'<span class="badge b-red">écart '+F0(tA-tP)+'</span>'}</p>`;
+};
+
+/* ---- TVA ---- */
+RENDER.tva=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-tva','Déclaration TVA')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const col=(m['4431']||{debit:0,credit:0});const ded=(m['4452']||{debit:0,credit:0});
+  const collectee=col.credit-col.debit, deductible=ded.debit-ded.credit, nette=collectee-deductible;
+  document.getElementById('p-tva').innerHTML=`
+  <div class="grid kpis">
+    <div class="card kpi o"><div class="lb">TVA collectée (4431)</div><div class="v mono">${F(collectee)}</div><div class="f">Sur ventes</div></div>
+    <div class="card kpi b"><div class="lb">TVA déductible (4452)</div><div class="v mono">${F(deductible)}</div><div class="f">Sur achats/charges</div></div>
+    <div class="card kpi ${nette>=0?'r':'g'}"><div class="lb">TVA nette</div><div class="v mono">${F(nette)}</div><div class="f">${nette>=0?'À reverser DGI':'Crédit reportable'}</div></div>
+  </div>
+  <div class="card"><h3 style="margin-bottom:10px">Déclaration mensuelle — synthèse</h3>
+  <table><tbody>
+    <tr><td>TVA facturée sur ventes (taux 18%)</td><td class="ta-r mono">${F(collectee)}</td></tr>
+    <tr><td>TVA récupérable sur achats et charges</td><td class="ta-r mono">${F(deductible)}</td></tr>
+    <tr class="foot-tr"><td>TVA NETTE ${nette>=0?'À PAYER':'À REPORTER'}</td><td class="ta-r mono ${nette>=0?'':'pos'}">${F(nette)}</td></tr>
+  </tbody></table>
+  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance DGI : au plus tard le 15 du mois suivant. Écriture de liquidation : débit 4431 / crédit 4452 et 4441.</p>
+  </div>`;
+};
+
+/* ---- Lettrage ---- */
+RENDER.lettrage=()=>{
+  const sel=window._letCpt||(ST.tiers[0]&&ST.tiers[0].compte)||'';
+  const tiersCptes=ST.comptes.filter(c=>c.aux).map(c=>c.numero);
+  document.getElementById('p-lettrage').innerHTML=`
+  <div class="toolbar"><select id="letSel" onchange="window._letCpt=this.value;RENDER.lettrage()">
+    ${tiersCptes.map(n=>`<option value="${n}" ${n===sel?'selected':''}>${n} · ${cptLib(n)}</option>`).join('')}
+  </select><button class="btn sm" onclick="doLettrage()">Lettrer la sélection</button><button class="btn sm gh" onclick="clearLettrage()">Délettrer</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th style="width:34px"></th><th>Date</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-c">Lettre</th></tr></thead><tbody id="letBody"></tbody></table></div>
+  <p style="margin-top:8px;color:var(--mut);font-size:12.5px">Cochez des lignes dont débit = crédit, puis « Lettrer ». Le lettrage rapproche factures et règlements.</p>`;
+  const rows=mouvements((e,l)=>l.compte===sel);
+  document.getElementById('letBody').innerHTML=rows.map(r=>`<tr>
+    <td class="ta-c"><input type="checkbox" data-eid="${r.eid}" data-li="${r.li}" ${r.lettre?'disabled':''}></td>
+    <td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle}</td>
+    <td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td>
+    <td class="ta-c">${r.lettre?`<span class="badge b-green">${r.lettre}</span>`:'—'}</td></tr>`).join('')||'<tr><td colspan=7 class="empty">Aucun mouvement</td></tr>';
+};
+async function doLettrage(){
+  const chk=[...document.querySelectorAll('#letBody input:checked')];
+  if(chk.length<2){toast('Sélectionnez au moins 2 lignes.');return;}
+  let d=0,c=0;const refs=chk.map(x=>({eid:x.dataset.eid,li:+x.dataset.li}));
+  refs.forEach(r=>{const l=ST.ecritures.find(e=>e.id===r.eid).lignes[r.li];d+=+l.debit||0;c+=+l.credit||0;});
+  if(Math.round(d)!==Math.round(c)){toast('Débit ('+F0(d)+') ≠ Crédit ('+F0(c)+'). Lettrage impossible.');return;}
+  const letMeta=await getOne('meta','lettreSeq');let seq=letMeta?letMeta.value:0;seq++;
+  const lettre=numToAlpha(seq);
+  for(const r of refs){const e=ST.ecritures.find(x=>x.id===r.eid);e.lignes[r.li].lettre=lettre;await put('ecritures',e);}
+  await put('meta',{id:'lettreSeq',value:seq});await loadAll();RENDER.lettrage();toast('Lettré : '+lettre);
+}
+async function clearLettrage(){
+  const chk=[...document.querySelectorAll('#letBody input:checked')];if(!chk.length){toast('Sélectionnez des lignes lettrées.');return;}
+  for(const x of chk){const e=ST.ecritures.find(y=>y.id===x.dataset.eid);e.lignes[+x.dataset.li].lettre='';await put('ecritures',e);}
+  await loadAll();RENDER.lettrage();toast('Délettré.');
+}
+function numToAlpha(n){let s='';while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;}
+
+/* ---- Rapprochement bancaire ---- */
+RENDER.rappro=()=>{
+  const bq=mouvements((e,l)=>l.compte.startsWith('52')||l.compte.startsWith('53'));
+  const solde=bq.reduce((s,r)=>s+r.debit-r.credit,0);
+  document.getElementById('p-rappro').innerHTML=`
+  <div class="grid kpis"><div class="card kpi b"><div class="lb">Solde comptable banque</div><div class="v mono">${F(solde)}</div><div class="f">Comptes 52/53</div></div>
+  <div class="card kpi o"><div class="lb">Mouvements</div><div class="v mono">${bq.length}</div><div class="f">Lignes bancaires</div></div></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-c">Pointé</th></tr></thead><tbody>
+  ${bq.map(r=>`<tr><td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td><td class="ta-c"><input type="checkbox"></td></tr>`).join('')||'<tr><td colspan=6 class="empty">Aucun mouvement bancaire</td></tr>'}
+  </tbody></table></div>`;
+};
+
+/* ---- Plan comptable ---- */
+RENDER.plan=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newCompte()">+ Compte</button>`;
+  const q=(window._planq||'').toLowerCase();
+  document.getElementById('p-plan').innerHTML=`<div class="toolbar"><input class="search" placeholder="Rechercher n° ou intitulé…" value="${window._planq||''}" oninput="window._planq=this.value;RENDER.plan()"></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th></tr></thead><tbody>
+  ${ST.comptes.filter(c=>!q||c.numero.includes(q)||c.libelle.toLowerCase().includes(q)).map(c=>`<tr><td class="mono"><b>${c.numero}</b></td><td>${c.libelle}</td><td><span class="badge b-gray">${c.classe} · ${CLASS_LABEL[c.classe]||''}</span></td><td>${natLabel(c.type)}</td>
+  <td class="ta-c">${c.aux?'<span class="badge b-gray">auxiliaire</span>':`<button class="linkbtn" onclick="editCompte('${c.numero}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delCompte('${c.numero}')">✕</button>`}</td></tr>`).join('')}
+  </tbody></table></div>`;
+};
+const natLabel=t=>({A:'Actif',P:'Passif',C:'Charge',R:'Produit'}[t]||'—');
+function newCompte(){editCompte(null);}
+function editCompte(num){
+  const c=num?ST.comptes.find(x=>x.numero===num):null;
+  openModal(`<div class="mh"><h3>${c?'Modifier':'Nouveau'} compte</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c2"><div><label>Numéro (SYSCOHADA)</label><input id="cN" value="${c?c.numero:''}" ${c?'disabled':''} placeholder="Ex : 6061"></div>
+  <div><label>Nature</label><select id="cT"><option value="A" ${c&&c.type==='A'?'selected':''}>Actif</option><option value="P" ${c&&c.type==='P'?'selected':''}>Passif</option><option value="C" ${c&&c.type==='C'?'selected':''}>Charge</option><option value="R" ${c&&c.type==='R'?'selected':''}>Produit</option></select></div></div>
+  <div class="frow"><div><label>Intitulé</label><input id="cL" value="${c?c.libelle:''}" placeholder="Ex : Fournitures non stockables"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveCompte('${num||''}')">${c?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveCompte(num){
+  if(num){const c=ST.comptes.find(x=>x.numero===num);c.libelle=document.getElementById('cL').value;c.type=document.getElementById('cT').value;
+    await put('comptes',c);await loadAll();closeModal();RENDER.plan();toast('Compte modifié.');return;}
+  const n=document.getElementById('cN').value.trim();if(!/^\d{2,}/.test(n)){toast('Numéro invalide.');return;}
+  if(ST.comptes.some(c=>c.numero===n)){toast('Compte déjà existant.');return;}
+  await put('comptes',{id:'c_'+n,numero:n,libelle:document.getElementById('cL').value,type:document.getElementById('cT').value,classe:n[0]});
+  await loadAll();closeModal();RENDER.plan();toast('Compte créé.');
+}
+async function delCompte(num){
+  if(mouvements((e,l)=>l.compte===num).length){toast('Impossible : compte mouvementé.');return;}
+  if(!confirm('Supprimer le compte '+num+' ?'))return;await del('comptes','c_'+num);await loadAll();RENDER.plan();toast('Compte supprimé.');}
+
+/* ---- Exercices ---- */
+RENDER.exercices=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newExercice()">+ Exercice</button>`;
+  document.getElementById('p-exercices').innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>Exercice</th><th>Début</th><th>Fin</th><th>Statut</th><th class="ta-c">Actions</th></tr></thead><tbody>
+  ${ST.exercices.map(e=>`<tr><td><b>${e.libelle}</b></td><td class="mono">${dfr(e.debut)}</td><td class="mono">${dfr(e.fin)}</td><td><span class="badge ${e.statut==='ouvert'?'b-green':'b-gray'}">${e.statut}</span></td>
+  <td class="ta-c">${e.id===ST.exId?'<span class="badge b-cuivre">courant</span>':`<button class="linkbtn" onclick="switchEx('${e.id}')">Activer</button>`} ${e.statut==='ouvert'?`<button class="linkbtn" onclick="editExercice('${e.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="cloturer('${e.id}')">Clôturer</button> <button class="linkbtn" style="color:var(--red)" onclick="delExercice('${e.id}')">✕</button>`:''}</td></tr>`).join('')}
+  </tbody></table></div>
+  <div class="card" style="margin-top:14px"><b>Clôture d'exercice</b><p style="color:var(--mut);font-size:12.5px;margin-top:6px">La clôture verrouille l'exercice, calcule le résultat (compte 120) et prépare les à-nouveaux. Les écritures deviennent non modifiables.</p></div>`;
+};
+function newExercice(){editExercice(null);}
+function editExercice(id){
+  const e=id?ST.exercices.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${e?'Modifier':'Nouvel'} exercice</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow"><div><label>Libellé</label><input id="xL" value="${e?e.libelle:''}" placeholder="Exercice 2027"></div></div>
+  <div class="frow c2"><div><label>Début</label><input type="date" id="xD" value="${e?e.debut:'2027-01-01'}"></div><div><label>Fin</label><input type="date" id="xF" value="${e?e.fin:'2027-12-31'}"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveExercice('${id||''}')">${e?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveExercice(id){
+  const lib=document.getElementById('xL').value||'Exercice',d=document.getElementById('xD').value,f=document.getElementById('xF').value;
+  if(id){const e=ST.exercices.find(x=>x.id===id);e.libelle=lib;e.debut=d;e.fin=f;await put('exercices',e);await loadAll();
+    if(id===ST.exId)document.getElementById('exLabel').textContent=lib;closeModal();RENDER.exercices();toast('Exercice modifié.');return;}
+  const e={id:uid('ex'),libelle:lib,debut:d,fin:f,statut:'ouvert'};
+  await put('exercices',e);await loadAll();closeModal();RENDER.exercices();toast('Exercice créé.');
+}
+async function delExercice(id){
+  if(id===ST.exId){toast('Impossible : exercice courant.');return;}
+  const nb=(await all('ecritures')).filter(x=>x.exId===id).length;
+  if(nb){toast('Impossible : '+nb+' écriture(s) liée(s).');return;}
+  if(!confirm('Supprimer cet exercice ?'))return;await del('exercices',id);await loadAll();RENDER.exercices();toast('Exercice supprimé.');}
+async function switchEx(id){await put('meta',{id:'exCourant',value:id});await loadAll();document.getElementById('exLabel').textContent=curEx().libelle;RENDER.exercices();toast('Exercice activé.');}
+async function cloturer(id){
+  if(!confirm('Clôturer définitivement cet exercice ? Génère les à-nouveaux.'))return;
+  const e=ST.exercices.find(x=>x.id===id);
+  // exercice suivant (par date de début)
+  const suivant=ST.exercices.filter(x=>x.debut>e.debut).sort((a,b)=>a.debut<b.debut?-1:1)[0];
+  if(!suivant){toast('Créez d\'abord l\'exercice suivant.');return;}
+  // soldes de clôture par compte (bilan : classes 1 à 5)
+  const m={};ST.ecritures.filter(x=>x.exId===id).forEach(ec=>ec.lignes.forEach(l=>{if(!m[l.compte])m[l.compte]={d:0,c:0};m[l.compte].d+=+l.debit||0;m[l.compte].c+=+l.credit||0;}));
+  // résultat = produits - charges
+  let produits=0,charges=0;for(const n in m){if(n[0]==='7')produits+=m[n].c-m[n].d;if(n[0]==='6')charges+=m[n].d-m[n].c;}
+  const resultat=produits-charges;
+  const lignes=[];
+  for(const n in m){if(!'12345'.includes(n[0]))continue;const solde=m[n].d-m[n].c;if(Math.abs(solde)<1)continue;
+    lignes.push({compte:n,libelle:'À-nouveau '+n,debit:solde>0?solde:0,credit:solde<0?-solde:0});}
+  // affectation résultat au 12 (report/résultat)
+  if(Math.abs(resultat)>=1)lignes.push({compte:'12',libelle:'Report résultat N-1',debit:resultat<0?-resultat:0,credit:resultat>0?resultat:0});
+  if(!ST.comptes.some(c=>c.numero==='12'))await put('comptes',{id:'c_12',numero:'12',libelle:'Report à nouveau / Résultat',type:'P',classe:'1'});
+  // équilibrage de sécurité
+  const sd=lignes.reduce((s,l)=>s+l.debit,0),sc=lignes.reduce((s,l)=>s+l.credit,0);
+  if(Math.abs(sd-sc)>=1)lignes.push({compte:'12',libelle:'Ajustement à-nouveau',debit:sd<sc?sc-sd:0,credit:sd>sc?sd-sc:0});
+  await put('ecritures',{id:'e_an_'+suivant.id,date:suivant.debut,journal:'OD',piece:'AN-'+suivant.debut.slice(0,4),libelle:'À-nouveaux '+suivant.libelle,exId:suivant.id,lignes});
+  e.statut='clôturé';await put('exercices',e);
+  await loadAll();RENDER.exercices();
+  toast('Clôturé. À-nouveaux générés · résultat '+F(resultat));
+}
+
+/* ---- Exports CSV ---- */
+function dl(name,txt){const b=new Blob(['\ufeff'+txt],{type:'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;a.click();}
+function exportEcrituresCSV(){
+  let c='Date;Journal;Piece;Compte;Libelle;Debit;Credit\n';
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>c+=`${e.date};${jLib(e.journal)};${e.piece||''};${l.compte};${(l.libelle||'').replace(/;/g,',')};${l.debit||0};${l.credit||0}\n`));
+  dl('ecritures_'+ST.exId+'.csv',c);toast('Export CSV généré.');
+}
+function exportBalanceCSV(){
+  const m=soldesParCompte();let c='Compte;Intitule;Debit;Credit;Solde\n';
+  Object.keys(m).sort().forEach(n=>c+=`${n};${cptLib(n).replace(/;/g,',')};${m[n].debit};${m[n].credit};${m[n].debit-m[n].credit}\n`);
+  dl('balance_'+ST.exId+'.csv',c);toast('Balance exportée.');
+}
+
+/* ============================================================
+   QR CODE — byte mode, ECC L, versions 1-9, auto-mask (offline)
+============================================================ */
+const QR=(function(){
+  const EXP=new Array(256),LOG=new Array(256);
+  (function(){let x=1;for(let i=0;i<255;i++){EXP[i]=x;LOG[x]=i;x<<=1;if(x&0x100)x^=0x11d;}EXP[255]=EXP[0];})();
+  const mul=(a,b)=>(a===0||b===0)?0:EXP[(LOG[a]+LOG[b])%255];
+  function genPoly(n){let p=[1];for(let i=0;i<n;i++){const np=new Array(p.length+1).fill(0);for(let j=0;j<p.length;j++){np[j]^=mul(p[j],EXP[i]);np[j+1]^=p[j];}p=np;}return p.reverse();}
+  function rs(data,ec){const gen=genPoly(ec);const res=data.concat(new Array(ec).fill(0));
+    for(let i=0;i<data.length;i++){const c=res[i];if(c!==0)for(let j=0;j<gen.length;j++)res[i+j]^=mul(gen[j],c);}
+    return res.slice(data.length);}
+  const CAP={1:[19,7,1],2:[34,10,1],3:[55,15,1],4:[80,20,1],5:[108,26,1],6:[136,18,2],7:[156,20,2],8:[194,24,2],9:[232,30,2]};
+  const ALIGN={1:[],2:[6,18],3:[6,22],4:[6,26],5:[6,30],6:[6,34],7:[6,22,38],8:[6,24,42],9:[6,26,46]};
+  function pickVer(len){for(let v=1;v<=9;v++)if(len+2<=CAP[v][0])return v;return 0;}
+  function encode(data){
+    const v=pickVer(data.length);if(!v)return null;const[dcw,ecw,nb]=CAP[v];
+    let bs=[];const push=(val,n)=>{for(let i=n-1;i>=0;i--)bs.push((val>>i)&1);};
+    push(4,4);push(data.length,8);data.forEach(b=>push(b,8));
+    const cap=dcw*8;if(bs.length+4<=cap)push(0,4);while(bs.length%8)bs.push(0);
+    const pads=[0xEC,0x11];let pi=0;while(bs.length/8<dcw)push(pads[pi++%2],8);
+    const cws=[];for(let i=0;i<bs.length;i+=8){let b=0;for(let j=0;j<8;j++)b=(b<<1)|bs[i+j];cws.push(b);}
+    const per=dcw/nb,blocks=[],eccs=[];
+    for(let i=0;i<nb;i++){const blk=cws.slice(i*per,(i+1)*per);blocks.push(blk);eccs.push(rs(blk,ecw));}
+    let out=[];for(let i=0;i<per;i++)for(let b=0;b<nb;b++)out.push(blocks[b][i]);
+    for(let i=0;i<ecw;i++)for(let b=0;b<nb;b++)out.push(eccs[b][i]);
+    return{v,cws:out};
+  }
+  const bchDigit=d=>{let n=0;while(d!==0){n++;d>>>=1;}return n;};
+  function bchInfo(data){let d=data<<10;while(bchDigit(d)-bchDigit(0x537)>=0)d^=0x537<<(bchDigit(d)-bchDigit(0x537));return((data<<10)|d)^0x5412;}
+  function bchNum(data){let d=data<<12;while(bchDigit(d)-bchDigit(0x1f25)>=0)d^=0x1f25<<(bchDigit(d)-bchDigit(0x1f25));return(data<<12)|d;}
+  const MASK=[(r,c)=>(r+c)%2===0,(r,c)=>r%2===0,(r,c)=>c%3===0,(r,c)=>(r+c)%3===0,
+    (r,c)=>(Math.floor(r/2)+Math.floor(c/3))%2===0,(r,c)=>(r*c)%2+(r*c)%3===0,
+    (r,c)=>((r*c)%2+(r*c)%3)%2===0,(r,c)=>((r+c)%2+(r*c)%3)%2===0];
+
+  function build(text,forceMask){
+    const data=[];for(const ch of unescape(encodeURIComponent(text)))data.push(ch.charCodeAt(0));
+    const enc=encode(data);if(!enc)return null;const v=enc.v,n=4*v+17;
+    const base=Array.from({length:n},()=>new Array(n).fill(null));
+    const fun=Array.from({length:n},()=>new Array(n).fill(false));
+    const setF=(r,c,val)=>{base[r][c]=val;fun[r][c]=true;};
+    function probe(r0,c0){for(let r=-1;r<=7;r++)for(let c=-1;c<=7;c++){const rr=r0+r,cc=c0+c;if(rr<0||cc<0||rr>=n||cc>=n)continue;
+      const dark=(r>=0&&r<=6&&c>=0&&c<=6)&&(r===0||r===6||c===0||c===6||(r>=2&&r<=4&&c>=2&&c<=4));setF(rr,cc,dark);}}
+    probe(0,0);probe(n-7,0);probe(0,n-7);
+    // alignment
+    const al=ALIGN[v];for(const r of al)for(const c of al){if(fun[r][c])continue;for(let dr=-2;dr<=2;dr++)for(let dc=-2;dc<=2;dc++)setF(r+dr,c+dc,Math.max(Math.abs(dr),Math.abs(dc))!==1);}
+    // timing
+    for(let i=8;i<n-8;i++){if(!fun[6][i])setF(6,i,i%2===0);if(!fun[i][6])setF(i,6,i%2===0);}
+    // reserve format area (function true)
+    for(let i=0;i<15;i++){let r,c;
+      if(i<6){r=i;}else if(i<8){r=i+1;}else{r=n-15+i;} setF(r,8,false);
+    }
+    for(let i=0;i<15;i++){let c;if(i<8){c=n-i-1;}else if(i<9){c=15-i-1+1;}else{c=15-i-1;} if(!fun[8][c])setF(8,c,false);else base[8][c]=false;}
+    setF(n-8,8,true); // dark
+    // reserve version area v>=7
+    if(v>=7){for(let i=0;i<18;i++){const r=Math.floor(i/3),c=i%3+n-8-3;setF(r,c,false);setF(c,r,false);}}
+    // place data (unmasked)
+    const cws=enc.cws,dlen=cws.length;let inc=-1,row=n-1,bitIndex=7,byteIndex=0;
+    for(let colBase=n-1;colBase>0;colBase-=2){let col=colBase;if(col<=6)col--;
+      while(true){for(const c of [col,col-1]){if(base[row][c]===null){
+        let dark=false;if(byteIndex<dlen)dark=((cws[byteIndex]>>bitIndex)&1)===1;
+        base[row][c]=dark;bitIndex--;if(bitIndex===-1){byteIndex++;bitIndex=7;}}}
+        row+=inc;if(row<0||row>=n){row-=inc;inc=-inc;break;}}
+    }
+    function render(msk){
+      const g=base.map(r=>r.slice());
+      for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(!fun[r][c]&&MASK[msk](r,c))g[r][c]=!g[r][c];
+      // format
+      const bits=bchInfo((1<<3)|msk);
+      for(let i=0;i<15;i++){const b=((bits>>i)&1)===1;let r;if(i<6)r=i;else if(i<8)r=i+1;else r=n-15+i;g[r][8]=b;}
+      for(let i=0;i<15;i++){const b=((bits>>i)&1)===1;let c;if(i<8)c=n-i-1;else if(i<9)c=15-i-1+1;else c=15-i-1;g[8][c]=b;}
+      g[n-8][8]=true;
+      if(v>=7){const bn=bchNum(v);for(let i=0;i<18;i++){const b=((bn>>i)&1)===1;g[Math.floor(i/3)][i%3+n-8-3]=b;g[i%3+n-8-3][Math.floor(i/3)]=b;}}
+      return g;
+    }
+    if(forceMask!=null)return render(forceMask);
+    function penalty(g){let p=0;
+      for(let r=0;r<n;r++){let run=1;for(let c=1;c<n;c++){if(g[r][c]===g[r][c-1])run++;else{if(run>=5)p+=3+run-5;run=1;}}if(run>=5)p+=3+run-5;}
+      for(let c=0;c<n;c++){let run=1;for(let r=1;r<n;r++){if(g[r][c]===g[r-1][c])run++;else{if(run>=5)p+=3+run-5;run=1;}}if(run>=5)p+=3+run-5;}
+      for(let r=0;r<n-1;r++)for(let c=0;c<n-1;c++)if(g[r][c]===g[r+1][c]&&g[r][c]===g[r][c+1]&&g[r][c]===g[r+1][c+1])p+=3;
+      let dark=0;for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(g[r][c])dark++;
+      p+=Math.floor(Math.abs(dark*100/(n*n)-50)/5)*10;return p;}
+    let bestG=null,bp=1e9;for(let m=0;m<8;m++){const g=render(m);const p=penalty(g);if(p<bp){bp=p;bestG=g;}}
+    return bestG;
+  }
+  function svg(text,size){const g=build(text);if(!g)return'';const n=g.length,q=4,tot=n+q*2;
+    let r=`<svg xmlns="http://www.w3.org/2000/svg" width="${size||132}" height="${size||132}" viewBox="0 0 ${tot} ${tot}" shape-rendering="crispEdges"><rect width="${tot}" height="${tot}" fill="#fff"/>`;
+    for(let y=0;y<n;y++)for(let x=0;x<n;x++)if(g[y][x])r+=`<rect x="${x+q}" y="${y+q}" width="1" height="1" fill="#1C1C2E"/>`;
+    return r+'</svg>';}
+  return{svg,build};
+})();
+
+/* ============================================================
+   FACTURATION — simple + FNE
+============================================================ */
+async function societe(){let s=await getOne('meta','societe');if(!s){s={id:'societe',value:{nom:'SANIX AFRICA DIVISION TECHNOLOGIES',ncc:'CI-XXXXXXX-X',rccm:'CI-ABJ-XX-XXXX-BXX-XXXXX',tel:'+225 07 79 18 10 75',adresse:'Abidjan, Côte d\'Ivoire',regime:'Réel Normal d\'Imposition (RNI)'}};await put('meta',s);}return s.value;}
+let FL=[]; // lignes facture
+
+RENDER.facturation=async()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm dark" onclick="editSociete()">⚙ Émetteur</button> <button class="btn sm gh" onclick="newFacture('simple')">+ Facture simple</button> <button class="btn sm" onclick="newFacture('fne')">+ Facture FNE</button>`;
+  const q=(window._facq||'').toLowerCase();
+  const rows=ST.factures.filter(f=>!q||(f.numero+f.clientNom).toLowerCase().includes(q)).map(f=>`<tr>
+    <td class="mono"><b>${f.numero}</b></td><td class="mono">${dfr(f.date)}</td><td>${f.clientNom}</td>
+    <td><span class="badge ${f.type==='fne'?'b-green':'b-gray'}">${f.type==='fne'?'FNE ✓':'Simple'}</span></td>
+    <td class="ta-r mono">${F0(f.ht)}</td><td class="ta-r mono">${F0(f.tva)}</td><td class="ta-r mono"><b>${F0(f.ttc)}</b></td>
+    <td class="ta-c"><button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`).join('');
+  const tHT=ST.factures.reduce((s,f)=>s+f.ht,0),tTVA=ST.factures.reduce((s,f)=>s+f.tva,0),tTTC=ST.factures.reduce((s,f)=>s+f.ttc,0);
+  document.getElementById('p-facturation').innerHTML=`
+  <div class="grid kpis">
+    <div class="card kpi o"><div class="lb">Factures émises</div><div class="v mono">${ST.factures.length}</div><div class="f">${ST.factures.filter(f=>f.type==='fne').length} FNE · ${ST.factures.filter(f=>f.type==='simple').length} simples</div></div>
+    <div class="card kpi b"><div class="lb">Total HT facturé</div><div class="v mono">${F(tHT)}</div></div>
+    <div class="card kpi g"><div class="lb">Total TTC</div><div class="v mono">${F(tTTC)}</div><div class="f">dont TVA ${F0(tTVA)}</div></div>
+  </div>
+  <div class="toolbar"><input class="search" placeholder="Rechercher n° ou client…" value="${window._facq||''}" oninput="window._facq=this.value;RENDER.facturation()"></div>
+  <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Client</th><th>Type</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Actions</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🧾</div>Aucune facture. Créez une facture FNE ou simple.</td></tr>'}</tbody></table></div>`;
+};
+
+async function nextFacNum(type){
+  const key='facSeq_'+curEx().id;const meta=await getOne('meta',key);let seq=meta?meta.value:0;seq++;
+  await put('meta',{id:key,value:seq});
+  const pre=type==='fne'?'FNE':'FAC';const yr=(curEx().debut||today()).slice(0,4);
+  return `${pre}-${yr}-${String(seq).padStart(4,'0')}`;
+}
+function newFacture(type){editFacture(null,type);}
+async function editFacture(id,type){
+  const f=id?ST.factures.find(x=>x.id===id):null;type=f?f.type:type;
+  FL=f?JSON.parse(JSON.stringify(f.lignes)):[{des:'',qte:1,pu:0,tva:18}];
+  const clients=ST.tiers.filter(t=>t.type==='client');
+  openModal(`
+    <div class="mh"><h3>${f?'Modifier':'Nouvelle'} facture ${type==='fne'?'<span class="badge b-green">FNE</span>':'<span class="badge b-gray">Simple</span>'}</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="frow c3">
+        <div><label>Client</label><select id="fClient" onchange="facClientPick()">
+          <option value="">— Saisie libre —</option>
+          ${clients.map(c=>`<option value="${c.id}" ${f&&f.clientId===c.id?'selected':''}>${c.nom}</option>`).join('')}
+        </select></div>
+        <div><label>Nom (si libre)</label><input id="fNom" value="${f?f.clientNom:''}" placeholder="Raison sociale"></div>
+        <div><label>Date</label><input type="date" id="fDate" value="${f?f.date:today()}"></div>
+      </div>
+      ${type==='fne'?`<div class="frow c2">
+        <div><label>NCC client (obligatoire FNE)</label><input id="fNcc" value="${f?(f.ncc||''):''}" placeholder="CI-XXXXXXX-X"></div>
+        <div><label>AIB — Acompte BIC (%)</label><select id="fAib"><option value="0" ${f&&f.aib===0?'selected':''}>Aucun</option><option value="0.5" ${f&&f.aib===0.5?'selected':''}>0,5 %</option><option value="1" ${f&&f.aib===1?'selected':''}>1 %</option><option value="7.5" ${f&&f.aib===7.5?'selected':''}>7,5 %</option></select></div>
+      </div>`:''}
+      <div class="tbl-wrap"><table class="lines"><thead><tr><th>Désignation</th><th style="width:70px">Qté</th><th style="width:120px">PU HT</th><th style="width:70px">TVA%</th><th style="width:120px">Montant HT</th><th style="width:34px"></th></tr></thead><tbody id="flBody"></tbody></table></div>
+      <div style="margin-top:8px"><button class="btn sm gh" onclick="addFLine()">+ Ligne</button></div>
+      <div class="balbar" style="flex-direction:column;align-items:flex-end;gap:4px">
+        <span>Total HT <b id="fHT" class="mono">0</b></span>
+        <span>TVA <b id="fTVA" class="mono">0</b></span>
+        <span id="fAibRow" style="display:none">AIB <b id="fAibV" class="mono">0</b></span>
+        <span style="font-size:16px">Net à payer TTC <b id="fTTC" class="mono" style="color:var(--cuivre-d)">0</b></span>
+      </div>
+    </div>
+    <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveFacture('${id||''}','${type}')">${type==='fne'?'Certifier & enregistrer':'Enregistrer'}</button></div>
+  `,true);
+  renderFLines();
+}
+function facClientPick(){const id=document.getElementById('fClient').value;const c=ST.tiers.find(t=>t.id===id);if(c){document.getElementById('fNom').value=c.nom;const n=document.getElementById('fNcc');if(n&&c.ncc)n.value=c.ncc;}}
+function renderFLines(){
+  document.getElementById('flBody').innerHTML=FL.map((l,i)=>`<tr>
+    <td><input value="${l.des||''}" oninput="FL[${i}].des=this.value"></td>
+    <td><input class="amt" value="${l.qte}" oninput="FL[${i}].qte=+this.value||0;facBal()"></td>
+    <td><input class="amt" value="${l.pu}" oninput="FL[${i}].pu=+this.value||0;facBal()"></td>
+    <td><input class="amt" value="${l.tva}" oninput="FL[${i}].tva=+this.value||0;facBal()"></td>
+    <td class="ta-r mono">${F0((l.qte||0)*(l.pu||0))}</td>
+    <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="FL.splice(${i},1);renderFLines()">✕</button></td></tr>`).join('');
+  facBal();
+}
+function addFLine(){FL.push({des:'',qte:1,pu:0,tva:18});renderFLines();}
+function facBal(){
+  const ht=FL.reduce((s,l)=>s+(l.qte||0)*(l.pu||0),0);
+  const tva=FL.reduce((s,l)=>s+(l.qte||0)*(l.pu||0)*(l.tva||0)/100,0);
+  const aibEl=document.getElementById('fAib');const aib=aibEl?(+aibEl.value||0):0;
+  const aibV=ht*aib/100;
+  document.getElementById('fHT').textContent=F0(ht);document.getElementById('fTVA').textContent=F0(tva);
+  if(aibEl&&aib>0){document.getElementById('fAibRow').style.display='';document.getElementById('fAibV').textContent='+ '+F0(aibV);}
+  else if(document.getElementById('fAibRow'))document.getElementById('fAibRow').style.display='none';
+  document.getElementById('fTTC').textContent=F0(ht+tva+aibV);
+}
+async function saveFacture(id,type){
+  const nom=document.getElementById('fNom').value.trim();
+  if(!nom){toast('Client obligatoire.');return;}
+  if(FL.some(l=>!l.des||!l.pu)){toast('Chaque ligne : désignation + prix.');return;}
+  const ht=FL.reduce((s,l)=>s+(l.qte||0)*(l.pu||0),0);
+  const tva=FL.reduce((s,l)=>s+(l.qte||0)*(l.pu||0)*(l.tva||0)/100,0);
+  const clientId=document.getElementById('fClient').value;
+  const aibEl=document.getElementById('fAib');const aib=aibEl?(+aibEl.value||0):0;const aibV=ht*aib/100;
+  const ncc=document.getElementById('fNcc')?document.getElementById('fNcc').value.trim():'';
+  if(type==='fne'&&!ncc){toast('NCC client obligatoire pour une FNE.');return;}
+  const numero=id?ST.factures.find(f=>f.id===id).numero:await nextFacNum(type);
+  const fac={id:id||uid('f'),exId:ST.exId,numero,type,date:document.getElementById('fDate').value,
+    clientId,clientNom:nom,ncc,aib,aibV,lignes:FL,ht,tva,ttc:ht+tva+aibV,
+    fneRef:type==='fne'?(id?ST.factures.find(f=>f.id===id).fneRef:genFneRef(numero)):'',created:Date.now()};
+  await put('factures',fac);
+  await genFactureEcriture(fac);
+  await loadAll();closeModal();RENDER.facturation();toast(type==='fne'?'FNE certifiée : '+numero:'Facture '+numero+' enregistrée.');
+}
+function genFneRef(num){ // référence de certification simulée (la vraie vient de la plateforme DGI)
+  const h=num.split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,7)>>>0;
+  return 'FNE'+(curEx().debut||today()).slice(0,4)+h.toString(36).toUpperCase().padStart(8,'0');
+}
+async function genFactureEcriture(f){
+  // écriture VT auto : client débit TTC / 70x crédit HT / 4431 crédit TVA / AIB 4494
+  const cl=ST.tiers.find(t=>t.id===f.clientId);
+  const cptClient=cl?cl.compte:'4111';
+  const lignes=[{compte:cptClient,tiers:f.clientId,libelle:'Client '+f.clientNom,debit:f.ttc,credit:0,lettre:''},
+    {compte:'701',libelle:'Ventes',debit:0,credit:f.ht,lettre:''},
+    {compte:'4431',libelle:'TVA collectée',debit:0,credit:f.tva,lettre:''}];
+  if(f.aibV>0)lignes.push({compte:'4499',libelle:'AIB '+f.aib+'%',debit:0,credit:f.aibV,lettre:''});
+  const e={id:'e_fac_'+f.id,exId:ST.exId,journal:'VT',date:f.date,piece:f.numero,libelle:'Facture '+f.numero+' — '+f.clientNom,lignes,created:Date.now()};
+  await put('ecritures',e);
+}
+async function delFacture(id){const f=ST.factures.find(x=>x.id===id);if(!confirm('Supprimer '+f.numero+' ? (annule aussi l\'écriture)'))return;await del('factures',id);await del('ecritures','e_fac_'+id);await loadAll();RENDER.facturation();toast('Facture supprimée.');}
+
+async function factureHTML(id){
+  const f=ST.factures.find(x=>x.id===id);const s=await societe();
+  const qrPayload=f.type==='fne'?`https://fne.dgi.gouv.ci/verif/${f.fneRef}|${f.numero}|${Math.round(f.ttc)}|${f.ncc}`:`${s.nom}|${f.numero}|${Math.round(f.ttc)}`;
+  const qr=QR.svg(qrPayload,120)||'';
+  const lignes=f.lignes.map(l=>`<tr><td>${l.des}</td><td class="ta-c mono">${l.qte}</td><td class="ta-r mono">${F0(l.pu)}</td><td class="ta-c mono">${l.tva}%</td><td class="ta-r mono">${F0(l.qte*l.pu)}</td></tr>`).join('');
+  return `<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;max-width:720px;margin:0 auto;padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #B87333;padding-bottom:12px">
+      <div><div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">SX</div><div><div style="font-weight:800;font-size:16px">${s.nom}</div><div style="font-size:11px;color:#697089">${s.adresse} · ${s.tel}</div></div></div>
+      <div style="font-size:11px;color:#697089;margin-top:6px">NCC : <b>${s.ncc}</b> · RCCM : ${s.rccm}<br>Régime : ${s.regime}</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:800;letter-spacing:-.5px">${f.type==='fne'?'FACTURE NORMALISÉE':'FACTURE'}</div>
+      <div style="font-size:13px;font-weight:700;color:#B87333">${f.numero}</div><div style="font-size:11px;color:#697089">Date : ${dfr(f.date)}</div>
+      ${f.type==='fne'?'<div style="margin-top:4px;font-size:10px;background:#e2f4ec;color:#1a8a5a;padding:2px 8px;border-radius:20px;font-weight:800;display:inline-block">CERTIFIÉE FNE ✓</div>':''}</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin:14px 0">
+      <div style="font-size:12.5px"><div style="color:#697089;font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700">Facturé à</div><b style="font-size:15px">${f.clientNom}</b>${f.ncc?`<div style="font-size:11px;color:#697089">NCC : ${f.ncc}</div>`:''}</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+      <thead><tr style="background:#1C1C2E;color:#fff"><th style="text-align:left;padding:8px 10px">Désignation</th><th style="padding:8px 10px">Qté</th><th style="text-align:right;padding:8px 10px">PU HT</th><th style="padding:8px 10px">TVA</th><th style="text-align:right;padding:8px 10px">Montant HT</th></tr></thead>
+      <tbody>${lignes}</tbody></table>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;gap:20px">
+      <div style="flex:1">
+        ${f.type==='fne'?`<div style="border:1px solid #e3e6ee;border-radius:9px;padding:10px;display:flex;gap:12px;align-items:center">
+          <div style="flex-shrink:0">${qr}</div>
+          <div style="font-size:10.5px;color:#697089;line-height:1.5"><b style="color:#1a8a5a">Facture certifiée DGI</b><br>Réf. FNE : <b style="color:#1C1C2E">${f.fneRef}</b><br>Scannez pour vérifier l'authenticité sur le portail DGI.</div>
+        </div>`:`<div style="border:1px dashed #e3e6ee;border-radius:9px;padding:10px;display:flex;gap:12px;align-items:center"><div>${qr}</div><div style="font-size:10.5px;color:#697089">Facture simple — non fiscale.<br>Pour une facture opposable, émettre en mode FNE.</div></div>`}
+      </div>
+      <div style="width:250px;font-size:13px">
+        <div style="display:flex;justify-content:space-between;padding:4px 0"><span>Total HT</span><b class="mono">${F0(f.ht)}</b></div>
+        <div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eef0f5"><span>TVA (18%)</span><b class="mono">${F0(f.tva)}</b></div>
+        ${f.aibV>0?`<div style="display:flex;justify-content:space-between;padding:4px 0"><span>AIB (${f.aib}%)</span><b class="mono">${F0(f.aibV)}</b></div>`:''}
+        <div style="display:flex;justify-content:space-between;padding:9px 10px;background:#1C1C2E;color:#fff;border-radius:8px;margin-top:6px;font-size:15px"><span>NET À PAYER</span><b class="mono">${F0(f.ttc)} F</b></div>
+      </div>
+    </div>
+    <div style="margin-top:18px;font-size:10px;color:#9aa0b4;text-align:center;border-top:1px solid #e3e6ee;padding-top:8px">
+      ${f.type==='fne'?'Facture normalisée électronique conforme au dispositif FNE de la DGI Côte d\'Ivoire.':'Document non fiscal.'} · Émis via SANIX ComptaPro
+    </div>
+  </div>`;
+}
+async function viewFacture(id){openModal(`<div class="mh"><h3>Aperçu facture</h3><button class="x" onclick="closeModal()">×</button></div><div class="mb" style="background:#f4f5f8">${await factureHTML(id)}</div><div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="printFacture('${id}')">⎙ Imprimer</button></div>`,true);}
+async function printFacture(id){
+  const html=await factureHTML(id);const w=window.open('','_blank');
+  w.document.write(`<html><head><title>${ST.factures.find(f=>f.id===id).numero}</title><style>@media print{body{margin:0}}</style></head><body onload="window.print()">${html}</body></html>`);
+  w.document.close();
+}
+function editSociete(){societe().then(s=>{
+  openModal(`<div class="mh"><h3>Émetteur (paramètres FNE)</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c2"><div><label>Raison sociale</label><input id="sNom" value="${s.nom}"></div><div><label>NCC (Numéro Compte Contribuable)</label><input id="sNcc" value="${s.ncc}"></div></div>
+  <div class="frow c2"><div><label>RCCM</label><input id="sRccm" value="${s.rccm}"></div><div><label>Téléphone</label><input id="sTel" value="${s.tel}"></div></div>
+  <div class="frow c2"><div><label>Adresse</label><input id="sAdr" value="${s.adresse}"></div><div><label>Régime fiscal</label><input id="sReg" value="${s.regime}"></div></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid #B87333;padding:10px 12px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:6px">NCC et régime réels obligatoires pour la conformité FNE. La certification définitive est délivrée par la plateforme DGI.</div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveSociete()">Enregistrer</button></div>`);
+});}
+async function saveSociete(){
+  await put('meta',{id:'societe',value:{nom:sNom.value,ncc:sNcc.value,rccm:sRccm.value,tel:sTel.value,adresse:sAdr.value,regime:sReg.value}});
+  closeModal();toast('Émetteur mis à jour.');
+}
+
+/* ---- Télédéclarations (fiscal DGI + social CNPS) ---- */
+function moisMouv(ym){const m={};mouvements().forEach(r=>{if((r.date||'').slice(0,7)!==ym)return;if(!m[r.compte])m[r.compte]={debit:0,credit:0};m[r.compte].debit+=r.debit;m[r.compte].credit+=r.credit;});return m;}
+const moisLibelle=ym=>{const[y,mo]=ym.split('-');return['','Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'][+mo]+' '+y;};
+function moisDispo(){const set=new Set();mouvements().forEach(r=>{if(r.date)set.add(r.date.slice(0,7));});const arr=[...set].sort().reverse();return arr.length?arr:[today().slice(0,7)];}
+RENDER.teledec=()=>{
+  const mois=moisDispo();const ym=window._tdMois||mois[0];const tab=window._tdTab||'fiscal';
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="exportTeledecCSV('${ym}','${tab}')">⭳ CSV</button> <button class="btn sm gh" onclick="printReport('p-teledec','Télédéclaration ${tab==='fiscal'?'fiscale':'sociale'}')">⎙ Imprimer</button>`;
+  const m=moisMouv(ym);const sc=(n,sens)=>{const c=m[n]||{debit:0,credit:0};return sens==='c'?c.credit-c.debit:c.debit-c.credit;};
+  const echDGI=echeance(ym,15), echCNPS=echeance(ym,15);
+  const tabBtn=(k,l)=>`<button class="btn sm ${tab===k?'':'gh'}" onclick="window._tdTab='${k}';RENDER.teledec()">${l}</button>`;
+  let body='';
+  if(tab==='fiscal'){
+    const tvaColl=sc('4431','c'),tvaDed=sc('4452','d'),tvaNette=tvaColl-tvaDed;
+    const aib=sc('4499','c');
+    const ca=(()=>{let s=0;const mm=moisMouv(ym);for(const n in mm)if(n[0]==='7')s+=mm[n].credit-mm[n].debit;return s;})();
+    const acompteBIC=Math.round(ca*0.005); // acompte type; à ajuster selon régime
+    body=`
+    ${declCard('TVA — Taxe sur la Valeur Ajoutée','DGI · e-impots','#0f7c72',[
+      ['TVA collectée sur ventes (4431)',tvaColl],['TVA déductible sur achats (4452)',tvaDed],['TVA NETTE '+(tvaNette>=0?'à payer':'crédit reportable'),tvaNette,true]],echDGI,'Formulaire TVA mensuelle')}
+    ${declCard('AIB — Acompte d\'Impôt sur le BIC','DGI','#B87333',[
+      ['AIB collecté / retenu (4499)',aib,true]],echDGI,'Reversement AIB')}
+    ${declCard('Acompte BIC / IS','DGI · indicatif','#2c6fb5',[
+      ['Chiffre d\'affaires du mois',ca],['Acompte estimé (0,5% CA — à ajuster régime)',acompteBIC,true]],echDGI,'Acompte prévisionnel')}`;
+  } else {
+    const salaires=sc('661','d'),chargesSoc=sc('664','d');
+    const its=sc('4471','c'),cnps=sc('431','c');
+    // ventilation indicative CNPS (part patronale ~16,45%, salariale 6,3% sur base plafonnée)
+    const cnpsPat=Math.round(cnps*0.72),cnpsSal=cnps-cnpsPat;
+    body=`
+    ${declCard('CNPS — Cotisations sociales','CNPS · e-CNPS','#6d4b9e',[
+      ['Base salariale brute (661)',salaires],['Cotisations dues (431)',cnps],
+      ['— dont part patronale (~72%)',cnpsPat],['— dont part salariale (~28%)',cnpsSal,true]],echCNPS,'DISA mensuelle')}
+    ${declCard('ITS — Impôt sur Traitements et Salaires','DGI · e-impots','#c0392b',[
+      ['Salaires imposables (661)',salaires],['ITS retenu à reverser (4471)',its,true]],echDGI,'Reversement ITS')}
+    ${declCard('Charges sociales patronales','Récapitulatif','#4a5578',[
+      ['Charges sociales comptabilisées (664)',chargesSoc,true]],echDGI,'Contrôle')}`;
+  }
+  document.getElementById('p-teledec').innerHTML=`
+  <div class="toolbar">
+    <div style="display:flex;gap:6px">${tabBtn('fiscal','Fiscal (DGI)')}${tabBtn('social','Social (CNPS)')}</div>
+    <select style="margin-left:auto" onchange="window._tdMois=this.value;RENDER.teledec()">${mois.map(x=>`<option value="${x}" ${x===ym?'selected':''}>${moisLibelle(x)}</option>`).join('')}</select>
+  </div>
+  ${body}
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:11px 14px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:4px"><b style="color:var(--cuivre-d)">Télé-procédure.</b> Montants issus de la comptabilité du mois. Reporter sur les portails DGI (e-impots) et CNPS (e-CNPS). Le CSV sert de justificatif de saisie.</div>`;
+};
+function echeance(ym,jour){const[y,mo]=ym.split('-').map(Number);const d=new Date(y,mo,jour);return d.toISOString().slice(0,10);}
+function declCard(titre,org,color,lignes,ech,formu){
+  const rows=lignes.map(l=>`<tr><td>${l[0]}</td><td class="ta-r mono ${l[2]?'':''}" style="${l[2]?'font-weight:800':''}">${F(l[1])}</td></tr>`).join('');
+  return`<div class="card" style="border-left:4px solid ${color};padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;background:#fafbfd;border-bottom:1px solid var(--line)">
+      <div><b style="font-size:14.5px">${titre}</b><div style="font-size:11px;color:var(--mut)">${org} · ${formu}</div></div>
+      <div style="text-align:right"><span class="badge b-cuivre">échéance ${dfr(ech)}</span></div>
+    </div>
+    <table style="border:none"><tbody>${rows}</tbody></table>
+  </div>`;
+}
+function exportTeledecCSV(ym,tab){
+  const m=moisMouv(ym);const sc=(n,s)=>{const c=m[n]||{debit:0,credit:0};return s==='c'?c.credit-c.debit:c.debit-c.credit;};
+  let c='Declaration;Poste;Compte;Montant;Periode;Echeance\n';const ech=dfr(echeance(ym,15));
+  if(tab==='fiscal'){
+    c+=`TVA;TVA collectee;4431;${sc('4431','c')};${ym};${ech}\n`;
+    c+=`TVA;TVA deductible;4452;${sc('4452','d')};${ym};${ech}\n`;
+    c+=`TVA;TVA nette;;${sc('4431','c')-sc('4452','d')};${ym};${ech}\n`;
+    c+=`AIB;AIB collecte;4499;${sc('4499','c')};${ym};${ech}\n`;
+  } else {
+    c+=`CNPS;Base salariale;661;${sc('661','d')};${ym};${ech}\n`;
+    c+=`CNPS;Cotisations dues;431;${sc('431','c')};${ym};${ech}\n`;
+    c+=`ITS;Salaires imposables;661;${sc('661','d')};${ym};${ech}\n`;
+    c+=`ITS;ITS a reverser;4471;${sc('4471','c')};${ym};${ech}\n`;
+  }
+  dl('teledeclaration_'+tab+'_'+ym+'.csv',c);toast('Déclaration exportée.');
+}
+/* ---- Paramétrage ---- */
+RENDER.parametrage=()=>{
+  if(!can('admin')){document.getElementById('p-parametrage').innerHTML='<div class="empty">Accès réservé à l\'administrateur.</div>';return;}
+  const tab=window._pgTab||'societe';
+  document.getElementById('pgActions').innerHTML='';
+  const tb=(k,l)=>`<button class="btn sm ${tab===k?'':'gh'}" onclick="window._pgTab='${k}';RENDER.parametrage()">${l}</button>`;
+  let body='';
+  if(tab==='societe')body='<div id="pgSoc"></div>';
+  else if(tab==='users')body=usersHTML();
+  else if(tab==='stockage')body=stockageHTML();
+  else if(tab==='import')body=importHTML();
+  document.getElementById('p-parametrage').innerHTML=`
+  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}</div>
+  ${body}`;
+  if(tab==='societe')societeForm();
+};
+async function societeForm(){const s=await societe();const el=document.getElementById('pgSoc');if(!el)return;
+  el.innerHTML=`<div class="card">
+    <div class="frow c2"><div><label>Raison sociale</label><input id="sNom" value="${s.nom}"></div><div><label>NCC</label><input id="sNcc" value="${s.ncc}"></div></div>
+    <div class="frow c2"><div><label>RCCM</label><input id="sRccm" value="${s.rccm}"></div><div><label>Téléphone</label><input id="sTel" value="${s.tel}"></div></div>
+    <div class="frow c2"><div><label>Adresse</label><input id="sAdr" value="${s.adresse}"></div><div><label>Régime fiscal</label><input id="sReg" value="${s.regime}"></div></div>
+    <button class="btn sm" onclick="saveSociete()">Enregistrer</button></div>`;
+}
+async function saveSociete(){
+  await put('meta',{id:'societe',value:{nom:sNom.value,ncc:sNcc.value,rccm:sRccm.value,tel:sTel.value,adresse:sAdr.value,regime:sReg.value}});
+  toast('Société enregistrée.');
+}
+/* -- Utilisateurs & rôles -- */
+function usersHTML(){
+  const rows=ST.users.map(u=>`<tr><td><b>${u.login}</b></td><td><span class="badge b-cuivre">${u.role}</span><div style="font-size:11px;color:var(--mut)">${ROLES[u.role]?ROLES[u.role].lb:''}</div></td>
+    <td class="ta-c"><button class="linkbtn" onclick="editUser('${u.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delUser('${u.id}')">✕</button></td></tr>`).join('');
+  return `<div class="sect-h" style="margin-top:0"><h3>Comptes utilisateurs</h3><button class="btn sm" onclick="editUser(null)">+ Utilisateur</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Identifiant</th><th>Rôle</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="card" style="margin-top:12px"><h3>Matrice des rôles</h3><table style="border:none"><tbody>${Object.entries(ROLES).map(([k,v])=>`<tr><td><b>${k}</b></td><td>${v.lb}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function editUser(id){
+  const u=id?ST.users.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${u?'Modifier':'Nouvel'} utilisateur</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c2"><div><label>Identifiant</label><input id="uLogin" value="${u?u.login:''}" ${u?'disabled':''}></div>
+  <div><label>Rôle</label><select id="uRole">${Object.keys(ROLES).map(r=>`<option ${u&&u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
+  <div class="frow"><div><label>Mot de passe ${u?'(laisser vide = inchangé)':''}</label><input id="uPwd" type="password" placeholder="••••"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveUser('${id||''}')">${u?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveUser(id){
+  const login=document.getElementById('uLogin').value.trim(),role=document.getElementById('uRole').value,pwd=document.getElementById('uPwd').value;
+  if(!login){toast('Identifiant requis.');return;}
+  if(id){const u=ST.users.find(x=>x.id===id);u.role=role;if(pwd)u.hash=hashPwd(pwd);await put('users',u);}
+  else{if(ST.users.some(x=>x.login.toUpperCase()===login.toUpperCase())){toast('Identifiant déjà pris.');return;}
+    if(!pwd){toast('Mot de passe requis.');return;}
+    await put('users',{id:uid('u'),login,role,hash:hashPwd(pwd)});}
+  await loadAll();closeModal();RENDER.parametrage();toast('Utilisateur enregistré.');
+}
+async function delUser(id){const u=ST.users.find(x=>x.id===id);
+  if(u.login===ST.user.login){toast('Impossible : compte connecté.');return;}
+  if(ST.users.filter(x=>x.role==='Administrateur').length<=1&&u.role==='Administrateur'){toast('Impossible : dernier administrateur.');return;}
+  if(!confirm('Supprimer '+u.login+' ?'))return;await del('users',id);await loadAll();RENDER.parametrage();toast('Utilisateur supprimé.');}
+/* -- Stockage & sync -- */
+function stockageHTML(){
+  const cnt=STORES.map(s=>`${s}: ${(s==='comptes'?ST.comptes.length:s==='tiers'?ST.tiers.length:s==='ecritures'?ST.ecritures.length:s==='factures'?ST.factures.length:s==='users'?ST.users.length:'—')}`);
+  const sb=window._sb||{};
+  return `<div class="card"><h3>Stockage local (IndexedDB)</h3>
+    <p style="font-size:13px;color:var(--mut)">Base <code>sanix_comptapro</code> v3 · ${STORES.length} magasins · fonctionnement hors-ligne.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sm gh" onclick="backupExport()">⭳ Sauvegarde complète (JSON)</button>
+    <label class="btn sm gh" style="cursor:pointer">⭱ Restaurer<input type="file" accept=".json" style="display:none" onchange="backupImport(this.files[0])"></label>
+    <button class="btn sm" style="background:var(--red)" onclick="resetBase()">Réinitialiser</button></div></div>
+  <div class="card"><h3>Synchronisation Supabase</h3>
+    <div class="frow c2"><div><label>URL du projet</label><input id="sbUrl" value="${sb.url||''}" placeholder="https://xxxx.supabase.co"></div>
+    <div><label>Clé anon (publique)</label><input id="sbKey" value="${sb.key||''}" placeholder="eyJ…"></div></div>
+    <button class="btn sm" onclick="saveSupabase()">Enregistrer la configuration</button>
+    <button class="btn sm" style="background:var(--green)" onclick="syncNow()">⇄ Synchroniser maintenant</button>
+    <label style="font-size:12.5px;display:inline-flex;align-items:center;gap:6px;margin-left:8px"><input type="checkbox" id="autoSyncChk" ${window._autosync?'checked':''} onchange="toggleAutosync(this.checked)"> Auto-sync (60s)</label>
+    <span id="syncStatus" style="font-size:12px;color:var(--mut);margin-left:8px">${window._lastSync?'Dernière sync : '+window._lastSync:''}</span>
+    <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:10px">Sync via API REST (compatible file://). Push local → Supabase puis pull. Créez d'abord les tables :</div>
+    <details style="margin-top:6px"><summary style="cursor:pointer;font-size:12.5px;color:var(--cuivre-d);font-weight:700">Voir le script SQL des tables</summary>
+    <pre style="background:#1C1C2E;color:#e8c9a8;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto;margin-top:6px">${SB_SQL.replace(/</g,'&lt;')}</pre></details></div>`;
+}
+async function saveSupabase(){await put('meta',{id:'supabase',value:{url:sbUrl.value.trim(),key:sbKey.value.trim()}});window._sb={url:sbUrl.value.trim(),key:sbKey.value.trim()};toast('Configuration Supabase enregistrée.');}
+/* -- Synchronisation Supabase (XHR, compatible file://) -- */
+async function sbCfg(){const m=await getOne('meta','supabase');return m?m.value:null;}
+function xhrJSON(method,url,headers,body){return new Promise((res,rej)=>{
+  const x=new XMLHttpRequest();x.open(method,url,true);
+  for(const k in headers)x.setRequestHeader(k,headers[k]);
+  x.onload=()=>{if(x.status>=200&&x.status<300){try{res(x.responseText?JSON.parse(x.responseText):[]);}catch(e){res([]);}}else rej(new Error('HTTP '+x.status+' '+x.responseText));};
+  x.onerror=()=>rej(new Error('Réseau indisponible'));
+  x.send(body?JSON.stringify(body):null);
+});}
+const SB_TABLE=s=>'sanix_compta_'+s;
+async function sbPush(cfg,store){
+  const rows=(await all(store)).map(r=>({id:r.id,payload:r}));
+  if(!rows.length)return 0;
+  const h={'apikey':cfg.key,'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
+  await xhrJSON('POST',cfg.url+'/rest/v1/'+SB_TABLE(store),h,rows);
+  return rows.length;
+}
+async function sbPull(cfg,store){
+  const h={'apikey':cfg.key,'Authorization':'Bearer '+cfg.key};
+  const data=await xhrJSON('GET',cfg.url+'/rest/v1/'+SB_TABLE(store)+'?select=id,payload',h,null);
+  let n=0;for(const row of data){if(row.payload){await put(store,row.payload);n++;}}
+  return n;
+}
+async function syncNow(silent){
+  const cfg=await sbCfg();
+  if(!cfg||!cfg.url||!cfg.key){if(!silent)toast('Configurez Supabase d\'abord.');return;}
+  if(typeof navigator!=='undefined'&&navigator.onLine===false){if(!silent)toast('Hors-ligne : sync différée.');return;}
+  if(!silent)toast('Synchronisation en cours…');
+  let up=0,down=0;
+  try{
+    for(const s of STORES){if(s==='meta')continue;up+=await sbPush(cfg,s);down+=await sbPull(cfg,s);}
+    await put('meta',{id:'lastSync',value:new Date().toISOString()});
+    await loadAll();if(document.getElementById('p-parametrage'))RENDER.parametrage();
+    updateNetBadge();
+    if(!silent)toast('Sync OK · '+up+' envoyés, '+down+' reçus.');
+  }catch(e){if(!silent)toast('Échec sync : '+e.message);}
+}
+let AUTOSYNC_TIMER=null;
+async function startAutosync(){
+  const on=(await getOne('meta','autosync'))?.value;
+  clearInterval(AUTOSYNC_TIMER);
+  if(on){AUTOSYNC_TIMER=setInterval(()=>syncNow(true),60000);syncNow(true);}
+}
+async function toggleAutosync(v){await put('meta',{id:'autosync',value:v});startAutosync();toast(v?'Auto-sync activée (60s).':'Auto-sync désactivée.');}
+function updateNetBadge(){const b=document.getElementById('netBadge');if(!b)return;
+  const on=typeof navigator==='undefined'||navigator.onLine!==false;
+  b.textContent=on?'● en ligne':'● hors-ligne';b.style.color=on?'#7be0af':'#ff9a8f';}
+
+const SB_SQL=`-- À exécuter dans Supabase (SQL editor)
+do $$ declare t text; begin
+  foreach t in array array['comptes','tiers','ecritures','exercices','journaux','factures','users']
+  loop execute format('create table if not exists sanix_compta_%s (id text primary key, payload jsonb, updated_at timestamptz default now());',t);
+  execute format('alter table sanix_compta_%s enable row level security;',t); end loop; end $$;`;
+
+async function backupExport(){
+  const dump={};for(const s of STORES)dump[s]=await all(s);
+  const b=new Blob([JSON.stringify(dump)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sanix_comptapro_backup_'+today()+'.json';a.click();toast('Sauvegarde générée.');
+}
+function backupImport(file){if(!file)return;const rd=new FileReader();rd.onload=async()=>{try{const d=JSON.parse(rd.result);
+  for(const s of STORES)if(d[s])for(const rec of d[s])await put(s,rec);
+  await loadAll();toast('Sauvegarde restaurée.');RENDER.parametrage();}catch(e){toast('Fichier invalide.');}};rd.readAsText(file);}
+async function resetBase(){if(!confirm('Réinitialiser toute la base ? Action irréversible.'))return;for(const s of STORES)for(const r of await all(s))await del(s,r.id);await put('meta',{id:'seeded',value:false});toast('Base réinitialisée. Rechargez.');}
+/* -- Import CSV -- */
+function importHTML(){
+  return `<div class="card"><h3>Import CSV</h3>
+    <div class="frow c2"><div><label>Cible</label><select id="impCible"><option value="tiers">Clients / Fournisseurs</option><option value="comptes">Plan comptable</option></select></div>
+    <div><label>Séparateur</label><select id="impSep"><option value=";">point-virgule ;</option><option value=",">virgule ,</option></select></div></div>
+    <div id="impFmt" style="font-size:12px;color:var(--mut);margin-bottom:8px"></div>
+    <div class="frow"><div><label>Coller le CSV (1ère ligne = entêtes) ou charger un fichier</label><textarea id="impTxt" style="width:100%;min-height:130px;padding:9px;border:1.5px solid var(--line);border-radius:8px;font-family:monospace;font-size:12px"></textarea></div></div>
+    <div style="display:flex;gap:8px"><label class="btn sm gh" style="cursor:pointer">Charger fichier<input type="file" accept=".csv" style="display:none" onchange="loadCSVFile(this.files[0])"></label>
+    <button class="btn sm" onclick="runImport()">Importer</button></div>
+  </div>`;
+}
+function loadCSVFile(f){if(!f)return;const rd=new FileReader();rd.onload=()=>{document.getElementById('impTxt').value=rd.result;toast('Fichier chargé.');};rd.readAsText(f);}
+async function runImport(){
+  const cible=document.getElementById('impCible').value,sep=document.getElementById('impSep').value;
+  const txt=document.getElementById('impTxt').value.trim();if(!txt){toast('CSV vide.');return;}
+  const lines=txt.split(/\r?\n/).filter(x=>x.trim());const head=lines.shift().split(sep).map(h=>h.trim().toLowerCase());
+  let n=0;
+  for(const line of lines){const cols=line.split(sep);const row={};head.forEach((h,i)=>row[h]=(cols[i]||'').trim());
+    if(cible==='comptes'){const num=row['numero']||row['compte']||row['n°'];if(!num||!/^\d{2,}/.test(num))continue;
+      await put('comptes',{id:'c_'+num,numero:num,libelle:row['libelle']||row['intitule']||'',type:(row['type']||row['nature']||'A')[0].toUpperCase(),classe:num[0]});n++;}
+    else{const type=(row['type']||'client').toLowerCase().startsWith('four')?'fournisseur':'client';const nom=row['nom']||row['raison sociale']||row['designation'];if(!nom)continue;
+      const base=type==='client'?'4111':'4011';const cpt=row['compte']||(base+String(ST.tiers.filter(t=>t.type===type).length+1+n).padStart(3,'0'));
+      const t={id:uid('t'),type,nom,compte:cpt,ncc:row['ncc']||'',tel:row['tel']||row['telephone']||'',email:row['email']||'',adresse:row['adresse']||'',delai:+(row['delai']||0)||0,plafond:+(row['plafond']||0)||0};
+      await put('tiers',t);await put('comptes',{id:'c_'+cpt,numero:cpt,libelle:(type==='client'?'Client — ':'Fournisseur — ')+nom,type:type==='client'?'A':'P',classe:'4',aux:t.id});n++;}
+  }
+  await loadAll();toast(n+' ligne(s) importée(s).');document.getElementById('impTxt').value='';
+}
+
+/* ---- Immobilisations ---- */
+const IMMO_CAT=['Bâtiment','Matériel & outillage','Matériel roulant','Mobilier','Informatique','Incorporel'];
+function coefDeg(d){return d<=4?1.5:d<=6?2:2.5;}
+function planAmort(im){
+  const rows=[];let vnc=im.valeur;const an0=+(im.dateAcq||'').slice(0,4)||curEx().debut.slice(0,4);
+  if(im.mode==='degressif'){const taux=coefDeg(im.duree)/im.duree;
+    for(let k=0;k<im.duree;k++){const lin=vnc/(im.duree-k);let dot=vnc*taux;if(dot<lin)dot=lin;if(k===im.duree-1)dot=vnc;dot=Math.round(dot);vnc-=dot;rows.push({an:an0+k,dot,cumul:im.valeur-vnc,vnc});}}
+  else{const a=Math.round(im.valeur/im.duree);for(let k=0;k<im.duree;k++){let dot=a;if(k===im.duree-1)dot=vnc;vnc-=dot;rows.push({an:an0+k,dot,cumul:im.valeur-vnc,vnc});}}
+  return rows;
+}
+function dotationExercice(im){const y=+curEx().debut.slice(0,4);const r=planAmort(im).find(x=>x.an===y);return r?r.dot:0;}
+RENDER.immo=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-immo','Registre des immobilisations')">⎙ Imprimer</button> <button class="btn sm" onclick="editImmo(null)">+ Immobilisation</button>`;
+  let tVO=0,tCum=0,tVNC=0;
+  const rows=ST.immos.map(im=>{const pa=planAmort(im);const y=+curEx().debut.slice(0,4);const cur=pa.find(x=>x.an===y)||pa[pa.length-1]||{cumul:0,vnc:im.valeur};
+    tVO+=im.valeur;tCum+=cur.cumul;tVNC+=cur.vnc;
+    return`<tr><td class="mono"><b>${im.code}</b></td><td>${im.libelle}<div style="font-size:11px;color:var(--mut)">${im.categorie}</div></td>
+    <td>${dfr(im.dateAcq)}</td><td class="ta-c">${im.duree} ans · ${im.mode==='degressif'?'dég.':'lin.'}</td>
+    <td class="ta-r mono">${F0(im.valeur)}</td><td class="ta-r mono">${F0(cur.cumul)}</td><td class="ta-r mono"><b>${F0(cur.vnc)}</b></td>
+    <td class="ta-c">${im.statut==='cede'?'<span class="badge b-gray">cédé</span>':`<button class="linkbtn" onclick="viewImmo('${im.id}')">👁</button> <button class="linkbtn" onclick="editImmo('${im.id}')">✎</button> <button class="linkbtn" onclick="cederImmo('${im.id}')">Céder</button> <button class="linkbtn" style="color:var(--red)" onclick="delImmo('${im.id}')">✕</button>`}</td></tr>`;}).join('');
+  document.getElementById('p-immo').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Valeur d'origine</div><div class="v mono">${F(tVO)}</div></div>
+    <div class="card kpi b"><div class="lb">Amortissements cumulés</div><div class="v mono">${F(tCum)}</div></div>
+    <div class="card kpi g"><div class="lb">Valeur nette comptable</div><div class="v mono">${F(tVNC)}</div></div>
+    <div class="card kpi o"><div class="lb">Dotation exercice</div><div class="v mono">${F(ST.immos.reduce((s,im)=>s+(im.statut==='cede'?0:dotationExercice(im)),0))}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Désignation</th><th>Acquisition</th><th class="ta-c">Durée</th><th class="ta-r">V. origine</th><th class="ta-r">Amort. cumulé</th><th class="ta-r">VNC</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">▦</div>Aucune immobilisation</td></tr>'}</tbody></table></div>
+  <button class="btn sm" style="margin-top:10px" onclick="genDotations()">⚙ Générer les dotations de l'exercice</button>`;
+};
+function newImmo(){editImmo(null);}
+function editImmo(id){
+  const im=id?ST.immos.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${im?'Modifier':'Nouvelle'} immobilisation</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c2"><div><label>Code</label><input id="iCode" value="${im?im.code:''}" placeholder="IMMO-001"></div>
+  <div><label>Catégorie</label><select id="iCat">${IMMO_CAT.map(c=>`<option ${im&&im.categorie===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
+  <div class="frow"><div><label>Désignation</label><input id="iLib" value="${im?im.libelle:''}" placeholder="Ex : Camion Hyundai"></div></div>
+  <div class="frow c2"><div><label>Compte immo (2xx)</label><input id="iCpt" value="${im?im.compte:'2441'}" placeholder="2441"></div>
+  <div><label>Date d'acquisition</label><input type="date" id="iDate" value="${im?im.dateAcq:today()}"></div></div>
+  <div class="frow c3"><div><label>Valeur d'origine (HT)</label><input type="number" id="iVal" value="${im?im.valeur:0}"></div>
+  <div><label>Durée (ans)</label><input type="number" id="iDur" value="${im?im.duree:5}"></div>
+  <div><label>Mode</label><select id="iMode"><option value="lineaire" ${im&&im.mode==='lineaire'?'selected':''}>Linéaire</option><option value="degressif" ${im&&im.mode==='degressif'?'selected':''}>Dégressif</option></select></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveImmo('${id||''}')">${im?'Enregistrer':'Créer'}</button></div>`,true);
+}
+async function saveImmo(id){
+  const g=x=>document.getElementById(x).value;
+  const im={code:g('iCode').trim()||('IMMO-'+(ST.immos.length+1)),categorie:g('iCat'),libelle:g('iLib').trim(),compte:g('iCpt').trim()||'2441',dateAcq:g('iDate'),valeur:+g('iVal')||0,duree:+g('iDur')||1,mode:g('iMode')};
+  if(!im.libelle){toast('Désignation requise.');return;}
+  if(id){const o=ST.immos.find(x=>x.id===id);Object.assign(o,im);await put('immos',o);}
+  else await put('immos',Object.assign({id:uid('im'),statut:'actif'},im));
+  await loadAll();closeModal();RENDER.immo();toast('Immobilisation enregistrée.');
+}
+function viewImmo(id){const im=ST.immos.find(x=>x.id===id);const pa=planAmort(im);
+  const qr=QR.svg(`IMMO|${im.code}|${im.libelle}|${F0(im.valeur)}|${im.dateAcq}`,96)||'';
+  openModal(`<div class="mh"><h3>${im.code} — ${im.libelle}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px"><div style="flex:1">
+    <div style="font-size:12px;color:var(--mut)">${im.categorie} · compte ${im.compte}</div>
+    <div style="font-size:13px;margin-top:4px">Valeur ${F(im.valeur)} · ${im.duree} ans · ${im.mode}</div></div><div>${qr}</div></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Année</th><th class="ta-r">Dotation</th><th class="ta-r">Cumul</th><th class="ta-r">VNC</th></tr></thead><tbody>
+  ${pa.map(r=>`<tr><td class="mono">${r.an}</td><td class="ta-r mono">${F0(r.dot)}</td><td class="ta-r mono">${F0(r.cumul)}</td><td class="ta-r mono">${F0(r.vnc)}</td></tr>`).join('')}
+  </tbody></table></div></div><div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button></div>`,true);
+}
+async function delImmo(id){const im=ST.immos.find(x=>x.id===id);if(!confirm('Supprimer '+im.libelle+' ?'))return;await del('immos',id);await loadAll();RENDER.immo();toast('Immobilisation supprimée.');}
+async function cederImmo(id){const im=ST.immos.find(x=>x.id===id);
+  const px=prompt('Prix de cession (FCFA) :','0');if(px===null)return;
+  const prix=+px||0;const y=+curEx().debut.slice(0,4);
+  const pa=planAmort(im);const cur=pa.find(x=>x.an===y)||pa[pa.length-1]||{cumul:0,vnc:im.valeur};
+  const cumul=cur.cumul,vnc=cur.vnc;const cpt28=im.compte[0]+'8'+im.compte.slice(2);
+  const ens=[{compte:cpt28,libelle:'Amort. cédé '+im.code,debit:cumul,credit:0},
+    {compte:'6813',libelle:'VNC cédée '+im.code,debit:0,credit:0}];
+  // écriture de cession : sortie du bien + produit
+  const lignes=[
+    {compte:cpt28,libelle:'Reprise amort. '+im.code,debit:cumul,credit:0},
+    {compte:'6813',libelle:'VNC élément cédé '+im.code,debit:vnc,credit:0},
+    {compte:im.compte,libelle:'Sortie '+im.code,debit:0,credit:im.valeur},
+    {compte:'521',libelle:'Encaissement cession '+im.code,debit:prix,credit:0},
+    {compte:'775',libelle:'Produit cession '+im.code,debit:0,credit:prix}
+  ];
+  await put('ecritures',{id:'e_ces_'+im.id,date:today(),journal:'OD',piece:'CES-'+im.code,libelle:'Cession '+im.libelle,exId:ST.exId,lignes});
+  for(const[n,l,t,cl] of [['6813','VNC éléments cédés','C','6'],['775','Produits de cession','R','7'],['521','Banque','A','5'],[cpt28,'Amortissements','P','2']])
+    if(!ST.comptes.some(c=>c.numero===n))await put('comptes',{id:'c_'+n,numero:n,libelle:l,type:t,classe:cl});
+  im.statut='cede';im.dateCession=today();im.prixCession=prix;im.vncCession=vnc;await put('immos',im);
+  await loadAll();RENDER.immo();
+  const pv=prix-vnc;toast('Cession comptabilisée. '+(pv>=0?'Plus-value ':'Moins-value ')+F(Math.abs(pv)));
+}
+async function genDotations(){
+  const y=+curEx().debut.slice(0,4);let n=0;
+  for(const im of ST.immos){if(im.statut==='cede')continue;const dot=dotationExercice(im);if(dot<=0)continue;
+    const cpt28=im.compte[0]+'8'+im.compte.slice(2);const key='e_dot_'+im.id+'_'+y;
+    await put('ecritures',{id:key,date:curEx().debut.slice(0,4)+'-12-31',journal:'OD',piece:'DOT-'+y,libelle:'Dotation amort. '+im.libelle,exId:ST.exId,
+      lignes:[{compte:'6813',libelle:'Dotation '+im.code,debit:dot,credit:0},{compte:cpt28,libelle:'Amort. '+im.code,debit:0,credit:dot}]});
+    // s'assurer que les comptes existent
+    if(!ST.comptes.some(c=>c.numero==='6813'))await put('comptes',{id:'c_6813',numero:'6813',libelle:'Dotations aux amortissements',type:'C',classe:'6'});
+    if(!ST.comptes.some(c=>c.numero===cpt28))await put('comptes',{id:'c_'+cpt28,numero:cpt28,libelle:'Amortissements '+im.categorie,type:'P',classe:'2'});
+    n++;}
+  await loadAll();RENDER.immo();toast(n+' dotation(s) comptabilisée(s) au 31/12.');
+}
+
+/* ---- GED pièces jointes ---- */
+RENDER.ged=()=>{
+  document.getElementById('pgActions').innerHTML=`<label class="btn sm" style="cursor:pointer">+ Ajouter pièce<input type="file" accept="image/*,.pdf" style="display:none" onchange="addPiece(this.files[0])"></label>`;
+  const rows=ST.pieces.map(p=>`<tr>
+    <td>${p.type&&p.type.includes('pdf')?'📄':'🖼'}</td>
+    <td><b>${p.nom}</b><div style="font-size:11px;color:var(--mut)">${dfr(p.date)} · ${(p.taille/1024).toFixed(0)} Ko</div></td>
+    <td>${p.ref||'—'}</td>
+    <td class="ta-c"><button class="linkbtn" onclick="viewPiece('${p.id}')">👁</button> <button class="linkbtn" onclick="dlPiece('${p.id}')">⭳</button> <button class="linkbtn" style="color:var(--red)" onclick="delPiece('${p.id}')">✕</button></td></tr>`).join('');
+  const totKo=ST.pieces.reduce((s,p)=>s+p.taille,0)/1024;
+  document.getElementById('p-ged').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Pièces archivées</div><div class="v mono">${ST.pieces.length}</div></div>
+    <div class="card kpi b"><div class="lb">Volume total</div><div class="v mono">${totKo>1024?(totKo/1024).toFixed(1)+' Mo':totKo.toFixed(0)+' Ko'}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th></th><th>Pièce</th><th>Rattachement</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=4 class="empty"><div class="ic">▤</div>Aucune pièce. Numérisez factures et justificatifs.</td></tr>'}</tbody></table></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Archivage local</b> (IndexedDB) inclus dans la sauvegarde et la sync. Limite conseillée : 2 Mo/pièce.</div>`;
+};
+function addPiece(file){
+  if(!file)return;if(file.size>3*1024*1024){toast('Fichier trop lourd (max 3 Mo).');return;}
+  const rd=new FileReader();rd.onload=async()=>{
+    await put('pieces',{id:uid('pc'),nom:file.name,type:file.type,taille:file.size,date:today(),ref:'',data:rd.result});
+    await loadAll();RENDER.ged();toast('Pièce archivée.');};
+  rd.readAsDataURL(file);
+}
+function viewPiece(id){const p=ST.pieces.find(x=>x.id===id);
+  const prev=p.type&&p.type.includes('pdf')?`<embed src="${p.data}" type="application/pdf" style="width:100%;height:60vh">`:`<img src="${p.data}" style="max-width:100%;border-radius:8px">`;
+  openModal(`<div class="mh"><h3>${p.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow"><div><label>Rattacher à (pièce / réf)</label><input id="pcRef" value="${p.ref||''}" placeholder="Ex : FAC-2026-0001"></div></div>
+  <div style="margin-top:10px">${prev}</div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="savePieceRef('${id}')">Enregistrer</button></div>`,true);
+}
+async function savePieceRef(id){const p=ST.pieces.find(x=>x.id===id);p.ref=document.getElementById('pcRef').value;await put('pieces',p);await loadAll();closeModal();RENDER.ged();toast('Rattachement enregistré.');}
+function dlPiece(id){const p=ST.pieces.find(x=>x.id===id);const a=document.createElement('a');a.href=p.data;a.download=p.nom;a.click();}
+async function delPiece(id){if(!confirm('Supprimer cette pièce ?'))return;await del('pieces',id);await loadAll();RENDER.ged();toast('Pièce supprimée.');}
+
+/* ---- Notes annexes ---- */
+RENDER.annexes=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-annexes','Notes annexes')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  // Note 1 : immobilisations
+  let tVO=0,tCum=0;const immoRows=ST.immos.map(im=>{const pa=planAmort(im);const y=+curEx().debut.slice(0,4);const cur=pa.find(x=>x.an===y)||pa[pa.length-1]||{cumul:0,vnc:im.valeur};tVO+=im.valeur;tCum+=cur.cumul;
+    return`<tr><td>${im.code} — ${im.libelle}</td><td class="ta-r mono">${F0(im.valeur)}</td><td class="ta-r mono">${F0(cur.cumul)}</td><td class="ta-r mono">${F0(cur.vnc)}</td></tr>`;}).join('');
+  // Note 2 : créances clients (balance âgée synthèse)
+  const clients=ST.tiers.filter(t=>t.type==='client').map(t=>{const s=m[t.compte]||{debit:0,credit:0};return{nom:t.nom,solde:s.debit-s.credit};}).filter(x=>x.solde>0);
+  const totCreances=clients.reduce((s,c)=>s+c.solde,0);
+  // Note 3 : dettes fournisseurs
+  const fourn=ST.tiers.filter(t=>t.type==='fournisseur').map(t=>{const s=m[t.compte]||{debit:0,credit:0};return{nom:t.nom,solde:s.credit-s.debit};}).filter(x=>x.solde>0);
+  const totDettes=fourn.reduce((s,c)=>s+c.solde,0);
+  // Note 4 : TVA
+  const tvaC=(m['4431']||{debit:0,credit:0});const tvaD=(m['4452']||{debit:0,credit:0});
+  const note=(n,t,body)=>`<div class="card"><h3>Note ${n} — ${t}</h3>${body}</div>`;
+  document.getElementById('p-annexes').innerHTML=`
+  ${note(1,'Immobilisations et amortissements',
+    `<div class="tbl-wrap"><table><thead><tr><th>Immobilisation</th><th class="ta-r">Valeur brute</th><th class="ta-r">Amort. cumulé</th><th class="ta-r">VNC</th></tr></thead><tbody>${immoRows||'<tr><td colspan=4 class="empty">Aucune</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td>TOTAL</td><td class="ta-r mono">${F0(tVO)}</td><td class="ta-r mono">${F0(tCum)}</td><td class="ta-r mono">${F0(tVO-tCum)}</td></tr></tfoot></table></div>`)}
+  ${note(2,'Créances clients',
+    `<div class="tbl-wrap"><table><thead><tr><th>Client</th><th class="ta-r">Solde</th></tr></thead><tbody>${clients.map(c=>`<tr><td>${c.nom}</td><td class="ta-r mono">${F0(c.solde)}</td></tr>`).join('')||'<tr><td colspan=2 class="empty">Aucune</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td>TOTAL CRÉANCES</td><td class="ta-r mono">${F0(totCreances)}</td></tr></tfoot></table></div>`)}
+  ${note(3,'Dettes fournisseurs',
+    `<div class="tbl-wrap"><table><thead><tr><th>Fournisseur</th><th class="ta-r">Solde</th></tr></thead><tbody>${fourn.map(c=>`<tr><td>${c.nom}</td><td class="ta-r mono">${F0(c.solde)}</td></tr>`).join('')||'<tr><td colspan=2 class="empty">Aucune</td></tr>'}</tbody><tfoot><tr class="foot-tr"><td>TOTAL DETTES</td><td class="ta-r mono">${F0(totDettes)}</td></tr></tfoot></table></div>`)}
+  ${note(4,'État de la TVA',
+    `<div class="tbl-wrap"><table><tbody><tr><td>TVA collectée (4431)</td><td class="ta-r mono">${F0(tvaC.credit-tvaC.debit)}</td></tr><tr><td>TVA déductible (4452)</td><td class="ta-r mono">${F0(tvaD.debit-tvaD.credit)}</td></tr><tr class="foot-tr"><td>TVA nette</td><td class="ta-r mono">${F0((tvaC.credit-tvaC.debit)-(tvaD.debit-tvaD.credit))}</td></tr></tbody></table></div>`)}
+  ${note(5,'Règles et méthodes comptables',
+    `<ul class="clean" style="font-size:13px"><li>Référentiel : SYSCOHADA révisé</li><li>Monnaie : Franc CFA (XOF)</li><li>Amortissements : linéaire et dégressif</li><li>Créances/dettes : valeur nominale</li><li>Exercice : ${curEx().libelle}</li></ul>`)}`;
+};
+
+/* ---- Flux de trésorerie (TFT) ---- */
+RENDER.flux=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-flux','Tableau des flux de trésorerie')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const pref=(p,sens)=>{let s=0;for(const n in m)if(n.startsWith(p))s+=sens==='d'?m[n].debit-m[n].credit:m[n].credit-m[n].debit;return s;};
+  const cl=(c,sens)=>{let s=0;for(const n in m)if(n[0]===c)s+=sens==='d'?m[n].debit-m[n].credit:m[n].credit-m[n].debit;return s;};
+  const produits=cl('7','c'),charges=cl('6','d'),resultat=produits-charges;
+  const dotations=pref('681','d')+pref('6813','d');
+  const varStock=cl('3','d'),varClients=pref('41','d'),varFourn=pref('40','c');
+  const cafg=resultat+dotations;
+  const fluxExploit=cafg-varClients-varStock+varFourn;
+  const acqImmo=cl('2','d')>0?cl('2','d'):0;const cessImmo=pref('775','c');
+  const fluxInvest=-acqImmo+cessImmo;
+  const capital=pref('10','c'),emprunts=pref('16','c');
+  const fluxFinance=capital+emprunts;
+  const varTreso=fluxExploit+fluxInvest+fluxFinance;
+  const tresoReelle=cl('5','d');
+  const sec=(t,color)=>`<tr><td colspan=2 style="background:${color};color:#fff;font-weight:700;font-size:11.5px;padding:8px 11px">${t}</td></tr>`;
+  const li=(l,v,b)=>`<tr><td style="${b?'font-weight:700':''}">${l}</td><td class="ta-r mono ${v<0?'neg':'pos'}" style="${b?'font-weight:800':''}">${F0(v)}</td></tr>`;
+  document.getElementById('p-flux').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">CAFG</div><div class="v mono">${F(cafg)}</div><div class="f">Capacité autofinancement</div></div>
+    <div class="card kpi ${fluxExploit>=0?'g':'r'}"><div class="lb">Flux exploitation</div><div class="v mono">${F(fluxExploit)}</div></div>
+    <div class="card kpi b"><div class="lb">Variation trésorerie</div><div class="v mono">${F(varTreso)}</div></div>
+    <div class="card kpi o"><div class="lb">Trésorerie réelle</div><div class="v mono">${F(tresoReelle)}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><tbody>
+    ${sec('FLUX DE TRÉSORERIE OPÉRATIONNELS','#1a8a5a')}
+    ${li('Résultat net',resultat)}
+    ${li('+ Dotations amortissements',dotations)}
+    ${li('= Capacité d\'autofinancement (CAFG)',cafg,true)}
+    ${li('− Variation créances clients',-varClients)}
+    ${li('− Variation stocks',-varStock)}
+    ${li('+ Variation dettes fournisseurs',varFourn)}
+    ${li('= Flux nets opérationnels',fluxExploit,true)}
+    ${sec('FLUX D\'INVESTISSEMENT','#2c6fb5')}
+    ${li('− Acquisitions immobilisations',-acqImmo)}
+    ${li('+ Cessions d\'immobilisations',cessImmo)}
+    ${li('= Flux nets d\'investissement',fluxInvest,true)}
+    ${sec('FLUX DE FINANCEMENT','#B87333')}
+    ${li('+ Augmentation de capital',capital)}
+    ${li('+ Emprunts',emprunts)}
+    ${li('= Flux nets de financement',fluxFinance,true)}
+    <tr><td colspan=2 style="background:#1C1C2E;color:#fff;font-weight:800;padding:9px 11px">VARIATION DE TRÉSORERIE</td></tr>
+    ${li('Variation nette de trésorerie',varTreso,true)}
+    ${li('Trésorerie comptable (classe 5)',tresoReelle,true)}
+  </tbody></table></div>
+  <div class="hl ${Math.abs(varTreso-tresoReelle)<1000?'':'warn'}" style="margin-top:10px;padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;${Math.abs(varTreso-tresoReelle)<1000?'background:#eef8f2;border-left:3px solid var(--green)':'background:#fdf0ed;border-left:3px solid var(--red)'}">
+    ${Math.abs(varTreso-tresoReelle)<1000?'<b style="color:var(--green)">✓ Cohérent.</b> Variation calculée = trésorerie comptable.':'<b style="color:var(--red)">Écart de rapprochement : '+F(varTreso-tresoReelle)+'.</b> Vérifier à-nouveaux et postes non pris en compte.'}</div>`;
+};
+
+/* ---- Budget & réalisé ---- */
+RENDER.budget=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-budget','Budget et réalisé')">⎙ Imprimer</button> <button class="btn sm" onclick="editBudget(null)">+ Ligne budget</button>`;
+  const m=soldesParCompte();
+  const buds=ST.budgets.filter(b=>b.exId===ST.exId);
+  let tP=0,tR=0;
+  const rows=buds.map(b=>{const c=ST.comptes.find(x=>x.numero===b.compte);const s=m[b.compte]||{debit:0,credit:0};
+    const realise=b.compte[0]==='7'?s.credit-s.debit:s.debit-s.credit;
+    const ecart=b.montant-realise;const taux=b.montant?realise/b.montant:0;
+    tP+=b.montant;tR+=realise;
+    const dep=b.compte[0]!=='7'&&realise>b.montant;
+    return`<tr><td class="mono"><b>${b.compte}</b></td><td>${c?c.libelle:''}</td>
+    <td class="ta-r mono">${F0(b.montant)}</td><td class="ta-r mono">${F0(realise)}</td>
+    <td class="ta-r mono ${ecart<0?'neg':'pos'}">${F0(ecart)}</td>
+    <td style="width:120px"><div style="background:#eef0f5;border-radius:20px;height:8px;overflow:hidden"><div style="height:100%;width:${Math.min(100,Math.round(taux*100))}%;background:${dep?'var(--red)':'var(--cuivre)'}"></div></div><div style="font-size:10px;color:var(--mut);text-align:right">${Math.round(taux*100)}%${dep?' ⚠':''}</div></td>
+    <td class="ta-c"><button class="linkbtn" onclick="editBudget('${b.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delBudget('${b.id}')">✕</button></td></tr>`;}).join('');
+  const ecartT=tP-tR;
+  document.getElementById('p-budget').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Budget total</div><div class="v mono">${F(tP)}</div></div>
+    <div class="card kpi b"><div class="lb">Réalisé</div><div class="v mono">${F(tR)}</div></div>
+    <div class="card kpi ${ecartT>=0?'g':'r'}"><div class="lb">Écart global</div><div class="v mono">${F(ecartT)}</div></div>
+    <div class="card kpi o"><div class="lb">Taux d'exécution</div><div class="v mono">${tP?Math.round(tR/tP*100):0}%</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Libellé</th><th class="ta-r">Budget</th><th class="ta-r">Réalisé</th><th class="ta-r">Écart</th><th>Exécution</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=7 class="empty"><div class="ic">▲</div>Aucune ligne budgétaire</td></tr>'}</tbody>
+  ${buds.length?`<tfoot><tr class="foot-tr"><td colspan=2>TOTAL</td><td class="ta-r mono">${F0(tP)}</td><td class="ta-r mono">${F0(tR)}</td><td class="ta-r mono">${F0(ecartT)}</td><td colspan=2></td></tr></tfoot>`:''}</table></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Réalisé</b> issu du grand livre. Charges : dépassement en rouge. Produits : sous-réalisation à surveiller.</div>`;
+};
+function editBudget(id){
+  const b=id?ST.budgets.find(x=>x.id===id):null;
+  const cptCharges=ST.comptes.filter(c=>c.classe==='6'||c.classe==='7');
+  openModal(`<div class="mh"><h3>${b?'Modifier':'Nouvelle'} ligne budgétaire</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow"><div><label>Compte (charge ou produit)</label><select id="buCpt">${cptCharges.map(c=>`<option value="${c.numero}" ${b&&b.compte===c.numero?'selected':''}>${c.numero} — ${c.libelle}</option>`).join('')}</select></div></div>
+  <div class="frow"><div><label>Montant budgété (${curEx().libelle})</label><input type="number" id="buMt" value="${b?b.montant:0}"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveBudget('${id||''}')">${b?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveBudget(id){
+  const compte=document.getElementById('buCpt').value,montant=+document.getElementById('buMt').value||0;
+  if(id){const b=ST.budgets.find(x=>x.id===id);b.compte=compte;b.montant=montant;await put('budgets',b);}
+  else{if(ST.budgets.some(x=>x.exId===ST.exId&&x.compte===compte)){toast('Compte déjà budgété.');return;}
+    await put('budgets',{id:uid('bu'),exId:ST.exId,compte,montant});}
+  await loadAll();closeModal();RENDER.budget();toast('Budget enregistré.');
+}
+async function delBudget(id){if(!confirm('Supprimer cette ligne ?'))return;await del('budgets',id);await loadAll();RENDER.budget();toast('Ligne supprimée.');}
+
+/* ---- Recherche globale ---- */
+function globalSearch(q){
+  const pop=document.getElementById('searchPop');q=(q||'').trim().toLowerCase();
+  if(q.length<2){pop.style.display='none';return;}
+  const res=[];
+  ST.comptes.filter(c=>c.numero.includes(q)||c.libelle.toLowerCase().includes(q)).slice(0,6).forEach(c=>res.push(['Compte',c.numero+' — '+c.libelle,`go('plan')`]));
+  ST.tiers.filter(t=>t.nom.toLowerCase().includes(q)||(t.ncc||'').toLowerCase().includes(q)||t.compte.includes(q)).slice(0,6).forEach(t=>res.push(['Tiers',t.nom+' ('+t.compte+')',`go('tiers');setTimeout(()=>viewTiers('${t.id}'),120)`]));
+  ST.factures.filter(f=>(f.numero||'').toLowerCase().includes(q)||(f.clientNom||'').toLowerCase().includes(q)).slice(0,6).forEach(f=>res.push(['Facture',f.numero+' — '+(f.clientNom||''),`go('facturation');setTimeout(()=>viewFacture('${f.id}'),120)`]));
+  ST.immos.filter(i=>i.code.toLowerCase().includes(q)||i.libelle.toLowerCase().includes(q)).slice(0,5).forEach(i=>res.push(['Immo',i.code+' — '+i.libelle,`go('immo')`]));
+  mouvements((e,l)=>((l.libelle||e.libelle||'').toLowerCase().includes(q)||(e.piece||'').toLowerCase().includes(q))).slice(0,8).forEach(m=>res.push(['Écriture',(m.piece?m.piece+' · ':'')+m.libelle+' · '+F0(m.debit||m.credit),`go('ecritures')`]));
+  const badge={Compte:'#c98a10',Tiers:'#2c6fb5',Facture:'#1a8a5a',Immo:'#6d4b9e','Écriture':'#c0392b'};
+  pop.innerHTML=res.length?res.map(r=>`<div onclick="closeSearch();${r[2].replace(/"/g,'&quot;')}" style="padding:9px 13px;border-bottom:1px solid #f0f1f5;cursor:pointer;font-size:13px" onmouseover="this.style.background='#fafbfd'" onmouseout="this.style.background='#fff'">
+    <span style="display:inline-block;min-width:64px;font-size:9.5px;font-weight:800;color:${badge[r[0]]};text-transform:uppercase">${r[0]}</span> ${r[1]}</div>`).join('')
+    :'<div style="padding:14px;color:var(--mut);font-size:13px">Aucun résultat</div>';
+  pop.style.display='block';
+}
+function closeSearch(){const p=document.getElementById('searchPop');if(p){p.style.display='none';}const s=document.getElementById('globalSearch');if(s)s.value='';}
+
+RENDER.analytique=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-analytique','Comptabilité analytique')">⎙ Imprimer</button> <button class="btn sm" onclick="editCentre(null)">+ Centre</button>`;
+  // charges/produits ventilés
+  const charges=mouvements((e,l)=>l.compte[0]==='6');
+  const produits=mouvements((e,l)=>l.compte[0]==='7');
+  const affC={},affP={};let directC=0,directP=0;
+  charges.forEach(l=>{const m=l.debit-l.credit;if(l.centre){affC[l.centre]=(affC[l.centre]||0)+m;directC+=m;}});
+  produits.forEach(l=>{const m=l.credit-l.debit;if(l.centre){affP[l.centre]=(affP[l.centre]||0)+m;directP+=m;}});
+  const totC=charges.reduce((s,l)=>s+l.debit-l.credit,0);
+  const indirect=totC-directC; // charges non affectées à répartir par clé
+  const totCle=ST.centres.reduce((s,c)=>s+(+c.cle||0),0)||1;
+  let rows='',sC=0,sP=0,sR=0;
+  ST.centres.forEach(c=>{
+    const dir=affC[c.code]||0;const ind=Math.round(indirect*((+c.cle||0)/totCle));
+    const cout=dir+ind;const prod=affP[c.code]||0;const res=prod-cout;
+    sC+=cout;sP+=prod;sR+=res;
+    rows+=`<tr><td class="mono"><b>${c.code}</b></td><td>${c.nom}<div style="font-size:11px;color:var(--mut)">${c.type}</div></td>
+    <td class="ta-r mono">${F0(dir)}</td><td class="ta-r mono">${F0(ind)}</td><td class="ta-r mono"><b>${F0(cout)}</b></td>
+    <td class="ta-r mono">${F0(prod)}</td><td class="ta-r mono ${res<0?'neg':'pos'}">${F0(res)}</td>
+    <td class="ta-c"><button class="linkbtn" onclick="editCentre('${c.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delCentre('${c.id}')">✕</button></td></tr>`;
+  });
+  document.getElementById('p-analytique').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi r"><div class="lb">Coûts ventilés</div><div class="v mono">${F(sC)}</div></div>
+    <div class="card kpi g"><div class="lb">Produits ventilés</div><div class="v mono">${F(sP)}</div></div>
+    <div class="card kpi ${sR>=0?'g':'r'}"><div class="lb">Résultat analytique</div><div class="v mono">${F(sR)}</div></div>
+    <div class="card kpi o"><div class="lb">Charges indirectes à répartir</div><div class="v mono">${F(indirect)}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Centre</th><th class="ta-r">Coût direct</th><th class="ta-r">Coût indirect</th><th class="ta-r">Coût total</th><th class="ta-r">Produits</th><th class="ta-r">Résultat</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">◈</div>Aucun centre. Créez des centres puis affectez-les aux lignes d\'écriture.</td></tr>'}</tbody>
+  ${ST.centres.length?`<tfoot><tr class="foot-tr"><td colspan=4>TOTAL</td><td class="ta-r mono">${F0(sC)}</td><td class="ta-r mono">${F0(sP)}</td><td class="ta-r mono">${F0(sR)}</td><td></td></tr></tfoot>`:''}</table></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Répartition.</b> Coût direct = lignes affectées au centre. Coût indirect = charges non affectées réparties par clé (%). Somme des clés : ${totCle}${totCle===1?' — définissez des clés':''} .</div>`;
+};
+function editCentre(id){
+  const c=id?ST.centres.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${c?'Modifier':'Nouveau'} centre analytique</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c2"><div><label>Code</label><input id="ceCode" value="${c?c.code:''}" placeholder="ATELIER"></div>
+  <div><label>Type</label><select id="ceType"><option ${c&&c.type==='Coût'?'selected':''}>Coût</option><option ${c&&c.type==='Profit'?'selected':''}>Profit</option></select></div></div>
+  <div class="frow c2"><div><label>Désignation</label><input id="ceNom" value="${c?c.nom:''}" placeholder="Atelier production"></div>
+  <div><label>Clé de répartition (%)</label><input type="number" id="ceCle" value="${c?(c.cle||0):0}"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveCentre('${id||''}')">${c?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveCentre(id){
+  const code=document.getElementById('ceCode').value.trim().toUpperCase();if(!code){toast('Code requis.');return;}
+  const rec={code,nom:document.getElementById('ceNom').value.trim(),type:document.getElementById('ceType').value,cle:+document.getElementById('ceCle').value||0};
+  if(id){const c=ST.centres.find(x=>x.id===id);Object.assign(c,rec);await put('centres',c);}
+  else{if(ST.centres.some(x=>x.code===code)){toast('Code déjà utilisé.');return;}await put('centres',Object.assign({id:uid('ce')},rec));}
+  await loadAll();closeModal();RENDER.analytique();toast('Centre enregistré.');
+}
+async function delCentre(id){const c=ST.centres.find(x=>x.id===id);if(!confirm('Supprimer '+c.code+' ?'))return;await del('centres',id);await loadAll();RENDER.analytique();toast('Centre supprimé.');}
+
+/* ---- Comptabilité analytique fin ---- */
+/* ---- Impression brandée + QR ---- */
+async function printReport(pageId,titre){
+  const s=await societe();
+  const inner=document.getElementById(pageId).cloneNode(true);
+  // retirer boutons/toolbars du contenu cloné
+  inner.querySelectorAll('button,.toolbar,.linkbtn').forEach(e=>e.remove());
+  const date=today();
+  const hash=(pageId+titre+ST.exId+date).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,7)>>>0;
+  const ref='DOC-'+hash.toString(36).toUpperCase().padStart(7,'0');
+  const qrPayload=`${s.nom}|${titre}|${curEx().libelle}|${date}|${ref}`;
+  const qr=QR.svg(qrPayload,110)||'';
+  const html=`<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;padding:16px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #B87333;padding-bottom:12px">
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">SX</div>
+      <div><div style="font-weight:800;font-size:15px">${s.nom}</div><div style="font-size:10.5px;color:#697089">NCC ${s.ncc} · ${s.adresse} · ${s.tel}</div></div></div>
+      <div style="text-align:right"><div style="font-size:19px;font-weight:800">${titre}</div><div style="font-size:11px;color:#697089">${curEx().libelle} · au ${dfr(date)}</div><div style="font-size:10px;color:#9aa0b4">Réf ${ref}</div></div>
+    </div>
+    <div style="margin:14px 0">${inner.innerHTML}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e3e6ee;padding-top:10px;margin-top:14px">
+      <div style="font-size:9.5px;color:#9aa0b4;max-width:70%">Document généré par SANIX ComptaPro (SYSCOHADA). Scannez le QR pour vérifier l'origine et l'intégrité. Réf ${ref}.</div>
+      <div>${qr}</div>
+    </div>
+  </div>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><meta charset="utf-8"><title>${titre} — ${ref}</title>
+  <style>@page{margin:12mm}body{margin:0}table{width:100%;border-collapse:collapse;font-size:11.5px}th{background:#1C1C2E;color:#fff;text-align:left;padding:7px 9px;font-size:10px}td{padding:6px 9px;border-bottom:1px solid #eef0f5}.ta-r{text-align:right}.ta-c{text-align:center}.mono{font-variant-numeric:tabular-nums}.foot-tr td{background:#1C1C2E;color:#fff}.badge{padding:1px 6px;border-radius:10px;font-size:9px;background:#eee}.card{border:1px solid #e3e6ee;border-radius:8px;padding:10px;margin-bottom:8px}.kpis,.two,.grid{display:block}.kpi{display:inline-block;width:31%;margin:0 1% 6px;vertical-align:top}.pos{color:#1a8a5a}.neg{color:#c0392b}</style>
+  </head><body onload="window.print()">${html}</body></html>`);
+  w.document.close();
+}
+/* ---- login enter ---- */
+document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+</script>
+</body>
+</html>
