@@ -196,8 +196,11 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp">Pilotage</div>
       <a data-p="dash" class="on"><span class="ic">▚</span>Tableau de bord</a>
       <a data-p="analyse360"><span class="ic">◎</span>Analyse 360°</a>
+      <a data-p="consolidation"><span class="ic">▩</span>Consolidation</a>
+      <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
       <div class="grp">Saisie</div>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
+      <a data-p="workflow"><span class="ic">⇉</span>Validation &amp; visa</a>
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
       <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
@@ -210,15 +213,20 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
       <a data-p="flux"><span class="ic">≈</span>Flux de trésorerie</a>
       <a data-p="annexes"><span class="ic">▣</span>Notes annexes</a>
+      <a data-p="liasse"><span class="ic">▦</span>Liasse fiscale</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
+      <a data-p="devises"><span class="ic">$</span>Multi-devises</a>
       <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
       <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
       <div class="grp">Paramètres</div>
       <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
       <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture</a>
+      <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
+      <a data-p="audit"><span class="ic">◉</span>Journal d'audit</a>
       <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
     </nav>
     <div class="foot"><span>Connecté <b id="who">—</b></span><button class="linkbtn" onclick="logout()">Quitter</button></div>
+    <div style="padding:8px 14px;font-size:9.5px;color:var(--mut);line-height:1.5;border-top:1px solid var(--line)">Développé par SANIX Africa Division Technologies<br>+225 07 79 18 10 75 / 01 40 01 77 51<br>Cyrille KESSIE</div>
   </aside>
 
   <main class="main">
@@ -232,7 +240,10 @@ tbody tr:hover{background:#fbfcfe}
     <div class="content">
       <div class="page on" id="p-dash"></div>
       <div class="page" id="p-analyse360"></div>
+      <div class="page" id="p-consolidation"></div>
+      <div class="page" id="p-passerelle"></div>
       <div class="page" id="p-ecritures"></div>
+      <div class="page" id="p-workflow"></div>
       <div class="page" id="p-facturation"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
@@ -244,7 +255,9 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-bilan"></div>
       <div class="page" id="p-flux"></div>
       <div class="page" id="p-annexes"></div>
+      <div class="page" id="p-liasse"></div>
       <div class="page" id="p-ged"></div>
+      <div class="page" id="p-devises"></div>
       <div class="page" id="p-tva"></div>
       <div class="page" id="p-teledec"></div>
       <div class="page" id="p-plan"></div>
@@ -252,6 +265,8 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-analytique"></div>
       <div class="page" id="p-budget"></div>
       <div class="page" id="p-exercices"></div>
+      <div class="page" id="p-anomalies"></div>
+      <div class="page" id="p-audit"></div>
       <div class="page" id="p-parametrage"></div>
     </div>
   </main>
@@ -267,7 +282,7 @@ tbody tr:hover{background:#fbfcfe}
 ============================================================ */
 const DB_NAME='sanix_comptapro', DB_VER=3;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','users','meta'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','audit','users','meta'];
 
 function idb(){return new Promise((res,rej)=>{
   const r=indexedDB.open(DB_NAME,DB_VER);
@@ -277,14 +292,14 @@ function idb(){return new Promise((res,rej)=>{
   r.onerror=e=>rej(e);
 });}
 function tx(store,mode='readonly'){return DB.transaction(store,mode).objectStore(store);}
-function put(store,obj){return new Promise((res,rej)=>{const r=tx(store,'readwrite').put(obj);r.onsuccess=()=>res(obj);r.onerror=rej;});}
-function del(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(id);r.onsuccess=res;r.onerror=rej;});}
+function put(store,obj){return new Promise((res,rej)=>{const existed=obj&&obj.id;const r=tx(store,'readwrite').put(obj);r.onsuccess=()=>{if(typeof AUDIT_STORES!=='undefined'&&AUDIT_STORES.includes(store)&&store!=='audit')logAudit(existed&&window.__seen&&window.__seen[store+obj.id]?'update':'create',store,obj.id||obj.numero||'');if(window.__seen){window.__seen[store+obj.id]=1;}res(obj);};r.onerror=rej;});}
+function del(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrite').delete(id);r.onsuccess=()=>{if(typeof AUDIT_STORES!=='undefined'&&AUDIT_STORES.includes(store))logAudit('delete',store,id);res();};r.onerror=rej;});}
 function all(store){return new Promise((res,rej)=>{const r=tx(store).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=rej;});}
 function getOne(store,id){return new Promise((res,rej)=>{const r=tx(store).get(id);r.onsuccess=()=>res(r.result);r.onerror=rej;});}
 const uid=(p='id')=>p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],immos:[],centres:[],budgets:[],pieces:[],users:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -374,6 +389,7 @@ async function loadAll(){
   ST.centres=await all('centres');
   ST.budgets=await all('budgets');
   ST.pieces=await all('pieces');
+  ST.audit=await all('audit');
   const cur=await getOne('meta','exCourant');
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
   ST.ecritures=(await all('ecritures')).filter(e=>e.exId===ST.exId).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
@@ -431,6 +447,7 @@ async function boot(){
   // masquer Paramétrage hors admin
   const pa=document.querySelector('#nav a[data-p="parametrage"]');if(pa)pa.style.display=can('admin')?'':'none';
   window._autosync=(await getOne('meta','autosync'))?.value||false;
+  window.__seen=window.__seen||{};logAudit('login','users',ST.user.login);
   const ls=await getOne('meta','lastSync');window._lastSync=ls?ls.value:'';
   updateNetBadge();startAutosync();
   if(typeof window!=='undefined'){window.addEventListener('online',()=>{updateNetBadge();syncNow(true);});window.addEventListener('offline',updateNetBadge);}
@@ -438,16 +455,16 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],ecritures:['Écritures / Journaux','Saisie en partie double'],
+const TITLES={dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
 tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
 balance:['Balance générale','Débit / Crédit / Solde'],resultat:['Compte de résultat','Charges & produits — SYSCOHADA'],
-bilan:['Bilan','Actif / Passif au ' ],flux:['Flux de trésorerie','Tableau des flux (TFT SYSCOHADA)'],annexes:['Notes annexes','États annexés SYSCOHADA'],ged:['Pièces & GED','Justificatifs numérisés · archivage'],tva:['Déclaration TVA','TVA collectée / déductible'],
+bilan:['Bilan','Actif / Passif au ' ],flux:['Flux de trésorerie','Tableau des flux (TFT SYSCOHADA)'],annexes:['Notes annexes','États annexés SYSCOHADA'],liasse:['Liasse fiscale','États réglementaires · export PDF'],ged:['Pièces & GED','Justificatifs numérisés · archivage'],devises:['Multi-devises','Cours · conversion · écart de change'],tva:['Déclaration TVA','TVA collectée / déductible'],
 teledec:['Télédéclarations','Fiscal (DGI) & social (CNPS) — e-procédures'],
 plan:['Plan comptable','SYSCOHADA révisé'],immo:['Immobilisations','Amortissements · cessions · plan'],analytique:['Comptabilité analytique','Centres de coûts · axes · répartition'],budget:['Budget & réalisé','Prévisionnel · réalisé · écarts'],exercices:['Exercices & clôture','Gestion des périodes'],
-parametrage:['Paramétrage','Société · rôles · stockage · import']};
+parametrage:['Paramétrage','Société · rôles · stockage · import'],audit:['Journal d\'audit','Traçabilité des actions'],anomalies:['IA — Détection d\'anomalies','Contrôles automatiques · alertes']};
 function bindNav(){document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{go(a.dataset.p);closeNav();});}
 function toggleNav(){document.querySelector('.shell').classList.toggle('navopen');}
 function closeNav(){document.querySelector('.shell').classList.remove('navopen');}
@@ -1350,7 +1367,7 @@ async function factureHTML(id){
   const lignes=f.lignes.map(l=>`<tr><td>${l.des}</td><td class="ta-c mono">${l.qte}</td><td class="ta-r mono">${F0(l.pu)}</td><td class="ta-c mono">${l.tva}%</td><td class="ta-r mono">${F0(l.qte*l.pu)}</td></tr>`).join('');
   return `<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;max-width:720px;margin:0 auto;padding:18px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #B87333;padding-bottom:12px">
-      <div><div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">SX</div><div><div style="font-weight:800;font-size:16px">${s.nom}</div><div style="font-size:11px;color:#697089">${s.adresse} · ${s.tel}</div></div></div>
+      <div><div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;${s.logo?'':'background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;font-weight:800'}">${s.logo?`<img src="${s.logo}" style="max-width:100%;max-height:100%">`:'SX'}</div><div><div style="font-weight:800;font-size:16px">${s.nom}</div><div style="font-size:11px;color:#697089">${s.adresse} · ${s.tel}</div></div></div>
       <div style="font-size:11px;color:#697089;margin-top:6px">NCC : <b>${s.ncc}</b> · RCCM : ${s.rccm}<br>Régime : ${s.regime}</div></div>
       <div style="text-align:right"><div style="font-size:22px;font-weight:800;letter-spacing:-.5px">${f.type==='fne'?'FACTURE NORMALISÉE':'FACTURE'}</div>
       <div style="font-size:13px;font-weight:700;color:#B87333">${f.numero}</div><div style="font-size:11px;color:#697089">Date : ${dfr(f.date)}</div>
@@ -1490,13 +1507,25 @@ RENDER.parametrage=()=>{
 };
 async function societeForm(){const s=await societe();const el=document.getElementById('pgSoc');if(!el)return;
   el.innerHTML=`<div class="card">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line)">
+      <div id="logoPrev" style="width:80px;height:80px;border-radius:12px;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;overflow:hidden;background:#fafbfd">${s.logo?`<img src="${s.logo}" style="max-width:100%;max-height:100%">`:'<span style="font-size:10px;color:var(--mut);text-align:center">Aucun logo</span>'}</div>
+      <div><label>Logo de l'entreprise</label><br><label class="btn sm gh" style="cursor:pointer">⭱ Charger un logo<input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this.files[0])"></label>
+      ${s.logo?'<button class="btn sm gh" style="margin-left:6px;color:var(--red)" onclick="removeLogo()">Retirer</button>':''}
+      <div style="font-size:11px;color:var(--mut);margin-top:4px">PNG/JPG · max 500 Ko · apparaît sur tous les documents</div></div>
+    </div>
     <div class="frow c2"><div><label>Raison sociale</label><input id="sNom" value="${s.nom}"></div><div><label>NCC</label><input id="sNcc" value="${s.ncc}"></div></div>
     <div class="frow c2"><div><label>RCCM</label><input id="sRccm" value="${s.rccm}"></div><div><label>Téléphone</label><input id="sTel" value="${s.tel}"></div></div>
     <div class="frow c2"><div><label>Adresse</label><input id="sAdr" value="${s.adresse}"></div><div><label>Régime fiscal</label><input id="sReg" value="${s.regime}"></div></div>
     <button class="btn sm" onclick="saveSociete()">Enregistrer</button></div>`;
 }
-async function saveSociete(){
-  await put('meta',{id:'societe',value:{nom:sNom.value,ncc:sNcc.value,rccm:sRccm.value,tel:sTel.value,adresse:sAdr.value,regime:sReg.value}});
+async function uploadLogo(file){
+  if(!file)return;if(file.size>500*1024){toast('Logo trop lourd (max 500 Ko).');return;}
+  const rd=new FileReader();rd.onload=async()=>{const s=await societe();s.logo=rd.result;await put('meta',{id:'societe',value:s});await loadAll();societeForm();toast('Logo enregistré.');};
+  rd.readAsDataURL(file);
+}
+async function removeLogo(){const s=await societe();delete s.logo;await put('meta',{id:'societe',value:s});await loadAll();societeForm();toast('Logo retiré.');}
+async function saveSociete(){const s=await societe();
+  await put('meta',{id:'societe',value:{nom:sNom.value,ncc:sNcc.value,rccm:sRccm.value,tel:sTel.value,adresse:sAdr.value,regime:sReg.value,logo:s.logo||''}});
   toast('Société enregistrée.');
 }
 /* -- Utilisateurs & rôles -- */
@@ -1738,6 +1767,228 @@ async function genDotations(){
   await loadAll();RENDER.immo();toast(n+' dotation(s) comptabilisée(s) au 31/12.');
 }
 
+/* ---- Passerelle ERP ---- */
+const ERP_SANIX=[
+  {id:'immosuite',nom:'ImmoSuite ERP',desc:'Ventes lots, loyers, cessions',col:'#B87333'},
+  {id:'menkoagro',nom:'Menko Agro',desc:'Production agricole, campagnes',col:'#1a8a5a'},
+  {id:'medicore',nom:'MEDICORE Suite',desc:'Actes, consultations, pharmacie',col:'#2c6fb5'},
+  {id:'sanixfactory',nom:'SanixFactory 4.0',desc:'Production, ventes usine',col:'#6d4b9e'},
+  {id:'crm',nom:'SANIX CRM Pro',desc:'Factures, encaissements',col:'#c98a10'},
+  {id:'easystock',nom:'SANIX EasyStock',desc:'POS, ventes, achats',col:'#c0392b'}
+];
+RENDER.passerelle=()=>{
+  document.getElementById('pgActions').innerHTML='';
+  const cards=ERP_SANIX.map(e=>`<div class="card" style="border-top:3px solid ${e.col};margin-bottom:0">
+    <div style="font-weight:800;font-size:14px">${e.nom}</div><div style="font-size:12px;color:var(--mut);margin-bottom:8px">${e.desc}</div>
+    <label class="btn sm gh" style="cursor:pointer;width:100%;text-align:center">⭱ Importer JSON<input type="file" accept=".json" style="display:none" onchange="importERP('${e.id}','${e.nom}',this.files[0])"></label></div>`).join('');
+  document.getElementById('p-passerelle').innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">${cards}</div>
+  <div class="card" style="margin-top:14px"><h3 style="margin-top:0">Format d'échange attendu</h3>
+    <pre style="background:#1C1C2E;color:#e8c9a8;padding:12px;border-radius:8px;font-size:11px;overflow-x:auto">{
+  "source": "immosuite",
+  "ecritures": [
+    { "date":"2026-05-10", "journal":"VT", "piece":"F-001",
+      "libelle":"Vente lot A", "lignes":[
+        {"compte":"411","debit":5000000,"credit":0},
+        {"compte":"701","debit":0,"credit":5000000}
+      ]}
+  ]
+}</pre>
+    <div style="font-size:12px;color:var(--mut)">Écritures équilibrées importées au journal courant. Contrôle partie double appliqué.</div></div>`;
+};
+function importERP(src,nom,file){if(!file)return;const rd=new FileReader();rd.onload=async()=>{try{
+  const d=JSON.parse(rd.result);const ecr=d.ecritures||[];let ok=0,rej=0;
+  for(const e of ecr){const sd=(e.lignes||[]).reduce((s,l)=>s+(+l.debit||0),0),sc=(e.lignes||[]).reduce((s,l)=>s+(+l.credit||0),0);
+    if(Math.abs(sd-sc)>=1||!e.lignes||!e.lignes.length){rej++;continue;}
+    await put('ecritures',{id:uid('e'),date:e.date||today(),journal:e.journal||'OD',piece:e.piece||'',libelle:(e.libelle||'')+' ['+src+']',exId:ST.exId,source:src,lignes:e.lignes.map(l=>({compte:l.compte,libelle:l.libelle||e.libelle,debit:+l.debit||0,credit:+l.credit||0}))});
+    // créer comptes manquants
+    for(const l of e.lignes)if(!ST.comptes.some(c=>c.numero===l.compte))await put('comptes',{id:'c_'+l.compte,numero:l.compte,libelle:'Importé '+l.compte,type:l.compte[0]==='7'?'R':l.compte[0]==='6'?'C':'A',classe:l.compte[0]});
+    ok++;}
+  await loadAll();RENDER.passerelle();toast(nom+' : '+ok+' importée(s), '+rej+' rejetée(s).');
+}catch(e){toast('Fichier invalide.');}};rd.readAsText(file);}
+
+/* ---- Consolidation multi-sociétés ---- */
+async function getFiliales(){const m=await getOne('meta','filiales');return m?m.value:[];}
+RENDER.consolidation=()=>{
+  document.getElementById('pgActions').innerHTML=`<label class="btn sm gh" style="cursor:pointer">⭱ Importer société<input type="file" accept=".json" style="display:none" onchange="importFiliale(this.files[0])"></label> <button class="btn sm gh" onclick="printReport('p-consolidation','Consolidation')">⎙ Imprimer</button>`;
+  getFiliales().then(fils=>{
+    window._fils=fils;
+    // société courante = données live
+    const m=soldesParCompte();
+    const cl=(src,c,sens)=>{let s=0;for(const n in src)if(n[0]===c)s+=sens==='c'?src[n].credit-src[n].debit:src[n].debit-src[n].credit;return s;};
+    const societeCourante={nom:'(société courante)',soldes:m};
+    const toutes=[societeCourante,...fils];
+    // agrégation par classe
+    const agg={produits:0,charges:0,treso:0,clients:0,fourn:0,actif:0};
+    const perSoc=toutes.map(so=>{const src=so.soldes;
+      const prod=cl(src,'7','c'),chg=cl(src,'6','d'),tres=cl(src,'5','d');
+      let cli=0,fou=0;for(const n in src){if(n.startsWith('41'))cli+=src[n].debit-src[n].credit;if(n.startsWith('40'))fou+=src[n].credit-src[n].debit;}
+      agg.produits+=prod;agg.charges+=chg;agg.treso+=tres;agg.clients+=cli;agg.fourn+=fou;
+      return{nom:so.nom,prod,chg,res:prod-chg,tres};});
+    // éliminations intra-groupe (simplifié : comptes 18x liaisons)
+    let elim=0;toutes.forEach(so=>{for(const n in so.soldes)if(n.startsWith('18'))elim+=Math.abs(so.soldes[n].debit-so.soldes[n].credit);});
+    const resConso=agg.produits-agg.charges;
+    document.getElementById('p-consolidation').innerHTML=`
+    <div class="grid kpis" style="margin-bottom:12px">
+      <div class="card kpi o"><div class="lb">Sociétés consolidées</div><div class="v mono">${toutes.length}</div></div>
+      <div class="card kpi b"><div class="lb">CA consolidé</div><div class="v mono">${F(agg.produits)}</div></div>
+      <div class="card kpi ${resConso>=0?'g':'r'}"><div class="lb">Résultat consolidé</div><div class="v mono">${F(resConso)}</div></div>
+      <div class="card kpi o"><div class="lb">Éliminations intra-groupe</div><div class="v mono">${F(elim)}</div></div>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>Société</th><th class="ta-r">Produits</th><th class="ta-r">Charges</th><th class="ta-r">Résultat</th><th class="ta-r">Trésorerie</th></tr></thead>
+    <tbody>${perSoc.map(s=>`<tr><td><b>${s.nom}</b></td><td class="ta-r mono">${F0(s.prod)}</td><td class="ta-r mono">${F0(s.chg)}</td><td class="ta-r mono ${s.res<0?'neg':'pos'}">${F0(s.res)}</td><td class="ta-r mono">${F0(s.tres)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr class="foot-tr"><td>GROUPE CONSOLIDÉ</td><td class="ta-r mono">${F0(agg.produits)}</td><td class="ta-r mono">${F0(agg.charges)}</td><td class="ta-r mono">${F0(resConso)}</td><td class="ta-r mono">${F0(agg.treso)}</td></tr></tfoot></table></div>
+    ${fils.length?`<div style="margin-top:10px"><h3 style="font-size:14px;color:var(--cuivre-d)">Filiales importées</h3>${fils.map((f,i)=>`<span class="badge b-cuivre" style="margin:3px">${f.nom} <a onclick="delFiliale(${i})" style="cursor:pointer;color:#fff">✕</a></span>`).join('')}</div>`:''}
+    <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Méthode.</b> Importez la sauvegarde JSON de chaque filiale. Agrégation ligne à ligne. Éliminations sur comptes de liaison 18x. Intégration globale.</div>`;
+  });
+};
+function importFiliale(file){if(!file)return;const rd=new FileReader();rd.onload=async()=>{try{const d=JSON.parse(rd.result);
+  // reconstruire soldes depuis écritures importées
+  const soldes={};(d.ecritures||[]).forEach(e=>e.lignes.forEach(l=>{if(!soldes[l.compte])soldes[l.compte]={debit:0,credit:0};soldes[l.compte].debit+=+l.debit||0;soldes[l.compte].credit+=+l.credit||0;}));
+  const nom=(d.meta||[]).find?.(x=>x.id==='societe')?.value?.nom||('Filiale '+(( window._fils||[]).length+1));
+  const fils=await getFiliales();fils.push({nom,soldes});await put('meta',{id:'filiales',value:fils});RENDER.consolidation();toast('Filiale intégrée : '+nom);
+}catch(e){toast('Fichier invalide.');}};rd.readAsText(file);}
+async function delFiliale(i){const fils=window._fils;fils.splice(i,1);await put('meta',{id:'filiales',value:fils});RENDER.consolidation();toast('Filiale retirée.');}
+
+/* ---- IA détection anomalies ---- */
+function scanAnomalies(){
+  const A=[];const m=soldesParCompte();
+  // 1. écritures déséquilibrées
+  ST.ecritures.forEach(e=>{const d=e.lignes.reduce((s,l)=>s+(+l.debit||0),0),c=e.lignes.reduce((s,l)=>s+(+l.credit||0),0);
+    if(Math.abs(d-c)>=1)A.push(['bad','Écriture déséquilibrée',`${e.piece||e.libelle} — écart ${F(d-c)}`]);});
+  // 2. comptes non référencés
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if(l.compte&&!ST.comptes.some(c=>c.numero===l.compte))A.push(['warn','Compte inexistant au plan',l.compte+' ('+(e.piece||e.libelle)+')']);}));
+  // 3. montants négatifs
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if((+l.debit||0)<0||(+l.credit||0)<0)A.push(['bad','Montant négatif',e.piece||e.libelle]);}));
+  // 4. doublons potentiels (même date, montant, libellé)
+  const seen={};ST.ecritures.forEach(e=>{const tot=e.lignes.reduce((s,l)=>s+(+l.debit||0),0);const k=e.date+'|'+tot+'|'+(e.libelle||'').toLowerCase();
+    if(seen[k])A.push(['warn','Doublon possible',`${e.libelle} — ${dfr(e.date)} · ${F(tot)}`]);seen[k]=1;});
+  // 5. clients dépassant plafond
+  ST.tiers.filter(t=>t.type==='client'&&t.plafond>0).forEach(t=>{const s=m[t.compte]||{debit:0,credit:0};const solde=s.debit-s.credit;
+    if(solde>t.plafond)A.push(['warn','Plafond client dépassé',`${t.nom} — ${F(solde)} > ${F(t.plafond)}`]);});
+  // 6. TVA collectée sans ventes
+  const tvaC=(m['4431']||{debit:0,credit:0});const ventes=(-classeSolde('7'));
+  if((tvaC.credit-tvaC.debit)>0&&ventes<=0)A.push(['warn','TVA collectée sans produit','Vérifier comptes de vente']);
+  // 7. charge anormalement élevée (> 3x moyenne classe 6)
+  const charges6={};for(const n in m)if(n[0]==='6')charges6[n]=m[n].debit-m[n].credit;
+  const vals=Object.values(charges6).filter(v=>v>0);const moy=vals.reduce((a,b)=>a+b,0)/(vals.length||1);
+  for(const n in charges6)if(charges6[n]>moy*3&&vals.length>2)A.push(['info','Charge élevée vs moyenne',n+' — '+F(charges6[n])]);
+  // 8. écritures hors exercice
+  const ex=curEx();ST.ecritures.filter(e=>e.exId===ST.exId).forEach(e=>{if(e.date<ex.debut||e.date>ex.fin)A.push(['warn','Date hors exercice',`${e.piece||e.libelle} — ${dfr(e.date)}`]);});
+  // 9. tiers sans NCC (client facturé FNE)
+  ST.factures.filter(f=>f.type==='fne'&&!f.clientNcc).forEach(f=>A.push(['warn','Facture FNE sans NCC',f.numero||'']));
+  return A;
+}
+RENDER.anomalies=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-anomalies','Rapport anomalies')">⎙ Imprimer</button>`;
+  const A=scanAnomalies();
+  const nb={bad:A.filter(x=>x[0]==='bad').length,warn:A.filter(x=>x[0]==='warn').length,info:A.filter(x=>x[0]==='info').length};
+  const col={bad:['#fdf0ed','var(--red)','⚠'],warn:['#fbf0d8','var(--amber)','!'],info:['#e9f1fb','var(--blue)','ℹ']};
+  const rows=A.map(a=>{const c=col[a[0]];return`<tr><td class="ta-c"><b style="color:${c[1]}">${c[2]}</b></td><td><b>${a[1]}</b></td><td style="font-size:12.5px;color:var(--mut)">${a[2]}</td></tr>`;}).join('');
+  document.getElementById('p-anomalies').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi r"><div class="lb">Critiques</div><div class="v mono">${nb.bad}</div></div>
+    <div class="card kpi o"><div class="lb">Avertissements</div><div class="v mono">${nb.warn}</div></div>
+    <div class="card kpi b"><div class="lb">Informations</div><div class="v mono">${nb.info}</div></div>
+    <div class="card kpi ${A.length===0?'g':'o'}"><div class="lb">Score santé</div><div class="v mono">${Math.max(0,100-nb.bad*15-nb.warn*5)}%</div></div>
+  </div>
+  ${A.length===0?'<div class="card" style="text-align:center;padding:30px"><div style="font-size:32px">✓</div><b style="color:var(--green)">Aucune anomalie détectée.</b><div style="color:var(--mut);font-size:13px">Comptabilité saine.</div></div>':
+  `<div class="tbl-wrap"><table><thead><tr><th></th><th>Anomalie</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table></div>`}
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">9 contrôles</b> : équilibre, comptes, doublons, plafonds, TVA, dates, charges, FNE. Analyse locale, sans envoi externe.</div>`;
+};
+
+/* ---- Journal d'audit ---- */
+const AUDIT_STORES=['ecritures','tiers','factures','comptes','immos','centres','budgets','exercices','users','pieces'];
+async function logAudit(action,store,ref){
+  try{const rec={id:uid('au'),ts:new Date().toISOString(),user:ST.user?ST.user.login:'?',action,store,ref:ref||'',ua:(typeof navigator!=='undefined'?navigator.userAgent:'').slice(0,60)};
+    const db=await idb();await new Promise(res=>{const tx=db.transaction('audit','readwrite');tx.objectStore('audit').put(rec);tx.oncomplete=res;tx.onerror=res;});
+  }catch(e){}
+}
+RENDER.audit=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="exportAuditCSV()">⭳ CSV</button> <button class="btn sm gh" onclick="printReport('p-audit','Journal audit')">⎙ Imprimer</button>`;
+  const logs=[...ST.audit].sort((a,b)=>a.ts<b.ts?1:-1).slice(0,300);
+  const ic={create:'＋',update:'✎',delete:'✕',login:'→',sync:'⇄'};const col={create:'#1a8a5a',update:'#c98a10',delete:'#c0392b',login:'#2c6fb5',sync:'#6d4b9e'};
+  const rows=logs.map(l=>`<tr><td class="mono" style="font-size:11px">${new Date(l.ts).toLocaleString('fr-FR')}</td><td><b>${l.user}</b></td>
+    <td><span class="badge" style="background:${col[l.action]||'#eee'}22;color:${col[l.action]||'#333'}">${ic[l.action]||''} ${l.action}</span></td>
+    <td>${l.store}</td><td class="mono" style="font-size:11px">${l.ref||'—'}</td></tr>`).join('');
+  document.getElementById('p-audit').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Événements tracés</div><div class="v mono">${ST.audit.length}</div></div>
+    <div class="card kpi b"><div class="lb">Dernière action</div><div class="v mono" style="font-size:15px">${logs[0]?new Date(logs[0].ts).toLocaleString('fr-FR'):'—'}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Horodatage</th><th>Utilisateur</th><th>Action</th><th>Module</th><th>Référence</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=5 class="empty"><div class="ic">◉</div>Aucun événement</td></tr>'}</tbody></table></div>`;
+};
+function exportAuditCSV(){let c='Horodatage;Utilisateur;Action;Module;Reference;Navigateur\n';
+  ST.audit.forEach(l=>c+=[l.ts,l.user,l.action,l.store,l.ref,(l.ua||'').replace(/;/g,',')].join(';')+'\n');dl('audit.csv',c);toast('Journal exporté.');}
+
+/* ---- Workflow validation ---- */
+RENDER.workflow=()=>{
+  const f=window._wfFilter||'brouillard';
+  document.getElementById('pgActions').innerHTML='';
+  const cnt=st=>ST.ecritures.filter(e=>(e.statut||'brouillard')===st).length;
+  const tab=(k,l)=>`<button class="btn sm ${f===k?'':'gh'}" onclick="window._wfFilter='${k}';RENDER.workflow()">${l} (${cnt(k)})</button>`;
+  const list=ST.ecritures.filter(e=>(e.statut||'brouillard')===f).sort((a,b)=>a.date<b.date?1:-1);
+  const badge={brouillard:'b-gray',valide:'b-green',rejete:'b-red'};
+  const rows=list.map(e=>{const tot=e.lignes.reduce((s,l)=>s+(+l.debit||0),0);
+    return`<tr><td class="mono">${dfr(e.date)}</td><td>${jLib(e.journal)}</td><td>${e.piece||''}</td><td>${e.libelle}</td><td class="ta-r mono">${F0(tot)}</td>
+    <td class="ta-c">${f==='brouillard'?`<button class="linkbtn" style="color:var(--green)" onclick="visaEcriture('${e.id}','valide')">✓ Valider</button> <button class="linkbtn" style="color:var(--red)" onclick="visaEcriture('${e.id}','rejete')">✕ Rejeter</button>`:
+      f==='rejete'?`<button class="linkbtn" onclick="visaEcriture('${e.id}','brouillard')">↺ Rouvrir</button>`:
+      `<span class="badge b-green">visé ${e.visePar||''}</span>`}</td></tr>`;}).join('');
+  document.getElementById('p-workflow').innerHTML=`
+  <div class="toolbar">${tab('brouillard','Brouillard')}${tab('valide','Validées')}${tab('rejete','Rejetées')}
+    ${cnt('brouillard')?`<button class="btn sm" style="margin-left:auto;background:var(--green)" onclick="visaAll()">✓ Tout valider</button>`:''}</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Montant</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=6 class="empty">Aucune écriture</td></tr>'}</tbody></table></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Circuit.</b> Saisie → brouillard → visa → validé. Seules les écritures validées alimentent les états définitifs (option).</div>`;
+};
+async function visaEcriture(id,statut){const e=ST.ecritures.find(x=>x.id===id);e.statut=statut;e.visePar=statut==='valide'?ST.user.login:'';e.viseDate=statut==='valide'?today():'';await put('ecritures',e);await loadAll();RENDER.workflow();toast(statut==='valide'?'Écriture validée.':statut==='rejete'?'Écriture rejetée.':'Réouverte.');}
+async function visaAll(){const list=ST.ecritures.filter(e=>(e.statut||'brouillard')==='brouillard');for(const e of list){e.statut='valide';e.visePar=ST.user.login;e.viseDate=today();await put('ecritures',e);}await loadAll();RENDER.workflow();toast(list.length+' écriture(s) validée(s).');}
+
+/* ---- Multi-devises ---- */
+const DEV_DEF=[{code:'EUR',lb:'Euro',taux:655.957},{code:'USD',lb:'Dollar US',taux:600},{code:'GHS',lb:'Cedi ghanéen',taux:40},{code:'NGN',lb:'Naira',taux:0.40}];
+async function getDevises(){const m=await getOne('meta','devises');return m?m.value:DEV_DEF;}
+RENDER.devises=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="editDevise(null)">+ Devise</button>`;
+  getDevises().then(devs=>{
+    window._devs=devs;
+    const rows=devs.map((d,i)=>`<tr><td class="mono"><b>${d.code}</b></td><td>${d.lb}</td><td class="ta-r mono">${d.taux}</td>
+      <td class="ta-c"><button class="linkbtn" onclick="editDevise(${i})">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delDevise(${i})">✕</button></td></tr>`).join('');
+    document.getElementById('p-devises').innerHTML=`
+    <div class="card"><h3 style="margin-top:0">Convertisseur</h3>
+      <div class="frow c3"><div><label>Montant</label><input type="number" id="cvMt" value="100" oninput="convDev()"></div>
+      <div><label>Devise</label><select id="cvDev" onchange="convDev()">${devs.map(d=>`<option value="${d.taux}">${d.code}</option>`).join('')}</select></div>
+      <div><label>Sens</label><select id="cvSens" onchange="convDev()"><option value="to">→ FCFA</option><option value="from">FCFA →</option></select></div></div>
+      <div id="cvRes" style="font-size:20px;font-weight:800;color:var(--cuivre);margin-top:8px"></div></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Code</th><th>Devise</th><th class="ta-r">1 unité = FCFA</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="card"><h3>Écart de change (simulation)</h3>
+      <div class="frow c3"><div><label>Montant devise</label><input type="number" id="ecMt" value="1000" oninput="ecartChange()"></div>
+      <div><label>Cours facturation</label><input type="number" id="ecT1" value="655" oninput="ecartChange()"></div>
+      <div><label>Cours règlement</label><input type="number" id="ecT2" value="660" oninput="ecartChange()"></div></div>
+      <div id="ecRes" style="font-size:15px;font-weight:700;margin-top:8px"></div>
+      <div style="font-size:12px;color:var(--mut);margin-top:4px">Gain (776) si favorable · perte (676) sinon.</div></div>`;
+    convDev();ecartChange();
+  });
+};
+function convDev(){const mt=+document.getElementById('cvMt').value||0,t=+document.getElementById('cvDev').value,sens=document.getElementById('cvSens').value;
+  const r=sens==='to'?mt*t:mt/t;document.getElementById('cvRes').textContent=sens==='to'?F(Math.round(r)):(r.toFixed(2)+' devise');}
+function ecartChange(){const mt=+document.getElementById('ecMt').value||0,t1=+document.getElementById('ecT1').value||0,t2=+document.getElementById('ecT2').value||0;
+  const ec=mt*(t2-t1);const el=document.getElementById('ecRes');
+  el.innerHTML=`Écart : <span class="${ec>=0?'pos':'neg'}">${F(Math.round(ec))}</span> — ${ec>=0?'Gain de change (776)':'Perte de change (676)'}`;}
+function editDevise(i){const d=i!=null?window._devs[i]:null;
+  openModal(`<div class="mh"><h3>${d?'Modifier':'Nouvelle'} devise</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow c3"><div><label>Code</label><input id="dvCode" value="${d?d.code:''}" placeholder="EUR"></div>
+  <div><label>Libellé</label><input id="dvLb" value="${d?d.lb:''}"></div>
+  <div><label>Taux (1 = ? FCFA)</label><input type="number" id="dvT" value="${d?d.taux:0}"></div></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveDevise(${i!=null?i:-1})">Enregistrer</button></div>`);
+}
+async function saveDevise(i){const devs=window._devs||await getDevises();
+  const d={code:document.getElementById('dvCode').value.trim().toUpperCase(),lb:document.getElementById('dvLb').value.trim(),taux:+document.getElementById('dvT').value||0};
+  if(!d.code){toast('Code requis.');return;}
+  if(i>=0)devs[i]=d;else devs.push(d);
+  await put('meta',{id:'devises',value:devs});closeModal();RENDER.devises();toast('Devise enregistrée.');}
+async function delDevise(i){const devs=window._devs;devs.splice(i,1);await put('meta',{id:'devises',value:devs});RENDER.devises();toast('Devise supprimée.');}
+
 /* ---- GED pièces jointes ---- */
 RENDER.ged=()=>{
   document.getElementById('pgActions').innerHTML=`<label class="btn sm" style="cursor:pointer">+ Ajouter pièce<input type="file" accept="image/*,.pdf" style="display:none" onchange="addPiece(this.files[0])"></label>`;
@@ -1773,6 +2024,68 @@ function viewPiece(id){const p=ST.pieces.find(x=>x.id===id);
 async function savePieceRef(id){const p=ST.pieces.find(x=>x.id===id);p.ref=document.getElementById('pcRef').value;await put('pieces',p);await loadAll();closeModal();RENDER.ged();toast('Rattachement enregistré.');}
 function dlPiece(id){const p=ST.pieces.find(x=>x.id===id);const a=document.createElement('a');a.href=p.data;a.download=p.nom;a.click();}
 async function delPiece(id){if(!confirm('Supprimer cette pièce ?'))return;await del('pieces',id);await loadAll();RENDER.ged();toast('Pièce supprimée.');}
+
+/* ---- Liasse fiscale ---- */
+RENDER.liasse=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="exportLiassePDF()">⭳ Générer la liasse PDF</button>`;
+  const m=soldesParCompte();
+  const cl=(c,sens)=>{let s=0;for(const n in m)if(n[0]===c)s+=sens==='c'?m[n].credit-m[n].debit:m[n].debit-m[n].credit;return s;};
+  const produits=cl('7','c'),charges=cl('6','d'),resultat=produits-charges;
+  const actif=cl('2','d')+cl('3','d')+cl('4','d')+cl('5','d');
+  const check=[
+    ['Bilan','Actif = Passif',Math.abs(actif-(cl('1','c')+resultat+cl('4','c')))<1000?'ok':'warn'],
+    ['Compte de résultat','Produits − Charges',resultat!==0?'ok':'info'],
+    ['SIG','Soldes intermédiaires','ok'],
+    ['TFT','Flux de trésorerie','ok'],
+    ['Notes annexes','5 notes','ok'],
+    ['Immobilisations','Tableau amortissements',ST.immos.length?'ok':'info']
+  ];
+  const ic={ok:['#1a8a5a','✓'],warn:['#c0392b','⚠'],info:['#2c6fb5','ℹ']};
+  document.getElementById('p-liasse').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Chiffre d'affaires</div><div class="v mono">${F(produits)}</div></div>
+    <div class="card kpi ${resultat>=0?'g':'r'}"><div class="lb">Résultat net</div><div class="v mono">${F(resultat)}</div></div>
+    <div class="card kpi b"><div class="lb">Total actif</div><div class="v mono">${F(actif)}</div></div>
+    <div class="card kpi o"><div class="lb">Exercice</div><div class="v mono" style="font-size:15px">${curEx().libelle}</div></div>
+  </div>
+  <div class="card"><h3 style="margin-top:0">États inclus dans la liasse</h3>
+  <div class="tbl-wrap"><table><tbody>${check.map(c=>`<tr><td class="ta-c"><b style="color:${ic[c[2]][0]}">${ic[c[2]][1]}</b></td><td><b>${c[0]}</b></td><td style="color:var(--mut)">${c[1]}</td></tr>`).join('')}</tbody></table></div></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px"><b style="color:var(--cuivre-d)">Liasse SYSCOHADA.</b> Bilan · Résultat · SIG · TFT · Annexes en un seul PDF multi-pages avec en-tête société et QR.</div>`;
+};
+async function exportLiassePDF(){
+  toast('Génération de la liasse…');
+  const s=await societe();const m=soldesParCompte();
+  const cl=(c,sens)=>{let x=0;for(const n in m)if(n[0]===c)x+=sens==='c'?m[n].credit-m[n].debit:m[n].debit-m[n].credit;return x;};
+  const produits=cl('7','c'),charges=cl('6','d'),resultat=produits-charges;
+  const ref='LIASSE-'+(''+Date.now()).slice(-7);
+  const qr=QR.svg(`${s.nom}|LIASSE|${curEx().libelle}|${today()}|${ref}`,90)||'';
+  const grab=id=>{const el=document.getElementById(id);return el?el.innerHTML.replace(/<button[^>]*>.*?<\/button>/g,'').replace(/<(select|input)[^>]*>/g,''):'';};
+  // pré-rendre chaque état
+  ['bilan','resultat','tva','flux','annexes'].forEach(p=>{try{RENDER[p]&&RENDER[p]();}catch(e){}});
+  await new Promise(r=>setTimeout(r,50));
+  const page=(titre,body)=>`<section style="page-break-after:always;padding:14px">
+    <div style="display:flex;justify-content:space-between;border-bottom:3px solid #B87333;padding-bottom:10px;margin-bottom:12px">
+    <div style="display:flex;gap:8px;align-items:center">${s.logo?`<img src="${s.logo}" style="width:34px;height:34px;object-fit:contain">`:''}<div><div style="font-weight:800">${s.nom}</div><div style="font-size:10px;color:#697089">NCC ${s.ncc} · ${s.adresse}</div></div></div>
+    <div style="text-align:right"><div style="font-size:16px;font-weight:800">${titre}</div><div style="font-size:10px;color:#697089">${curEx().libelle} · ${dfr(today())}</div></div></div>
+    ${body}</section>`;
+  const html=`
+    ${page('Bilan',grab('p-bilan'))}
+    ${page('Compte de résultat',grab('p-resultat'))}
+    ${page('Soldes intermédiaires de gestion',grab('p-resultat'))}
+    ${page('Flux de trésorerie',grab('p-flux'))}
+    ${page('Notes annexes',grab('p-annexes'))}
+    <section style="padding:40px 14px;text-align:center">
+      <div style="margin:30px auto">${qr}</div>
+      <div style="font-size:12px;color:#697089">Liasse fiscale SYSCOHADA · Réf ${ref}</div>
+      <div style="font-size:10px;color:#9aa0b4;margin-top:8px">Développé par SANIX Africa Division Technologies · +225 07 79 18 10 75 / 01 40 01 77 51 · Cyrille KESSIE</div>
+    </section>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><meta charset="utf-8"><title>Liasse ${curEx().libelle}</title>
+  <style>@page{margin:12mm}body{margin:0;font-family:'Segoe UI',sans-serif;color:#1C1C2E}table{width:100%;border-collapse:collapse;font-size:11px}th{background:#1C1C2E;color:#fff;text-align:left;padding:6px 8px;font-size:9px}td{padding:5px 8px;border-bottom:1px solid #eef0f5}.ta-r{text-align:right}.ta-c{text-align:center}.mono{font-variant-numeric:tabular-nums}.foot-tr td{background:#1C1C2E;color:#fff}.kpis,.two,.grid{display:block}.kpi,.card{border:1px solid #e3e6ee;border-radius:8px;padding:8px;margin-bottom:6px}.pos{color:#1a8a5a}.neg{color:#c0392b}.hl{display:none}.badge{font-size:9px}</style>
+  </head><body onload="window.print()">${html}</body></html>`);
+  w.document.close();
+  RENDER.liasse();toast('Liasse prête. Imprimer → Enregistrer en PDF.');
+}
 
 /* ---- Notes annexes ---- */
 RENDER.annexes=()=>{
@@ -1983,13 +2296,13 @@ async function printReport(pageId,titre){
   const qr=QR.svg(qrPayload,110)||'';
   const html=`<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;padding:16px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #B87333;padding-bottom:12px">
-      <div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800">SX</div>
+      <div style="display:flex;gap:10px;align-items:center"><div style="width:40px;height:40px;border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;${s.logo?'':'background:linear-gradient(135deg,#B87333,#9c5f28);color:#fff;font-weight:800'}">${s.logo?`<img src="${s.logo}" style="max-width:100%;max-height:100%">`:'SX'}</div>
       <div><div style="font-weight:800;font-size:15px">${s.nom}</div><div style="font-size:10.5px;color:#697089">NCC ${s.ncc} · ${s.adresse} · ${s.tel}</div></div></div>
       <div style="text-align:right"><div style="font-size:19px;font-weight:800">${titre}</div><div style="font-size:11px;color:#697089">${curEx().libelle} · au ${dfr(date)}</div><div style="font-size:10px;color:#9aa0b4">Réf ${ref}</div></div>
     </div>
     <div style="margin:14px 0">${inner.innerHTML}</div>
     <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:1px solid #e3e6ee;padding-top:10px;margin-top:14px">
-      <div style="font-size:9.5px;color:#9aa0b4;max-width:70%">Document généré par SANIX ComptaPro (SYSCOHADA). Scannez le QR pour vérifier l'origine et l'intégrité. Réf ${ref}.</div>
+      <div style="font-size:9.5px;color:#9aa0b4;max-width:70%">Document généré par SANIX ComptaPro (SYSCOHADA). Scannez le QR pour vérifier l'origine et l'intégrité. Réf ${ref}.<br>Développé par SANIX Africa Division Technologies · +225 07 79 18 10 75 / 01 40 01 77 51 · Cyrille KESSIE</div>
       <div>${qr}</div>
     </div>
   </div>`;
