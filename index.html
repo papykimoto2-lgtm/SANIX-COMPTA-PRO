@@ -1250,7 +1250,7 @@ const QR=(function(){
 /* ============================================================
    FACTURATION — simple + FNE
 ============================================================ */
-async function societe(){let s=await getOne('meta','societe');if(!s){s={id:'societe',value:{nom:'SANIX AFRICA DIVISION TECHNOLOGIES',ncc:'CI-XXXXXXX-X',rccm:'CI-ABJ-XX-XXXX-BXX-XXXXX',tel:'+225 07 79 18 10 75',adresse:'Abidjan, Côte d\'Ivoire',regime:'Réel Normal d\'Imposition (RNI)'}};await put('meta',s);}return s.value;}
+async function societe(){let s=await getOne('meta','societe');if(!s){s={id:'societe',value:{nom:'SANIX AFRICA DIVISION TECHNOLOGIES',ncc:'CI-XXXXXXX-X',rccm:'CI-ABJ-XX-XXXX-BXX-XXXXX',tel:'+225 07 79 18 10 75',adresse:'Abidjan, Côte d\'Ivoire',regime:'Réel Normal d\'Imposition (RNI)',forme:'SARL',capital:'',secteur:'',dirigeant:'Cyrille KESSIE',email:'',siteweb:'',banque:'',rib:'',cnps:'',centreImpots:'',devise:'FCFA'}};await put('meta',s);}return s.value;}
 let FL=[]; // lignes facture
 
 RENDER.facturation=async()=>{
@@ -1506,14 +1506,44 @@ RENDER.parametrage=()=>{
   const tb=(k,l)=>`<button class="btn sm ${tab===k?'':'gh'}" onclick="window._pgTab='${k}';RENDER.parametrage()">${l}</button>`;
   let body='';
   if(tab==='societe')body='<div id="pgSoc"></div>';
+  else if(tab==='comptable')body='<div id="pgCpt"></div>';
   else if(tab==='users')body=usersHTML();
   else if(tab==='stockage')body=stockageHTML();
   else if(tab==='import')body=importHTML();
   document.getElementById('p-parametrage').innerHTML=`
-  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}</div>
+  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('comptable','Paramètres comptables')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}</div>
   ${body}`;
   if(tab==='societe')societeForm();
+  if(tab==='comptable')comptableForm();
 };
+async function paramCpt(){let p=await getOne('meta','paramCpt');if(!p){p={id:'paramCpt',value:{
+  cptClient:'411',cptFourn:'401',cptVente:'701',cptAchat:'601',cptTvaColl:'4431',cptTvaDed:'4452',cptAib:'4499',
+  cptBanque:'521',cptCaisse:'571',cptRemise:'709',cptFraisBank:'631',cptEcartPlus:'776',cptEcartMoins:'676',
+  cptDotation:'6813',cptResultat:'12',tauxTva:'18',tauxAib:'1'}};await put('meta',p);}return p.value;}
+async function comptableForm(){const p=await paramCpt();const el=document.getElementById('pgCpt');if(!el)return;
+  const opt=sel=>ST.comptes.map(c=>`<option value="${c.numero}" ${sel===c.numero?'selected':''}>${c.numero} — ${c.libelle}</option>`).join('');
+  const f=(id,lb,val)=>`<div><label>${lb}</label><select id="${id}">${opt(val)}</select></div>`;
+  el.innerHTML=`
+  <div class="card"><h3 style="margin-top:0">Comptes par défaut — automatismes</h3>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Utilisés pour la génération automatique des écritures (facturation, cession, change).</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Ventes</div>
+    <div class="frow c3">${f('pClient','Compte client (411)',p.cptClient)}${f('pVente','Compte de vente (701)',p.cptVente)}${f('pTvaC','TVA collectée (4431)',p.cptTvaColl)}</div>
+    <div class="frow c2">${f('pAib','AIB (4499)',p.cptAib)}${f('pRemise','Remises accordées (709)',p.cptRemise)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Achats</div>
+    <div class="frow c3">${f('pFourn','Compte fournisseur (401)',p.cptFourn)}${f('pAchat','Compte d achat (601)',p.cptAchat)}${f('pTvaD','TVA déductible (4452)',p.cptTvaDed)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Trésorerie</div>
+    <div class="frow c3">${f('pBanque','Banque (521)',p.cptBanque)}${f('pCaisse','Caisse (571)',p.cptCaisse)}${f('pFrais','Frais bancaires (631)',p.cptFraisBank)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Divers</div>
+    <div class="frow c3">${f('pEcP','Gain de change (776)',p.cptEcartPlus)}${f('pEcM','Perte de change (676)',p.cptEcartMoins)}${f('pDot','Dotation amort. (6813)',p.cptDotation)}</div>
+    <div class="frow c3"><div><label>Taux TVA (%)</label><input type="number" id="pTvaTx" value="${p.tauxTva}"></div><div><label>Taux AIB (%)</label><input type="number" id="pAibTx" value="${p.tauxAib}"></div><div></div></div>
+    <button class="btn sm" onclick="saveParamCpt()">Enregistrer</button>
+    <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:10px"><b style="color:var(--cuivre-d)">Impact</b> — facturation, cession immo et écart de change utilisent ces comptes.</div>
+  </div>`;
+}
+async function saveParamCpt(){const g=x=>document.getElementById(x).value;
+  await put('meta',{id:'paramCpt',value:{cptClient:g('pClient'),cptFourn:g('pFourn'),cptVente:g('pVente'),cptAchat:g('pAchat'),cptTvaColl:g('pTvaC'),cptTvaDed:g('pTvaD'),cptAib:g('pAib'),cptBanque:g('pBanque'),cptCaisse:g('pCaisse'),cptRemise:g('pRemise'),cptFraisBank:g('pFrais'),cptEcartPlus:g('pEcP'),cptEcartMoins:g('pEcM'),cptDotation:g('pDot'),cptResultat:'12',tauxTva:+g('pTvaTx')||18,tauxAib:+g('pAibTx')||1}});
+  toast('Paramètres comptables enregistrés.');
+}
 async function societeForm(){const s=await societe();const el=document.getElementById('pgSoc');if(!el)return;
   el.innerHTML=`<div class="card">
     <div style="display:flex;gap:16px;align-items:center;margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line)">
@@ -1522,9 +1552,14 @@ async function societeForm(){const s=await societe();const el=document.getElemen
       ${s.logo?'<button class="btn sm gh" style="margin-left:6px;color:var(--red)" onclick="removeLogo()">Retirer</button>':''}
       <div style="font-size:11px;color:var(--mut);margin-top:4px">PNG/JPG · max 500 Ko · apparaît sur tous les documents</div></div>
     </div>
-    <div class="frow c2"><div><label>Raison sociale</label><input id="sNom" value="${s.nom}"></div><div><label>NCC</label><input id="sNcc" value="${s.ncc}"></div></div>
-    <div class="frow c2"><div><label>RCCM</label><input id="sRccm" value="${s.rccm}"></div><div><label>Téléphone</label><input id="sTel" value="${s.tel}"></div></div>
-    <div class="frow c2"><div><label>Adresse</label><input id="sAdr" value="${s.adresse}"></div><div><label>Régime fiscal</label><input id="sReg" value="${s.regime}"></div></div>
+    <div class="frow c2"><div><label>Raison sociale</label><input id="sNom" value="${s.nom}"></div><div><label>Forme juridique</label><select id="sForme">${['SARL','SA','SAS','SARLU','Entreprise individuelle','SCI','GIE','Coopérative'].map(f=>`<option ${s.forme===f?'selected':''}>${f}</option>`).join('')}</select></div></div>
+    <div class="frow c2"><div><label>Dirigeant / Gérant</label><input id="sDir" value="${s.dirigeant||''}"></div><div><label>Secteur d'activité</label><input id="sSect" value="${s.secteur||''}" placeholder="Ex : Édition de logiciels"></div></div>
+    <div class="frow c2"><div><label>NCC</label><input id="sNcc" value="${s.ncc}"></div><div><label>RCCM</label><input id="sRccm" value="${s.rccm}"></div></div>
+    <div class="frow c2"><div><label>Capital social (FCFA)</label><input id="sCap" value="${s.capital||''}"></div><div><label>Régime fiscal</label><input id="sReg" value="${s.regime}"></div></div>
+    <div class="frow c3"><div><label>Téléphone</label><input id="sTel" value="${s.tel}"></div><div><label>Email</label><input id="sEmail" value="${s.email||''}"></div><div><label>Site web</label><input id="sWeb" value="${s.siteweb||''}"></div></div>
+    <div class="frow"><div><label>Adresse</label><input id="sAdr" value="${s.adresse}"></div></div>
+    <div class="frow c2"><div><label>Centre des impôts</label><input id="sImp" value="${s.centreImpots||''}" placeholder="Ex : CME Plateau"></div><div><label>N° employeur CNPS</label><input id="sCnps" value="${s.cnps||''}"></div></div>
+    <div class="frow c2"><div><label>Banque</label><input id="sBanque" value="${s.banque||''}"></div><div><label>RIB / IBAN</label><input id="sRib" value="${s.rib||''}"></div></div>
     <button class="btn sm" onclick="saveSociete()">Enregistrer</button></div>`;
 }
 async function uploadLogo(file){
@@ -1534,7 +1569,8 @@ async function uploadLogo(file){
 }
 async function removeLogo(){const s=await societe();delete s.logo;await put('meta',{id:'societe',value:s});await loadAll();societeForm();toast('Logo retiré.');}
 async function saveSociete(){const s=await societe();
-  await put('meta',{id:'societe',value:{nom:sNom.value,ncc:sNcc.value,rccm:sRccm.value,tel:sTel.value,adresse:sAdr.value,regime:sReg.value,logo:s.logo||''}});
+  const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
+  await put('meta',{id:'societe',value:{nom:g('sNom'),forme:g('sForme'),dirigeant:g('sDir'),secteur:g('sSect'),ncc:g('sNcc'),rccm:g('sRccm'),capital:g('sCap'),regime:g('sReg'),tel:g('sTel'),email:g('sEmail'),siteweb:g('sWeb'),adresse:g('sAdr'),centreImpots:g('sImp'),cnps:g('sCnps'),banque:g('sBanque'),rib:g('sRib'),devise:'FCFA',logo:s.logo||''}});
   toast('Société enregistrée.');
 }
 /* -- Utilisateurs & rôles -- */
