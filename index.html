@@ -7,12 +7,12 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ComptaPro">
-<link rel="manifest" href='data:application/manifest+json,{"name":"SANIX ComptaPro","short_name":"ComptaPro","start_url":".","display":"standalone","background_color":"%231C1C2E","theme_color":"%23B87333","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231C1C2E%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22%23B87333%22 text-anchor=%22middle%22%3ESX%3C/text%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml"}]}'>
+
 <meta name="theme-color" content="#1C1C2E">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ComptaPro">
-<link rel="manifest" href='data:application/manifest+json,{"name":"SANIX ComptaPro","short_name":"ComptaPro","start_url":".","display":"standalone","background_color":"%231C1C2E","theme_color":"%23B87333","icons":[{"src":"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Crect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%231C1C2E%22/%3E%3Ctext x=%2250%22 y=%2266%22 font-size=%2248%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22%23B87333%22 text-anchor=%22middle%22%3ESX%3C/text%3E%3C/svg%3E","sizes":"any","type":"image/svg+xml"}]}'>
+
 <title>SANIX ComptaPro — Expertise comptable SYSCOHADA</title>
 <style>
 :root{
@@ -177,9 +177,11 @@ tbody tr:hover{background:#fbfcfe}
   <div class="lcard">
     <div class="brand"><div class="logo">SX</div><div><h1>SANIX <span>ComptaPro</span></h1></div></div>
     <div class="tag">Progiciel d'expertise comptable · SYSCOHADA révisé · FCFA</div>
-    <div class="fld"><label>Identifiant</label><input id="lu" value="KESSIE" autocomplete="off"></div>
-    <div class="fld"><label>Mot de passe</label><input id="lp" type="password" value="Azerty@2026"></div>
-    <button class="btn full" onclick="doLogin()">Se connecter</button>
+    <form onsubmit="event.preventDefault();doLogin()">
+    <div class="fld"><label>Identifiant</label><input id="lu" value="KESSIE" autocomplete="username"></div>
+    <div class="fld"><label>Mot de passe</label><input id="lp" type="password" value="Azerty@2026" autocomplete="current-password"></div>
+    <button class="btn full" type="submit">Se connecter</button>
+    </form>
     <div class="err" id="lerr"></div>
     <div class="tag" style="margin-top:14px;margin-bottom:0">Démo : KESSIE / Azerty@2026 · Comptable : COMPTA / compta</div>
   </div>
@@ -280,7 +282,7 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_NAME='sanix_comptapro', DB_VER=3;
+const DB_NAME='sanix_comptapro', DB_VER=6;
 let DB=null;
 const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','audit','users','meta'];
 
