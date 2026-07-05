@@ -57,7 +57,12 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .exbar{padding:9px 16px;font-size:11px;color:#8a8ea6;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #2c2c42}
 .exbar b{color:var(--cuivre-l)}
 .nav{flex:1;overflow-y:auto;padding:8px 0}
-.nav .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#5c6079;padding:12px 18px 5px;font-weight:700}
+.nav .grp{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#5c6079;padding:12px 18px 5px;font-weight:700;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:6px}
+.nav .grp:hover{color:#9297b3}
+.nav .grp-arrow{font-size:9px;transition:transform .18s ease;opacity:.7;flex-shrink:0}
+.nav .grp-section.collapsed .grp-arrow{transform:rotate(-90deg)}
+.nav .grp-items{overflow:hidden;max-height:600px;transition:max-height .22s ease}
+.nav .grp-section.collapsed .grp-items{max-height:0}
 .nav a{display:flex;align-items:center;gap:10px;padding:9px 18px;color:#c2c6d6;font-size:13.5px;text-decoration:none;border-left:3px solid transparent;transition:.12s}
 .nav a:hover{background:#23233a;color:#fff}
 .nav a.on{background:#23233a;color:#fff;border-left-color:var(--cuivre)}
@@ -195,43 +200,64 @@ tbody tr:hover{background:#fbfcfe}
     <div class="exbar"><span>Exercice</span><b id="exLabel">—</b></div>
     <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span></div>
     <nav class="nav" id="nav">
-      <div class="grp">1 · Saisie</div>
+      <div class="grp-section" data-grp="saisie">
+      <div class="grp" onclick="toggleGrp(this)"><span>1 · Saisie</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
-      <div class="grp">2 · Contrôle</div>
+      </div></div>
+      <div class="grp-section" data-grp="controle">
+      <div class="grp" onclick="toggleGrp(this)"><span>2 · Contrôle</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="workflow"><span class="ic">⇉</span>Validation &amp; visa</a>
       <a data-p="lettrage"><span class="ic">⇄</span>Lettrage</a>
       <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
       <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
-      <div class="grp">3 · Traitement</div>
+      </div></div>
+      <div class="grp-section" data-grp="traitement">
+      <div class="grp" onclick="toggleGrp(this)"><span>3 · Traitement</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
       <a data-p="analytique"><span class="ic">◈</span>Comptabilité analytique</a>
       <a data-p="immo"><span class="ic">▦</span>Immobilisations</a>
       <a data-p="devises"><span class="ic">$</span>Multi-devises</a>
-      <div class="grp">4 · États comptables</div>
+      </div></div>
+      <div class="grp-section" data-grp="etats">
+      <div class="grp" onclick="toggleGrp(this)"><span>4 · États comptables</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="grandlivre"><span class="ic">≣</span>Grand livre</a>
       <a data-p="balance"><span class="ic">⚖</span>Balance générale</a>
       <a data-p="resultat"><span class="ic">∑</span>Compte de résultat</a>
       <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
       <a data-p="flux"><span class="ic">≈</span>Flux de trésorerie</a>
       <a data-p="annexes"><span class="ic">▣</span>Notes annexes</a>
-      <div class="grp">5 · Fiscalité</div>
+      </div></div>
+      <div class="grp-section" data-grp="fiscalite">
+      <div class="grp" onclick="toggleGrp(this)"><span>5 · Fiscalité</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
       <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
       <a data-p="liasse"><span class="ic">▦</span>Liasse fiscale</a>
-      <div class="grp">6 · Budget &amp; pilotage</div>
+      </div></div>
+      <div class="grp-section" data-grp="budget">
+      <div class="grp" onclick="toggleGrp(this)"><span>6 · Budget &amp; pilotage</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="budget"><span class="ic">▲</span>Budget &amp; réalisé</a>
       <a data-p="dash" class="on"><span class="ic">▚</span>Tableau de bord</a>
       <a data-p="analyse360"><span class="ic">◎</span>Analyse 360°</a>
       <a data-p="consolidation"><span class="ic">▩</span>Consolidation</a>
-      <div class="grp">7 · Configuration</div>
+      </div></div>
+      <div class="grp-section" data-grp="config">
+      <div class="grp" onclick="toggleGrp(this)"><span>7 · Configuration</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
       <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
       <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
       <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
       <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture</a>
       <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
       <a data-p="audit"><span class="ic">◉</span>Journal d'audit</a>
+      </div></div>
     </nav>
     <div class="foot"><span>Connecté <b id="who">—</b></span><button class="linkbtn" onclick="logout()">Quitter</button></div>
     <div style="padding:8px 14px;font-size:9.5px;color:var(--mut);line-height:1.5;border-top:1px solid var(--line)">Développé par SANIX Africa Division Technologies<br>+225 07 79 18 10 75 / 01 40 01 77 51<br>Cyrille KESSIE</div>
@@ -473,10 +499,32 @@ bilan:['Bilan','Actif / Passif au ' ],flux:['Flux de trésorerie','Tableau des f
 teledec:['Télédéclarations','Fiscal (DGI) & social (CNPS) — e-procédures'],
 plan:['Plan comptable','SYSCOHADA révisé'],immo:['Immobilisations','Amortissements · cessions · plan'],analytique:['Comptabilité analytique','Centres de coûts · axes · répartition'],budget:['Budget & réalisé','Prévisionnel · réalisé · écarts'],exercices:['Exercices & clôture','Gestion des périodes'],
 parametrage:['Paramétrage','Société · rôles · stockage · import'],audit:['Journal d\'audit','Traçabilité des actions'],anomalies:['IA — Détection d\'anomalies','Contrôles automatiques · alertes']};
-function bindNav(){document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{go(a.dataset.p);closeNav();});}
+function bindNav(){document.querySelectorAll('#nav a').forEach(a=>a.onclick=()=>{go(a.dataset.p);closeNav();});restoreGrpState();}
 function toggleNav(){document.querySelector('.shell').classList.toggle('navopen');}
 function closeNav(){document.querySelector('.shell').classList.remove('navopen');}
+function grpKey(sec){return 'navgrp_'+sec.dataset.grp;}
+function toggleGrp(hdr){
+  const sec=hdr.closest('.grp-section');
+  const collapsed=sec.classList.toggle('collapsed');
+  try{localStorage.setItem(grpKey(sec),collapsed?'1':'0');}catch(e){}
+}
+function restoreGrpState(){
+  document.querySelectorAll('.grp-section').forEach(sec=>{
+    let v=null;try{v=localStorage.getItem(grpKey(sec));}catch(e){}
+    if(v==='1')sec.classList.add('collapsed');
+  });
+}
+function expandGrpFor(p){
+  const a=document.querySelector('#nav a[data-p="'+p+'"]');
+  if(!a)return;
+  const sec=a.closest('.grp-section');
+  if(sec&&sec.classList.contains('collapsed')){
+    sec.classList.remove('collapsed');
+    try{localStorage.setItem(grpKey(sec),'0');}catch(e){}
+  }
+}
 function go(p){
+  expandGrpFor(p);
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.getElementById('p-'+p).classList.add('on');
