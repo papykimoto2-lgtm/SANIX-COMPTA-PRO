@@ -213,6 +213,14 @@ tbody tr:hover{background:#fbfcfe}
 .entitem:hover{border-color:var(--cuivre);box-shadow:0 6px 18px rgba(184,115,51,.12)}
 .entlogo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--cuivre),var(--cuivre-d));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
 .entmeta{font-size:11px;color:var(--mut);margin-top:2px}
+.entcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s}
+.entcard:hover{border-color:var(--cuivre);box-shadow:0 6px 18px rgba(184,115,51,.12)}
+.entrow{display:flex;align-items:center;gap:12px}
+.entkpi{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.entkpi>div{display:flex;flex-direction:column}
+.entkpi span{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.3px}
+.entkpi b{font-size:13px;font-variant-numeric:tabular-nums}
+.entkpi .kg{color:#1f9d6b}.entkpi .kr{color:#d9534f}
 </style>
 
 <!-- APP -->
@@ -413,21 +421,34 @@ async function openEntPicker(forceCreate){
   const ov=document.getElementById('entpick');ov.style.display='flex';
   const list=await listEntreprises();
   const wrap=document.getElementById('entList');
-  wrap.innerHTML = list.length
-    ? list.map(e=>'<div class="entitem" onclick="pickEnt(\''+e.id+'\')">'
-        +'<div class="entlogo">'+((e.raison||'?').slice(0,2).toUpperCase())+'</div>'
-        +'<div style="flex:1"><b>'+e.raison+'</b><div class="entmeta">NCC '+(e.ncc||'—')+' · '+e.devise+'</div></div>'
-        +'<button class="linkbtn" onclick="event.stopPropagation();deleteEntreprise(\''+e.id+'\')">✕</button></div>').join('')
-    : '<div class="entmeta" style="text-align:center;padding:14px">Aucune entreprise. Créez la première.</div>';
   document.getElementById('entNewForm').style.display=(forceCreate||!list.length)?'block':'none';
   document.getElementById('enErr').textContent='';
+  if(!list.length){wrap.innerHTML='<div class="entmeta" style="text-align:center;padding:14px">Aucune entreprise. Créez la première.</div>';return;}
+  wrap.innerHTML='<div class="entmeta" style="text-align:center;padding:10px">Chargement des indicateurs…</div>';
+  const kpis=await Promise.all(list.map(e=>portfolioKPI(e.id)));
+  const tva=nextTVADate();
+  wrap.innerHTML=list.map((e,i)=>{const k=kpis[i],pos=k.resultat>=0;
+    return '<div class="entcard" onclick="pickEnt(\''+e.id+'\')">'
+     +'<div class="entrow"><div class="entlogo">'+((e.raison||'?').slice(0,2).toUpperCase())+'</div>'
+     +'<div style="flex:1"><b>'+e.raison+'</b><div class="entmeta">NCC '+(e.ncc||'—')+'</div></div>'
+     +'<button class="linkbtn" title="Retirer" onclick="event.stopPropagation();deleteEntreprise(\''+e.id+'\')">✕</button></div>'
+     +'<div class="entkpi">'
+       +'<div><span>Résultat</span><b class="'+(pos?'kg':'kr')+'">'+F0(k.resultat)+'</b></div>'
+       +'<div><span>Trésorerie</span><b>'+F0(k.treso)+'</b></div>'
+       +'<div><span>Écritures</span><b>'+k.nb+'</b></div>'
+       +'<div><span>TVA due</span><b>'+tva+'</b></div>'
+     +'</div></div>';
+  }).join('');
 }
 async function pickEnt(id){
   setActiveEnt(id);
   document.getElementById('entpick').style.display='none';
   document.getElementById('app').style.display='block';
   if(DB){DB.close();DB=null;}
-  await boot();await paintEntLabel();
+  await boot();
+  const e=(await listEntreprises()).find(x=>x.id===id);
+  if(e)await hydrateSociete(e);
+  await paintEntLabel();
 }
 async function submitNewEnt(){
   const raison=document.getElementById('enR').value.trim();
@@ -440,6 +461,31 @@ function toggleNewEnt(){const f=document.getElementById('entNewForm');f.style.di
 async function paintEntLabel(){
   const list=await listEntreprises();const e=list.find(x=>x.id===ACTIVE_ENT);
   const el=document.getElementById('entLabel');if(el)el.textContent=e?e.raison:'—';
+}
+/* ---- lecture KPI portefeuille (ouvre chaque base tenant en lecture) ---- */
+function openNamed(name){return new Promise((res,rej)=>{const r=indexedDB.open(name);r.onsuccess=e=>res(e.target.result);r.onerror=rej;});}
+function getAllFrom(db,store){return new Promise(res=>{if(!db.objectStoreNames.contains(store)){res([]);return;}const r=db.transaction(store).objectStore(store).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>res([]);});}
+function getOneFrom(db,store,id){return new Promise(res=>{if(!db.objectStoreNames.contains(store)){res(null);return;}const r=db.transaction(store).objectStore(store).get(id);r.onsuccess=()=>res(r.result||null);r.onerror=()=>res(null);});}
+async function portfolioKPI(entId){
+  try{
+    const db=await openNamed(DB_BASE+'__'+entId);
+    const cur=await getOneFrom(db,'meta','exCourant');const exId=cur?cur.value:null;
+    const ecr=(await getAllFrom(db,'ecritures')).filter(e=>!exId||e.exId===exId);
+    let p=0,c=0,treso=0;
+    ecr.forEach(e=>(e.lignes||[]).forEach(l=>{const n=(l.compte||'')[0],d=+l.debit||0,cr=+l.credit||0;
+      if(n==='7')p+=cr-d;if(n==='6')c+=d-cr;if(n==='5')treso+=d-cr;}));
+    db.close();
+    return {resultat:p-c,treso,nb:ecr.length};
+  }catch(e){return {resultat:0,treso:0,nb:0};}
+}
+function nextTVADate(){const d=new Date(),n=new Date(d.getFullYear(),d.getMonth()+1,15);return String(n.getDate()).padStart(2,'0')+'/'+String(n.getMonth()+1).padStart(2,'0')+'/'+n.getFullYear();}
+/* ---- fusion registre ↔ émetteur (source unique) ---- */
+async function hydrateSociete(ent){
+  const s=await societe();let ch=false;
+  if(!s.nom||s.nom==='SANIX AFRICA DIVISION TECHNOLOGIES'){s.nom=ent.raison;ch=true;}
+  if(ent.ncc&&(!s.ncc||s.ncc==='CI-XXXXXXX-X')){s.ncc=ent.ncc;ch=true;}
+  if(ent.rccm&&(!s.rccm||/XX/.test(s.rccm))){s.rccm=ent.rccm;ch=true;}
+  if(ch){await put('meta',{id:'societe',value:s});await loadAll();}
 }
 
 /* ---- état ---- */
@@ -1730,6 +1776,8 @@ async function removeLogo(){const s=await societe();delete s.logo;await put('met
 async function saveSociete(){const s=await societe();
   const g=x=>{const el=document.getElementById(x);return el?el.value:'';};
   await put('meta',{id:'societe',value:{nom:g('sNom'),forme:g('sForme'),dirigeant:g('sDir'),secteur:g('sSect'),ncc:g('sNcc'),rccm:g('sRccm'),capital:g('sCap'),regime:g('sReg'),tel:g('sTel'),email:g('sEmail'),siteweb:g('sWeb'),adresse:g('sAdr'),centreImpots:g('sImp'),cnps:g('sCnps'),banque:g('sBanque'),rib:g('sRib'),devise:'FCFA',logo:s.logo||''}});
+  if(ACTIVE_ENT){await ridb();const e=(await rall('entreprises')).find(x=>x.id===ACTIVE_ENT);
+    if(e){e.raison=g('sNom')||e.raison;e.ncc=g('sNcc')||e.ncc;e.rccm=g('sRccm')||e.rccm;await rput('entreprises',e);const el=document.getElementById('entLabel');if(el)el.textContent=e.raison;}}
   toast('Société enregistrée.');
 }
 /* -- Utilisateurs & rôles -- */
