@@ -269,6 +269,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp" onclick="toggleGrp(this)"><span>5 · Fiscalité</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
+      <a data-p="echeancier"><span class="ic">⏰</span>Échéancier fiscal</a>
       <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
       <a data-p="liasse"><span class="ic">▦</span>Liasse fiscale</a>
       </div></div>
@@ -325,6 +326,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-ged"></div>
       <div class="page" id="p-devises"></div>
       <div class="page" id="p-tva"></div>
+      <div class="page" id="p-echeancier"></div>
       <div class="page" id="p-teledec"></div>
       <div class="page" id="p-plan"></div>
       <div class="page" id="p-immo"></div>
@@ -654,6 +656,7 @@ tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · éch
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
 balance:['Balance générale','Débit / Crédit / Solde'],resultat:['Compte de résultat','Charges & produits — SYSCOHADA'],
 bilan:['Bilan','Actif / Passif au ' ],flux:['Flux de trésorerie','Tableau des flux (TFT SYSCOHADA)'],annexes:['Notes annexes','États annexés SYSCOHADA'],liasse:['Liasse fiscale','États réglementaires · export PDF'],ged:['Pièces & GED','Justificatifs numérisés · archivage'],devises:['Multi-devises','Cours · conversion · écart de change'],tva:['Déclaration TVA','TVA collectée / déductible'],
+echeancier:['Échéancier fiscal','Calendrier DGI / CNPS · rappels · alertes WhatsApp'],
 teledec:['Télédéclarations','Fiscal (DGI) & social (CNPS) — e-procédures'],
 plan:['Plan comptable','SYSCOHADA révisé'],immo:['Immobilisations','Amortissements · cessions · plan'],analytique:['Comptabilité analytique','Centres de coûts · axes · répartition'],budget:['Budget & réalisé','Prévisionnel · réalisé · écarts'],exercices:['Exercices & clôture','Gestion des périodes'],
 parametrage:['Paramétrage','Société · rôles · stockage · import'],audit:['Journal d\'audit','Traçabilité des actions'],anomalies:['IA — Détection d\'anomalies','Contrôles automatiques · alertes']};
@@ -699,6 +702,51 @@ document.getElementById('ov').onclick=e=>{if(e.target.id==='ov')closeModal();};
 
 /* ============ RENDER ============ */
 const RENDER={};
+
+/* ============ ÉCHÉANCIER FISCAL (DGI / CNPS · CI) ============ */
+async function fisc(){let m=await getOne('meta','fisc');if(!m){m={id:'fisc',value:{regime:'RNI',tvaPeriod:'mensuelle',tvaJour:15,cnps:true,its:true,acompteBIC:true,patenteMois:3,patenteJour:15}};await put('meta',m);}return m.value;}
+async function saveFisc(){const g=x=>document.getElementById(x);
+  await put('meta',{id:'fisc',value:{regime:g('fRegime').value,tvaPeriod:g('fTvaP').value,tvaJour:+g('fTvaJ').value||15,cnps:g('fCnps').checked,its:g('fIts').checked,acompteBIC:g('fBic').checked,patenteMois:+g('fPatM').value||3,patenteJour:+g('fPatJ').value||15}});
+  closeModal();RENDER.echeancier();toast('Paramètres fiscaux enregistrés.');}
+const isoD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const moisNom=d=>['janv','févr','mars','avr','mai','juin','juil','août','sept','oct','nov','déc'][d.getMonth()]+' '+d.getFullYear();
+function fiscEcheances(f){
+  const t=new Date();const L=[];
+  const add=(type,label,d)=>{const j=Math.ceil((d-t)/86400000);L.push({type,label,date:d,jours:j});};
+  if(f.tvaPeriod==='trimestrielle'){const q=Math.floor(t.getMonth()/3);add('TVA','TVA trimestre '+(q+1),new Date(t.getFullYear(),q*3+3,f.tvaJour));}
+  else for(let i=0;i<3;i++)add('TVA','TVA '+moisNom(new Date(t.getFullYear(),t.getMonth()+i,1)),new Date(t.getFullYear(),t.getMonth()+1+i,f.tvaJour));
+  if(f.cnps)for(let i=0;i<2;i++)add('CNPS','CNPS '+moisNom(new Date(t.getFullYear(),t.getMonth()+i,1)),new Date(t.getFullYear(),t.getMonth()+1+i,15));
+  if(f.its)for(let i=0;i<2;i++)add('ITS','ITS '+moisNom(new Date(t.getFullYear(),t.getMonth()+i,1)),new Date(t.getFullYear(),t.getMonth()+1+i,15));
+  if(f.acompteBIC)[3,5,8,11].forEach(mo=>{let d=new Date(t.getFullYear(),mo,15);if(d<t)d=new Date(t.getFullYear()+1,mo,15);add('BIC','Acompte provisionnel BIC',d);});
+  {let d=new Date(t.getFullYear(),(f.patenteMois||3)-1,f.patenteJour||15);if(d<t)d=new Date(t.getFullYear()+1,(f.patenteMois||3)-1,f.patenteJour||15);add('PATENTE','Patente '+d.getFullYear(),d);}
+  {let d=new Date(t.getFullYear(),3,30);if(d<t)d=new Date(t.getFullYear()+1,3,30);add('DSF','DSF exercice '+(d.getFullYear()-1),d);}
+  return L.filter(x=>x.jours>=-3).sort((a,b)=>a.date-b.date);
+}
+function badgeJours(j){const c=j<0?'#d9534f':j<=7?'#d9534f':j<=15?'#e0913a':'#1f9d6b';const txt=j<0?'en retard':j+' j';return '<span style="background:'+c+';color:#fff;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700">'+txt+'</span>';}
+RENDER.echeancier=async()=>{
+  const f=await fisc();const ech=fiscEcheances(f);const s=await societe();
+  document.getElementById('pgActions').innerHTML='<button class="btn sm gh" onclick="editFisc()">⚙ Paramètres fiscaux</button> <button class="btn sm" style="background:#25D366;color:#fff" onclick="waEcheances()">⇪ Alerte WhatsApp</button>';
+  const rows=ech.map(e=>'<tr><td><b>'+e.type+'</b></td><td>'+e.label+'</td><td class="mono">'+dfr(isoD(e.date))+'</td><td class="ta-c">'+badgeJours(e.jours)+'</td></tr>').join('');
+  const urgent=ech.filter(e=>e.jours<=7).length;
+  document.getElementById('p-echeancier').innerHTML=
+   '<div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:12px">Dates indicatives · régime '+f.regime+'. Le jour exact varie selon DGE / CME / SAID et l\'ordre alphabétique de la raison sociale. Confirmez sur DGIci (e-Impôts). Retard = majoration 10 %/mois + amende.</div>'
+   +(urgent?'<div class="hl" style="background:#fdecec;border-left:3px solid #d9534f;padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:12px;font-weight:600">⚠ '+urgent+' échéance(s) sous 7 jours.</div>':'')
+   +'<div class="card"><table><thead><tr><th>Impôt</th><th>Période</th><th>Date limite</th><th class="ta-c">Reste</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+};
+async function editFisc(){const f=await fisc();
+  openModal('<h3>Paramètres fiscaux — '+((await societe()).nom||'')+'</h3>'
+   +'<div class="frow c2"><div><label>Régime</label><select id="fRegime"><option '+(f.regime==='RNI'?'selected':'')+'>RNI</option><option '+(f.regime==='RSI'?'selected':'')+'>RSI</option><option '+(f.regime==='Entreprenant'?'selected':'')+'>Entreprenant</option></select></div>'
+   +'<div><label>Périodicité TVA</label><select id="fTvaP"><option value="mensuelle" '+(f.tvaPeriod==='mensuelle'?'selected':'')+'>Mensuelle</option><option value="trimestrielle" '+(f.tvaPeriod==='trimestrielle'?'selected':'')+'>Trimestrielle</option></select></div></div>'
+   +'<div class="frow c2"><div><label>Jour limite TVA</label><input id="fTvaJ" type="number" value="'+f.tvaJour+'"></div><div><label>Patente — mois / jour</label><div style="display:flex;gap:6px"><input id="fPatM" type="number" value="'+f.patenteMois+'" style="width:70px"><input id="fPatJ" type="number" value="'+f.patenteJour+'" style="width:70px"></div></div></div>'
+   +'<div class="frow"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="fCnps" '+(f.cnps?'checked':'')+'> CNPS</label><label style="display:inline-flex;gap:6px;align-items:center;margin-left:14px"><input type="checkbox" id="fIts" '+(f.its?'checked':'')+'> ITS</label><label style="display:inline-flex;gap:6px;align-items:center;margin-left:14px"><input type="checkbox" id="fBic" '+(f.acompteBIC?'checked':'')+'> Acomptes BIC</label></div>'
+   +'<div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveFisc()">Enregistrer</button></div>');}
+async function waEcheances(){
+  const f=await fisc();const s=await societe();const ech=fiscEcheances(f).slice(0,6);
+  const lines=ech.map(e=>'• '+e.type+' — '+e.label+' : '+dfr(isoD(e.date))+' ('+(e.jours<0?'RETARD':e.jours+'j')+')').join('%0A');
+  const msg='*Échéances fiscales — '+(s.nom||'')+'*%0A'+lines+'%0A%0A_SANIX ComptaPro_';
+  const tel=(s.tel||'').replace(/[^0-9]/g,'');
+  window.open('https://wa.me/'+tel+'?text='+msg,'_blank');
+}
 
 /* ---- Analyse 360° (pilotage financier) ---- */
 /* ---- BI : agrégats mensuels + graphiques SVG natifs (offline) ---- */
@@ -1458,12 +1506,44 @@ const QR=(function(){
 async function societe(){let s=await getOne('meta','societe');if(!s){s={id:'societe',value:{nom:'SANIX AFRICA DIVISION TECHNOLOGIES',ncc:'CI-XXXXXXX-X',rccm:'CI-ABJ-XX-XXXX-BXX-XXXXX',tel:'+225 07 79 18 10 75',adresse:'Abidjan, Côte d\'Ivoire',regime:'Réel Normal d\'Imposition (RNI)',forme:'SARL',capital:'',secteur:'',dirigeant:'Cyrille KESSIE',email:'',siteweb:'',banque:'',rib:'',cnps:'',centreImpots:'',devise:'FCFA'}};await put('meta',s);}return s.value;}
 let FL=[]; // lignes facture
 
+/* ============ INTERFAÇAGE FNE — API DGI Côte d'Ivoire ============ */
+async function fneCfg(){let m=await getOne('meta','fne');if(!m){m={id:'fne',value:{url:'http://54.247.95.108/ws',key:'',pos:'1',etab:'Principal',enabled:false}};await put('meta',m);}return m.value;}
+async function saveFne(){const g=x=>document.getElementById(x);await put('meta',{id:'fne',value:{url:g('cUrl').value.trim().replace(/\/$/,''),key:g('cKey').value.trim(),pos:g('cPos').value.trim(),etab:g('cEtab').value.trim(),enabled:g('cEn').checked}});closeModal();toast('Configuration FNE enregistrée.');}
+async function editFne(){const c=await fneCfg();
+ openModal('<div class="mh"><h3>Interfaçage FNE — DGI Côte d\'Ivoire</h3><button class="x" onclick="closeModal()">×</button></div><div class="mb">'
+ +'<div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:10px">Clé API : espace FNE → Paramétrage (visible après validation DGI). Test : http://54.247.95.108/ws. URL prod transmise par la DGI. Appel navigateur direct = souvent bloqué (CORS/mixed-content) : passer par un relais Supabase Edge Function en production.</div>'
+ +'<div class="frow c2"><div><label>URL API</label><input id="cUrl" value="'+c.url+'"></div><div><label>Clé API (Bearer)</label><input id="cKey" value="'+(c.key||'')+'" placeholder="kAF01g…"></div></div>'
+ +'<div class="frow c2"><div><label>Point de vente</label><input id="cPos" value="'+(c.pos||'')+'"></div><div><label>Établissement</label><input id="cEtab" value="'+(c.etab||'')+'"></div></div>'
+ +'<div class="frow"><label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" id="cEn" '+(c.enabled?'checked':'')+'> Certification DGI active (sinon référence provisoire locale)</label></div>'
+ +'<div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveFne()">Enregistrer</button></div></div>');}
+function fneTaxCode(tva){return tva>=18?'TVA':tva>=9?'TVAB':'TVAC';}
+function factureToFNE(fac,cfg){
+  const t=ST.tiers.find(x=>x.id===fac.clientId)||{};
+  const tel=(t.tel||'').replace(/[^0-9]/g,'')||'0000000000';
+  return {invoiceType:'sale',paymentMethod:fac.mode||'cash',template:fac.ncc?'B2B':'B2C',isRne:false,rne:'',
+    clientNcc:fac.ncc||'',clientCompanyName:fac.clientNom,clientPhone:tel,clientEmail:t.email||'client@exemple.ci',
+    pointOfSale:cfg.pos||'1',establishment:cfg.etab||'Principal',foreignCurrency:'',foreignCurrencyRate:0,
+    items:fac.lignes.map(l=>({taxes:[fneTaxCode(l.tva)],description:l.des,quantity:l.qte,amount:l.pu,discount:0,measurementUnit:'pcs'})),
+    discount:0};
+}
+async function certifyFNE(fac){
+  const cfg=await fneCfg();
+  if(!cfg.enabled||!cfg.key)return {ok:false,reason:'FNE non activée'};
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return {ok:false,reason:'hors-ligne'};
+  try{
+    const res=await xhrJSON('POST',cfg.url+'/external/invoices/sign',
+      {'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+cfg.key},factureToFNE(fac,cfg));
+    if(res&&res.reference)return {ok:true,ref:res.reference,token:res.token,id:res.invoice&&res.invoice.id,balance:res.balance_sticker};
+    return {ok:false,reason:(res&&res.message)||'réponse invalide'};
+  }catch(e){return {ok:false,reason:e.message};}
+}
+
 RENDER.facturation=async()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm dark" onclick="editSociete()">⚙ Émetteur</button> <button class="btn sm gh" onclick="newFacture('simple')">+ Facture simple</button> <button class="btn sm" onclick="newFacture('fne')">+ Facture FNE</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm dark" onclick="editFne()">⚙ FNE (DGI)</button> <button class="btn sm dark" onclick="editSociete()">⚙ Émetteur</button> <button class="btn sm gh" onclick="newFacture('simple')">+ Facture simple</button> <button class="btn sm" onclick="newFacture('fne')">+ Facture FNE</button>`;
   const q=(window._facq||'').toLowerCase();
   const rows=ST.factures.filter(f=>!q||(f.numero+f.clientNom).toLowerCase().includes(q)).map(f=>`<tr>
     <td class="mono"><b>${f.numero}</b></td><td class="mono">${dfr(f.date)}</td><td>${f.clientNom}</td>
-    <td><span class="badge ${f.type==='fne'?'b-green':'b-gray'}">${f.type==='fne'?'FNE ✓':'Simple'}</span></td>
+    <td><span class="badge ${f.type!=='fne'?'b-gray':f.fneCertified?'b-green':''}" ${f.type==='fne'&&!f.fneCertified?'style="background:#e0913a;color:#fff"':''}>${f.type!=='fne'?'Simple':f.fneCertified?'FNE ✓ DGI':'FNE ⏳ provisoire'}</span></td>
     <td class="ta-r mono">${F0(f.ht)}</td><td class="ta-r mono">${F0(f.tva)}</td><td class="ta-r mono"><b>${F0(f.ttc)}</b></td>
     <td class="ta-c"><button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`).join('');
   const tHT=ST.factures.reduce((s,f)=>s+f.ht,0),tTVA=ST.factures.reduce((s,f)=>s+f.tva,0),tTTC=ST.factures.reduce((s,f)=>s+f.ttc,0);
@@ -1552,10 +1632,17 @@ async function saveFacture(id,type){
   const numero=id?ST.factures.find(f=>f.id===id).numero:await nextFacNum(type);
   const fac={id:id||uid('f'),exId:ST.exId,numero,type,date:document.getElementById('fDate').value,
     clientId,clientNom:nom,ncc,aib,aibV,lignes:FL,ht,tva,ttc:ht+tva+aibV,
-    fneRef:type==='fne'?(id?ST.factures.find(f=>f.id===id).fneRef:genFneRef(numero)):'',created:Date.now()};
+    fneRef:'',fneToken:'',fneCertified:false,created:Date.now()};
+  let msg;
+  if(type==='fne'){
+    if(id){const o=ST.factures.find(f=>f.id===id);fac.fneRef=o.fneRef;fac.fneToken=o.fneToken;fac.fneId=o.fneId;fac.fneCertified=o.fneCertified;msg='FNE '+numero+' mise à jour.';}
+    else{const c=await certifyFNE(fac);
+      if(c.ok){fac.fneRef=c.ref;fac.fneToken=c.token;fac.fneId=c.id;fac.fneBalance=c.balance;fac.fneCertified=true;msg='FNE certifiée DGI · '+c.ref+(c.balance!=null?' · stickers restants '+c.balance:'');}
+      else{fac.fneRef=genFneRef(numero);fac.fneCertified=false;fac.fneWarn=c.reason;msg='FNE enregistrée NON certifiée ('+c.reason+') · réf provisoire '+fac.fneRef;}}
+  } else msg='Facture '+numero+' enregistrée.';
   await put('factures',fac);
   await genFactureEcriture(fac);
-  await loadAll();closeModal();RENDER.facturation();toast(type==='fne'?'FNE certifiée : '+numero:'Facture '+numero+' enregistrée.');
+  await loadAll();closeModal();RENDER.facturation();toast(msg);
 }
 function genFneRef(num){ // référence de certification simulée (la vraie vient de la plateforme DGI)
   const h=num.split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,7)>>>0;
@@ -1576,7 +1663,7 @@ async function delFacture(id){const f=ST.factures.find(x=>x.id===id);if(!confirm
 
 async function factureHTML(id){
   const f=ST.factures.find(x=>x.id===id);const s=await societe();
-  const qrPayload=f.type==='fne'?`https://fne.dgi.gouv.ci/verif/${f.fneRef}|${f.numero}|${Math.round(f.ttc)}|${f.ncc}`:`${s.nom}|${f.numero}|${Math.round(f.ttc)}`;
+  const qrPayload=f.type==='fne'?(f.fneToken||`https://fne.dgi.gouv.ci/verif/${f.fneRef}|${f.numero}|${Math.round(f.ttc)}|${f.ncc}`):`${s.nom}|${f.numero}|${Math.round(f.ttc)}`;
   const qr=QR.svg(qrPayload,120)||'';
   const lignes=f.lignes.map(l=>`<tr><td>${l.des}</td><td class="ta-c mono">${l.qte}</td><td class="ta-r mono">${F0(l.pu)}</td><td class="ta-c mono">${l.tva}%</td><td class="ta-r mono">${F0(l.qte*l.pu)}</td></tr>`).join('');
   return `<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;max-width:720px;margin:0 auto;padding:18px">
