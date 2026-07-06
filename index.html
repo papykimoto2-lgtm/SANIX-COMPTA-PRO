@@ -236,6 +236,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp" onclick="toggleGrp(this)"><span>1 · Saisie</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
+      <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
       </div></div>
@@ -312,6 +313,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-ecritures"></div>
       <div class="page" id="p-workflow"></div>
       <div class="page" id="p-facturation"></div>
+      <div class="page" id="p-achats"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-lettrage"></div>
@@ -348,11 +350,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=6;
+const DB_BASE='sanix_comptapro', DB_VER=7;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','audit','users','meta'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta'];
 
 function idb(){return new Promise((res,rej)=>{
   const r=indexedDB.open(DB_NAME,DB_VER);
@@ -491,7 +493,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -588,6 +590,7 @@ async function loadAll(){
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
   ST.ecritures=(await all('ecritures')).filter(e=>e.exId===ST.exId).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
   ST.factures=(await all('factures')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
+  ST.achats=(await all('achats')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
 }
 const curEx=()=>ST.exercices.find(e=>e.id===ST.exId)||{};
 const cptLib=num=>{const c=ST.comptes.find(x=>x.numero===num);return c?c.libelle:'';};
@@ -599,7 +602,7 @@ function mouvements(filterFn){
   ST.ecritures.forEach(e=>e.lignes.forEach((l,i)=>{
     if(filterFn&&!filterFn(e,l))return;
     rows.push({eid:e.id,li:i,date:e.date,journal:jLib(e.journal),piece:e.piece||'',libelle:l.libelle||e.libelle,
-      compte:l.compte,tiers:l.tiers,debit:+l.debit||0,credit:+l.credit||0,lettre:l.lettre||'',centre:l.centre||''});
+      compte:l.compte,tiers:l.tiers,debit:+l.debit||0,credit:+l.credit||0,lettre:l.lettre||'',centre:l.centre||'',pointe:!!l.pointe});
   }));
   return rows;
 }
@@ -651,6 +654,7 @@ async function boot(){
 /* ============ NAV ============ */
 const TITLES={dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
+achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
 tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
@@ -974,7 +978,9 @@ function refreshBal(){
   const ok=d===c&&d>0;const chip=document.getElementById('balChip');
   chip.className='chip '+(ok?'ok':'no');chip.textContent=ok?'Équilibré ✓':'Écart : '+F0(d-c);
 }
+function exLocked(){return curEx().statut==='clôturé';}
 async function saveEcriture(id){
+  if(exLocked()){toast('Exercice clôturé. Écritures verrouillées.');return;}
   const d=EL.reduce((s,l)=>s+(+l.debit||0),0),c=EL.reduce((s,l)=>s+(+l.credit||0),0);
   if(d!==c||d===0){toast('Écriture non équilibrée — débit doit égaler crédit.');return;}
   if(EL.some(l=>!l.compte)){toast('Chaque ligne doit avoir un compte.');return;}
@@ -984,7 +990,7 @@ async function saveEcriture(id){
     piece:document.getElementById('eP').value,libelle:document.getElementById('eP').value||EL[0].libelle,lignes:EL,created:Date.now()};
   await put('ecritures',obj);await loadAll();closeModal();RENDER.ecritures();toast('Écriture enregistrée.');
 }
-async function delEcriture(id){if(!confirm('Supprimer cette écriture ?'))return;await del('ecritures',id);await loadAll();RENDER.ecritures();toast('Écriture supprimée.');}
+async function delEcriture(id){if(exLocked()){toast('Exercice clôturé. Suppression interdite.');return;}if(!confirm('Supprimer cette écriture ?'))return;await del('ecritures',id);await loadAll();RENDER.ecritures();toast('Écriture supprimée.');}
 
 /* ---- Tiers ---- */
 const REGIMES=['RNI — Réel Normal','RSI — Réel Simplifié','Micro-entreprise','Exonéré','Particulier'];
@@ -1155,7 +1161,12 @@ function relanceTiers(id){
   openModal(`<div class="mh"><h3>Relance — ${t.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb"><div class="hl" style="background:#fdf0ed;border-left:3px solid var(--red);padding:10px 12px;border-radius:0 8px 8px 0;font-size:13px;margin-bottom:12px">Montant échu <b>${F(du)}</b> · ${retard.length} pièce(s) en retard</div>
   <textarea id="relTxt" style="width:100%;min-height:220px;padding:10px;border:1.5px solid var(--line);border-radius:8px;font-family:inherit;font-size:12.5px">${txt}</textarea></div>
-  <div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('relTxt').value);toast('Relance copiée.')">Copier</button></div>`,true);
+  <div class="mf"><button class="btn sm gh" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('relTxt').value);toast('Relance copiée.')">Copier</button><button class="btn sm" style="background:#25D366;color:#fff" onclick="waRelance('${t.id}')">⇪ WhatsApp</button></div>`,true);
+}
+function waRelance(id){
+  const t=ST.tiers.find(x=>x.id===id);const tel=(t.tel||'').replace(/[^0-9]/g,'');
+  const msg=encodeURIComponent(document.getElementById('relTxt').value);
+  window.open('https://wa.me/'+tel+'?text='+msg,'_blank');
 }
 
 /* ---- Grand livre ---- */
@@ -1241,25 +1252,57 @@ RENDER.bilan=()=>{
 
 /* ---- TVA ---- */
 RENDER.tva=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-tva','Déclaration TVA')">⎙ Imprimer</button>`;
-  const m=soldesParCompte();
-  const col=(m['4431']||{debit:0,credit:0});const ded=(m['4452']||{debit:0,credit:0});
-  const collectee=col.credit-col.debit, deductible=ded.debit-ded.credit, nette=collectee-deductible;
+  const months=[...new Set(ST.ecritures.map(e=>(e.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  const ym=window._tvaM||months[0]||today().slice(0,7);
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="genLiquidationTVA('${ym}')">⇄ Écriture de liquidation</button> <button class="btn sm gh" onclick="printReport('p-tva','Déclaration TVA')">⎙ Imprimer</button>`;
+  let collectee=0,deductible=0;
+  ST.ecritures.forEach(e=>{if((e.date||'').slice(0,7)!==ym)return;e.lignes.forEach(l=>{const c=l.compte||'',d=+l.debit||0,cr=+l.credit||0;if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductible+=d-cr;});});
+  const nette=collectee-deductible;
+  let creditAnt=0;const cut=ym+'-01';
+  ST.ecritures.forEach(e=>{if((e.date||'')>=cut)return;e.lignes.forEach(l=>{const c=l.compte||'';if(c.startsWith('4449'))creditAnt+=(+l.debit||0)-(+l.credit||0);});});
+  creditAnt=Math.max(0,Math.round(creditAnt));
+  const apres=nette-creditAnt;
+  const opts=(months.length?months:[ym]).map(x=>`<option value="${x}" ${x===ym?'selected':''}>${x}</option>`).join('');
+  const liquide=!!ST.ecritures.find(e=>e.id==='e_tva_'+ym);
   document.getElementById('p-tva').innerHTML=`
+  <div class="toolbar"><label style="font-size:12.5px;margin-right:8px">Période</label><select class="search" style="max-width:160px" onchange="window._tvaM=this.value;RENDER.tva()">${opts}</select>${liquide?'<span class="badge b-green" style="margin-left:10px">Liquidée ✓</span>':''}</div>
   <div class="grid kpis">
-    <div class="card kpi o"><div class="lb">TVA collectée (4431)</div><div class="v mono">${F(collectee)}</div><div class="f">Sur ventes</div></div>
+    <div class="card kpi o"><div class="lb">TVA collectée (4431)</div><div class="v mono">${F(collectee)}</div><div class="f">Sur ventes · ${ym}</div></div>
     <div class="card kpi b"><div class="lb">TVA déductible (4452)</div><div class="v mono">${F(deductible)}</div><div class="f">Sur achats/charges</div></div>
-    <div class="card kpi ${nette>=0?'r':'g'}"><div class="lb">TVA nette</div><div class="v mono">${F(nette)}</div><div class="f">${nette>=0?'À reverser DGI':'Crédit reportable'}</div></div>
+    <div class="card kpi ${nette>=0?'r':'g'}"><div class="lb">TVA nette</div><div class="v mono">${F(nette)}</div><div class="f">${nette>=0?'À reverser (4441)':'Crédit reportable (4449)'}</div></div>
   </div>
-  <div class="card"><h3 style="margin-bottom:10px">Déclaration mensuelle — synthèse</h3>
+  <div class="card"><h3 style="margin-bottom:10px">Déclaration mensuelle — ${ym}</h3>
   <table><tbody>
-    <tr><td>TVA facturée sur ventes (taux 18%)</td><td class="ta-r mono">${F(collectee)}</td></tr>
+    <tr><td>TVA facturée sur ventes</td><td class="ta-r mono">${F(collectee)}</td></tr>
     <tr><td>TVA récupérable sur achats et charges</td><td class="ta-r mono">${F(deductible)}</td></tr>
-    <tr class="foot-tr"><td>TVA NETTE ${nette>=0?'À PAYER':'À REPORTER'}</td><td class="ta-r mono ${nette>=0?'':'pos'}">${F(nette)}</td></tr>
+    ${creditAnt>0?`<tr><td>Crédit TVA antérieur reporté (4449)</td><td class="ta-r mono">− ${F(creditAnt)}</td></tr>`:''}
+    <tr class="foot-tr"><td>TVA NETTE ${apres>=0?'À PAYER':'À REPORTER'}</td><td class="ta-r mono ${apres>=0?'':'pos'}">${F(apres)}</td></tr>
   </tbody></table>
-  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance DGI : au plus tard le 15 du mois suivant. Écriture de liquidation : débit 4431 / crédit 4452 et 4441.</p>
+  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance : 15 du mois suivant (varie selon DGE/CME/SAID). Liquidation : débit 4431 / crédit 4452 / ${nette>=0?'crédit 4441 (TVA due)':'débit 4449 (crédit reportable)'}.</p>
   </div>`;
 };
+async function genLiquidationTVA(ym){
+  let collectee=0,deductible=0,creditAnt=0;const cut=ym+'-01';
+  ST.ecritures.forEach(e=>{
+    if(e.id==='e_tva_'+ym)return;
+    const em=(e.date||'').slice(0,7);
+    e.lignes.forEach(l=>{const c=l.compte||'',d=+l.debit||0,cr=+l.credit||0;
+      if(em===ym){if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductible+=d-cr;}
+      if((e.date||'')<cut&&c.startsWith('4449'))creditAnt+=d-cr;});
+  });
+  collectee=Math.round(collectee);deductible=Math.round(deductible);creditAnt=Math.round(Math.max(0,creditAnt));
+  if(collectee<=0&&deductible<=0){toast('Aucune TVA sur la période.');return;}
+  const net=collectee-deductible,eff=net-creditAnt;
+  const lignes=[{compte:'4431',libelle:'TVA collectée liquidée',debit:collectee,credit:0,lettre:''},
+    {compte:'4452',libelle:'TVA déductible liquidée',debit:0,credit:deductible,lettre:''}];
+  if(creditAnt>0)lignes.push({compte:'4449',libelle:'Imputation crédit TVA antérieur',debit:0,credit:creditAnt,lettre:''});
+  if(eff>=0)lignes.push({compte:'4441',libelle:'État, TVA due '+ym,debit:0,credit:eff,lettre:''});
+  else lignes.push({compte:'4449',libelle:'État, crédit TVA à reporter '+ym,debit:-eff,credit:0,lettre:''});
+  const jl=ST.journaux.find(j=>j.code==='OD')?'OD':'VT';
+  const e={id:'e_tva_'+ym,exId:ST.exId,journal:jl,date:ym+'-'+new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate(),piece:'TVA-'+ym,libelle:'Liquidation TVA '+ym,lignes,created:Date.now()};
+  await put('ecritures',e);await loadAll();RENDER.tva();
+  toast('Liquidation TVA '+ym+(creditAnt>0?' · crédit antérieur imputé '+F0(creditAnt):'')+(eff>=0?' · à payer '+F0(eff):' · crédit reporté '+F0(-eff)));
+}
 
 /* ---- Lettrage ---- */
 RENDER.lettrage=()=>{
@@ -1300,13 +1343,20 @@ function numToAlpha(n){let s='';while(n>0){n--;s=String.fromCharCode(65+n%26)+s;
 RENDER.rappro=()=>{
   const bq=mouvements((e,l)=>l.compte.startsWith('52')||l.compte.startsWith('53'));
   const solde=bq.reduce((s,r)=>s+r.debit-r.credit,0);
+  const rap=bq.filter(r=>r.pointe).reduce((s,r)=>s+r.debit-r.credit,0);
   document.getElementById('p-rappro').innerHTML=`
   <div class="grid kpis"><div class="card kpi b"><div class="lb">Solde comptable banque</div><div class="v mono">${F(solde)}</div><div class="f">Comptes 52/53</div></div>
-  <div class="card kpi o"><div class="lb">Mouvements</div><div class="v mono">${bq.length}</div><div class="f">Lignes bancaires</div></div></div>
+  <div class="card kpi g"><div class="lb">Solde rapproché</div><div class="v mono">${F(rap)}</div><div class="f">Lignes pointées</div></div>
+  <div class="card kpi ${Math.abs(solde-rap)<1?'g':'o'}"><div class="lb">Écart</div><div class="v mono">${F(solde-rap)}</div><div class="f">${Math.abs(solde-rap)<1?'Rapproché ✓':'À pointer'}</div></div></div>
   <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-c">Pointé</th></tr></thead><tbody>
-  ${bq.map(r=>`<tr><td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td><td class="ta-c"><input type="checkbox"></td></tr>`).join('')||'<tr><td colspan=6 class="empty">Aucun mouvement bancaire</td></tr>'}
+  ${bq.map(r=>`<tr><td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle}</td><td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td><td class="ta-c"><input type="checkbox" ${r.pointe?'checked':''} onchange="togglePointe('${r.eid}',${r.li})"></td></tr>`).join('')||'<tr><td colspan=6 class="empty">Aucun mouvement bancaire</td></tr>'}
   </tbody></table></div>`;
 };
+async function togglePointe(eid,li){
+  const e=await getOne('ecritures',eid);if(!e)return;
+  e.lignes[li].pointe=!e.lignes[li].pointe;
+  await put('ecritures',e);await loadAll();RENDER.rappro();
+}
 
 /* ---- Plan comptable ---- */
 RENDER.plan=()=>{
@@ -1385,11 +1435,11 @@ async function cloturer(id){
   for(const n in m){if(!'12345'.includes(n[0]))continue;const solde=m[n].d-m[n].c;if(Math.abs(solde)<1)continue;
     lignes.push({compte:n,libelle:'À-nouveau '+n,debit:solde>0?solde:0,credit:solde<0?-solde:0});}
   // affectation résultat au 12 (report/résultat)
-  if(Math.abs(resultat)>=1)lignes.push({compte:'12',libelle:'Report résultat N-1',debit:resultat<0?-resultat:0,credit:resultat>0?resultat:0});
-  if(!ST.comptes.some(c=>c.numero==='12'))await put('comptes',{id:'c_12',numero:'12',libelle:'Report à nouveau / Résultat',type:'P',classe:'1'});
-  // équilibrage de sécurité
+  const cptR=resultat>=0?'110':'119';
+  if(Math.abs(resultat)>=1)lignes.push({compte:cptR,libelle:'Report à nouveau '+(resultat>=0?'bénéfice':'perte')+' N-1',debit:resultat<0?-resultat:0,credit:resultat>0?resultat:0});
+  if(!ST.comptes.some(c=>c.numero===cptR))await put('comptes',{id:'c_'+cptR,numero:cptR,libelle:resultat>=0?'Report à nouveau créditeur':'Report à nouveau débiteur',type:resultat>=0?'P':'A',classe:'1'});
   const sd=lignes.reduce((s,l)=>s+l.debit,0),sc=lignes.reduce((s,l)=>s+l.credit,0);
-  if(Math.abs(sd-sc)>=1)lignes.push({compte:'12',libelle:'Ajustement à-nouveau',debit:sd<sc?sc-sd:0,credit:sd>sc?sd-sc:0});
+  if(Math.abs(sd-sc)>=1)lignes.push({compte:cptR,libelle:'Ajustement à-nouveau',debit:sd<sc?sc-sd:0,credit:sd>sc?sd-sc:0});
   await put('ecritures',{id:'e_an_'+suivant.id,date:suivant.debut,journal:'OD',piece:'AN-'+suivant.debut.slice(0,4),libelle:'À-nouveaux '+suivant.libelle,exId:suivant.id,lignes});
   e.statut='clôturé';await put('exercices',e);
   await loadAll();RENDER.exercices();
@@ -1610,6 +1660,106 @@ RENDER.facturation=async()=>{
   <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🧾</div>Aucune facture. Créez une facture FNE ou simple.</td></tr>'}</tbody></table></div>`;
 };
 
+/* ============ ACHATS FOURNISSEURS (TVA déductible · dettes 401) ============ */
+let AL=[];
+async function nextAchatNum(){const key='achSeq_'+curEx().id;const m=await getOne('meta',key);let seq=m?m.value:0;seq++;await put('meta',{id:key,value:seq});return 'ACH-'+((curEx().debut||today()).slice(0,4))+'-'+String(seq).padStart(4,'0');}
+RENDER.achats=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="editAchat(null)">+ Facture d'achat</button>`;
+  const q=(window._achq||'').toLowerCase();
+  const rows=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')).toLowerCase().includes(q)).map(a=>`<tr>
+    <td class="mono"><b>${a.numero}</b></td><td class="mono">${dfr(a.date)}</td><td>${a.fournNom}<div style="font-size:11px;color:var(--mut)">Pièce ${a.piece||'—'} · ${a.nature==='immo'?'Immobilisation':a.nature==='service'?'Service':'Bien'}</div></td>
+    <td class="ta-r mono">${F0(a.ht)}</td><td class="ta-r mono">${F0(a.tva)}</td><td class="ta-r mono"><b>${F0(a.ttc)}</b></td>
+    <td class="ta-c"><span class="badge ${a.regle?'b-green':'b-gray'}">${a.regle?'Réglé':'À payer'}</span></td>
+    <td class="ta-c">${a.regle?'':`<button class="linkbtn" title="Régler" onclick="reglerAchat('${a.id}')">💵</button> `}<button class="linkbtn" onclick="editAchat('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delAchat('${a.id}')">✕</button></td></tr>`).join('');
+  const tHT=ST.achats.reduce((s,a)=>s+a.ht,0),tTVA=ST.achats.reduce((s,a)=>s+a.tva,0),tTTC=ST.achats.reduce((s,a)=>s+a.ttc,0);
+  document.getElementById('p-achats').innerHTML=`
+  <div class="grid kpis">
+    <div class="card kpi o"><div class="lb">Factures d'achat</div><div class="v mono">${ST.achats.length}</div></div>
+    <div class="card kpi b"><div class="lb">TVA déductible</div><div class="v mono">${F(tTVA)}</div><div class="f">Récupérable (4452)</div></div>
+    <div class="card kpi g"><div class="lb">Total TTC achats</div><div class="v mono">${F(tTTC)}</div><div class="f">HT ${F0(tHT)}</div></div>
+  </div>
+  <div class="toolbar"><input class="search" placeholder="Rechercher n°, fournisseur, pièce…" value="${window._achq||''}" oninput="window._achq=this.value;RENDER.achats()"></div>
+  <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th><th class="ta-c">Actions</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🛒</div>Aucune facture d\'achat.</td></tr>'}</tbody></table></div>`;
+};
+async function editAchat(id){
+  const a=id?ST.achats.find(x=>x.id===id):null;
+  AL=a?JSON.parse(JSON.stringify(a.lignes)):[{des:'',compte:'601',ht:0,tva:18}];
+  const fourns=ST.tiers.filter(t=>t.type==='fournisseur');
+  const cptCharge=ST.comptes.filter(c=>c.numero[0]==='6').sort((x,y)=>x.numero.localeCompare(y.numero));
+  window._cptCharge=cptCharge;
+  openModal(`
+    <div class="mh"><h3>${a?'Modifier':'Nouvelle'} facture d'achat</h3><button class="x" onclick="closeModal()">×</button></div>
+    <div class="mb">
+      <div class="frow c3">
+        <div><label>Fournisseur</label><select id="aFourn" onchange="achFournPick()"><option value="">— Saisie libre —</option>${fourns.map(f=>`<option value="${f.id}" ${a&&a.fournId===f.id?'selected':''}>${f.nom}</option>`).join('')}</select></div>
+        <div><label>Nom (si libre)</label><input id="aNom" value="${a?a.fournNom:''}"></div>
+        <div><label>N° pièce fournisseur</label><input id="aPiece" value="${a?(a.piece||''):''}" placeholder="Facture n°"></div>
+      </div>
+      <div class="frow c3"><div><label>Date</label><input type="date" id="aDate" value="${a?a.date:today()}"></div><div><label>Échéance</label><input type="date" id="aEch" value="${a?(a.echeance||''):''}"></div><div><label>Nature (TVA)</label><select id="aNat"><option value="bien" ${!a||a.nature==='bien'?'selected':''}>Bien / marchandise → 4452</option><option value="service" ${a&&a.nature==='service'?'selected':''}>Service → 4453 (exig. paiement)</option><option value="immo" ${a&&a.nature==='immo'?'selected':''}>Immobilisation → 4451</option></select></div></div>
+      <div class="tbl-wrap"><table class="lines"><thead><tr><th>Désignation</th><th style="width:150px">Compte charge</th><th style="width:130px">Montant HT</th><th style="width:70px">TVA%</th><th style="width:34px"></th></tr></thead><tbody id="alBody"></tbody></table></div>
+      <div style="margin-top:8px"><button class="btn sm gh" onclick="addALine()">+ Ligne</button></div>
+      <div class="balbar" style="flex-direction:column;align-items:flex-end;gap:4px">
+        <span>Total HT <b id="aHT" class="mono">0</b></span><span>TVA déductible <b id="aTVA" class="mono">0</b></span>
+        <span style="font-size:16px">Total TTC <b id="aTTC" class="mono" style="color:var(--cuivre-d)">0</b></span>
+      </div>
+    </div>
+    <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveAchat('${id||''}')">Enregistrer</button></div>
+  `,true);
+  renderALines();
+}
+function achFournPick(){const id=document.getElementById('aFourn').value;const f=ST.tiers.find(t=>t.id===id);if(f)document.getElementById('aNom').value=f.nom;}
+function renderALines(){
+  const opts=l=>(window._cptCharge||[]).map(c=>`<option value="${c.numero}" ${l.compte===c.numero?'selected':''}>${c.numero} ${c.libelle}</option>`).join('');
+  document.getElementById('alBody').innerHTML=AL.map((l,i)=>`<tr>
+    <td><input value="${l.des||''}" oninput="AL[${i}].des=this.value"></td>
+    <td><select onchange="AL[${i}].compte=this.value">${opts(l)}</select></td>
+    <td><input class="amt" value="${l.ht}" oninput="AL[${i}].ht=+this.value||0;achatBal()"></td>
+    <td><input class="amt" value="${l.tva}" oninput="AL[${i}].tva=+this.value||0;achatBal()"></td>
+    <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="AL.splice(${i},1);renderALines()">✕</button></td></tr>`).join('');
+  achatBal();
+}
+function addALine(){AL.push({des:'',compte:'601',ht:0,tva:18});renderALines();}
+function achatBal(){const ht=AL.reduce((s,l)=>s+(l.ht||0),0);const tva=AL.reduce((s,l)=>s+(l.ht||0)*(l.tva||0)/100,0);
+  document.getElementById('aHT').textContent=F0(ht);document.getElementById('aTVA').textContent=F0(tva);document.getElementById('aTTC').textContent=F0(ht+tva);}
+async function saveAchat(id){
+  if(exLocked()){toast('Exercice clôturé. Achats verrouillés.');return;}
+  const nom=document.getElementById('aNom').value.trim();
+  if(!nom){toast('Fournisseur obligatoire.');return;}
+  if(AL.some(l=>!l.des||!l.ht)){toast('Chaque ligne : désignation + montant.');return;}
+  const ht=AL.reduce((s,l)=>s+(l.ht||0),0),tva=AL.reduce((s,l)=>s+(l.ht||0)*(l.tva||0)/100,0);
+  const fournId=document.getElementById('aFourn').value;
+  const numero=id?ST.achats.find(a=>a.id===id).numero:await nextAchatNum();
+  const ach={id:id||uid('a'),exId:ST.exId,numero,fournId,fournNom:nom,piece:document.getElementById('aPiece').value.trim(),
+    date:document.getElementById('aDate').value,echeance:document.getElementById('aEch').value,nature:document.getElementById('aNat').value,lignes:AL,ht,tva,ttc:ht+tva,regle:id?(ST.achats.find(x=>x.id===id)||{}).regle:false,created:Date.now()};
+  await put('achats',ach);await genAchatEcriture(ach);
+  await loadAll();closeModal();RENDER.achats();toast('Facture d\'achat '+numero+' enregistrée.');
+}
+async function delAchat(id){if(!confirm('Supprimer cette facture d\'achat ?'))return;await del('achats',id);await del('ecritures','e_ach_'+id);await del('ecritures','e_regl_'+id);await loadAll();RENDER.achats();toast('Facture d\'achat supprimée.');}
+async function genAchatEcriture(a){
+  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:'4011';
+  const lignes=a.lignes.map(l=>({compte:l.compte,libelle:l.des,debit:Math.round(l.ht),credit:0,lettre:''}));
+  if(a.tva>0){const cptTva=a.nature==='immo'?'4451':a.nature==='service'?'4453':'4452';
+    const lib=a.nature==='immo'?'TVA récup. immobilisations':a.nature==='service'?'TVA déductible en attente (service)':'TVA déductible';
+    lignes.push({compte:cptTva,libelle:lib,debit:Math.round(a.tva),credit:0,lettre:''});}
+  lignes.push({compte:cptFourn,tiers:a.fournId,libelle:'Fournisseur '+a.fournNom,debit:0,credit:Math.round(a.ttc),lettre:''});
+  const e={id:'e_ach_'+a.id,exId:ST.exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:a.date,piece:a.numero,libelle:'Achat '+a.numero+' — '+a.fournNom,lignes,created:Date.now()};
+  await put('ecritures',e);
+}
+async function reglerAchat(id){
+  const a=ST.achats.find(x=>x.id===id);if(!a||a.regle)return;
+  if(!confirm('Marquer réglé ? Génère le paiement (banque 5211).'))return;
+  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:'4011';
+  const lignes=[{compte:cptFourn,tiers:a.fournId,libelle:'Règlement '+a.fournNom,debit:Math.round(a.ttc),credit:0,lettre:''},
+    {compte:'5211',libelle:'Banque',debit:0,credit:Math.round(a.ttc),lettre:''}];
+  if(a.nature==='service'&&a.tva>0){
+    lignes.push({compte:'4452',libelle:'TVA déductible exigible (service payé)',debit:Math.round(a.tva),credit:0,lettre:''});
+    lignes.push({compte:'4453',libelle:'Transfert TVA en attente',debit:0,credit:Math.round(a.tva),lettre:''});
+  }
+  await put('ecritures',{id:'e_regl_'+a.id,exId:ST.exId,journal:ST.journaux.find(j=>j.code==='BQ')?'BQ':'OD',date:today(),piece:a.numero+'-R',libelle:'Règlement achat '+a.numero,lignes,created:Date.now()});
+  a.regle=true;await put('achats',a);await loadAll();RENDER.achats();
+  toast('Achat '+a.numero+' réglé'+(a.nature==='service'?' · TVA service devenue déductible':''));
+}
 async function nextFacNum(type){
   const key='facSeq_'+curEx().id;const meta=await getOne('meta',key);let seq=meta?meta.value:0;seq++;
   await put('meta',{id:key,value:seq});
@@ -1672,6 +1822,7 @@ function facBal(){
   document.getElementById('fTTC').textContent=F0(ht+tva+aibV);
 }
 async function saveFacture(id,type){
+  if(exLocked()){toast('Exercice clôturé. Facturation verrouillée.');return;}
   const nom=document.getElementById('fNom').value.trim();
   if(!nom){toast('Client obligatoire.');return;}
   if(FL.some(l=>!l.des||!l.pu)){toast('Chaque ligne : désignation + prix.');return;}
@@ -2478,8 +2629,41 @@ RENDER.liasse=()=>{
   </div>
   <div class="card"><h3 style="margin-top:0">États inclus dans la liasse</h3>
   <div class="tbl-wrap"><table><tbody>${check.map(c=>`<tr><td class="ta-c"><b style="color:${ic[c[2]][0]}">${ic[c[2]][1]}</b></td><td><b>${c[0]}</b></td><td style="color:var(--mut)">${c[1]}</td></tr>`).join('')}</tbody></table></div></div>
+  ${sigCard(m)}
   <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px"><b style="color:var(--cuivre-d)">Liasse SYSCOHADA.</b> Bilan · Résultat · SIG · TFT · Annexes en un seul PDF multi-pages avec en-tête société et QR.</div>`;
 };
+function sigCard(m){
+  const p=(pre,sens)=>{let s=0;for(const n in m)if(n.startsWith(pre))s+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);return s;};
+  const ventesM=p('701','c'),achatsM=p('601','d')+p('6031','d');
+  const margeComm=ventesM-achatsM;
+  const prodVendue=p('70','c')-ventesM,prodStockee=p('73','c'),prodImmo=p('72','c');
+  const prodEx=prodVendue+prodStockee+prodImmo;
+  const conso=p('602','d')+p('604','d')+p('605','d')+p('606','d')+p('608','d')+p('61','d')+p('62','d');
+  const va=margeComm+prodEx-conso;
+  const subv=p('71','c'),impotsTaxes=p('64','d'),perso=p('66','d');
+  const ebe=va+subv-impotsTaxes-perso;
+  const autresProd=p('75','c')+p('78','c')+p('79','c'),dotations=p('68','d'),autresCh=p('65','d');
+  const resExpl=ebe+autresProd-dotations-autresCh;
+  const resFin=p('77','c')-p('67','d');
+  const rao=resExpl+resFin;
+  const hao=(p('82','c')+p('84','c')+p('86','c')+p('88','c'))-(p('81','d')+p('83','d')+p('85','d')+p('87','d'));
+  const impot=p('89','d');
+  const net=rao+hao-impot;
+  const row=(l,v,strong)=>`<tr class="${strong?'foot-tr':''}"><td>${l}</td><td class="ta-r mono ${v<0?'neg':''}">${F(v)}</td></tr>`;
+  return `<div class="card"><h3 style="margin-top:0">Soldes intermédiaires de gestion (SIG)</h3>
+  <div class="tbl-wrap"><table><tbody>
+  ${row('Marge commerciale',margeComm)}
+  ${row('Production de l\'exercice',prodEx)}
+  ${row('Valeur ajoutée (VA)',va,1)}
+  ${row('Excédent brut d\'exploitation (EBE)',ebe,1)}
+  ${row('Résultat d\'exploitation',resExpl,1)}
+  ${row('Résultat financier',resFin)}
+  ${row('Résultat des activités ordinaires (RAO)',rao,1)}
+  ${row('Résultat HAO',hao)}
+  ${row('Impôt sur le résultat (89)',-impot)}
+  ${row('RÉSULTAT NET',net,1)}
+  </tbody></table></div></div>`;
+}
 async function exportLiassePDF(){
   toast('Génération de la liasse…');
   const s=await societe();const m=soldesParCompte();
