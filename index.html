@@ -1533,9 +1533,61 @@ async function certifyFNE(fac){
   try{
     const res=await xhrJSON('POST',cfg.url+'/external/invoices/sign',
       {'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+cfg.key},factureToFNE(fac,cfg));
+    if(res&&res.reference)return {ok:true,ref:res.reference,token:res.token,id:res.invoice&&res.invoice.id,balance:res.balance_sticker,items:res.invoice&&res.invoice.items?res.invoice.items.map(x=>x.id):[]};
+    return {ok:false,reason:(res&&res.message)||'réponse invalide'};
+  }catch(e){return {ok:false,reason:e.message};}
+}
+let AV=[];
+async function refundFNE(orig,qtys){
+  const cfg=await fneCfg();
+  if(!cfg.enabled||!cfg.key)return {ok:false,reason:'FNE non activée'};
+  if(!orig.fneId)return {ok:false,reason:'facture non certifiée DGI'};
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return {ok:false,reason:'hors-ligne'};
+  try{
+    const items=qtys.map((q,i)=>({id:orig.fneItems&&orig.fneItems[i],quantity:q})).filter(x=>x.quantity>0);
+    const res=await xhrJSON('POST',cfg.url+'/external/invoices/'+orig.fneId+'/refund',
+      {'Content-Type':'application/json','Accept':'application/json','Authorization':'Bearer '+cfg.key},{items});
     if(res&&res.reference)return {ok:true,ref:res.reference,token:res.token,id:res.invoice&&res.invoice.id,balance:res.balance_sticker};
     return {ok:false,reason:(res&&res.message)||'réponse invalide'};
   }catch(e){return {ok:false,reason:e.message};}
+}
+function avoirFacture(id){
+  const f=ST.factures.find(x=>x.id===id);if(!f)return;
+  AV=f.lignes.map(l=>({des:l.des,qte:l.qte,pu:l.pu,tva:l.tva}));
+  openModal('<div class="mh"><h3>Avoir sur '+f.numero+' — '+f.clientNom+'</h3><button class="x" onclick="closeModal()">×</button></div><div class="mb">'
+   +'<div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:8px">Quantités à créditer (max = facturé). '+(f.fneCertified?'Avoir certifié DGI.':'Facture non certifiée : avoir local.')+'</div>'
+   +'<div class="tbl-wrap"><table class="lines"><thead><tr><th>Désignation</th><th style="width:90px">Qté avoir</th><th style="width:120px">PU</th><th class="ta-r">Montant</th></tr></thead><tbody>'
+   +f.lignes.map((l,i)=>'<tr><td>'+l.des+'</td><td><input class="amt" value="'+l.qte+'" oninput="AV['+i+'].qte=+this.value||0"></td><td class="ta-r mono">'+F0(l.pu)+'</td><td class="ta-r mono">'+F0(l.qte*l.pu)+'</td></tr>').join('')
+   +'</tbody></table></div>'
+   +'<div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveAvoir(\''+id+'\')">Créer l\'avoir</button></div></div>',true);
+}
+async function saveAvoir(origId){
+  const orig=ST.factures.find(f=>f.id===origId);if(!orig)return;
+  const lignes=AV.filter(l=>l.qte>0).map(l=>({des:l.des,qte:l.qte,pu:l.pu,tva:l.tva}));
+  if(!lignes.length){toast('Aucune quantité à créditer.');return;}
+  const ht=lignes.reduce((s,l)=>s+l.qte*l.pu,0),tva=lignes.reduce((s,l)=>s+l.qte*l.pu*(l.tva||0)/100,0);
+  const numero=await nextFacNum('avoir');
+  const av={id:uid('f'),exId:ST.exId,numero,type:'avoir',date:today(),origId,origNum:orig.numero,
+    clientId:orig.clientId,clientNom:orig.clientNom,ncc:orig.ncc,aib:0,aibV:0,lignes,ht:-ht,tva:-tva,ttc:-(ht+tva),
+    fneRef:'',fneToken:'',fneCertified:false,created:Date.now()};
+  let msg;
+  if(orig.fneCertified){
+    const c=await refundFNE(orig,orig.lignes.map((l,i)=>AV[i]?AV[i].qte:0));
+    if(c.ok){av.fneRef=c.ref;av.fneToken=c.token;av.fneId=c.id;av.fneCertified=true;msg='Avoir certifié DGI · '+c.ref;}
+    else{av.fneRef=genFneRef(numero);av.fneWarn=c.reason;msg='Avoir NON certifié ('+c.reason+') · réf provisoire.';}
+  } else {av.fneRef=genFneRef(numero);msg='Avoir '+numero+' enregistré (facture d\'origine non certifiée DGI).';}
+  await put('factures',av);
+  await genAvoirEcriture(av,orig);
+  await loadAll();closeModal();RENDER.facturation();toast(msg);
+}
+async function genAvoirEcriture(av,orig){
+  const cl=ST.tiers.find(t=>t.id===av.clientId);const cptClient=cl?cl.compte:'4111';
+  const ht=Math.abs(av.ht),tva=Math.abs(av.tva),ttc=Math.abs(av.ttc);
+  const lignes=[{compte:'701',libelle:'Avoir sur ventes',debit:ht,credit:0,lettre:''},
+    {compte:'4431',libelle:'TVA sur avoir',debit:tva,credit:0,lettre:''},
+    {compte:cptClient,tiers:av.clientId,libelle:'Client '+av.clientNom,debit:0,credit:ttc,lettre:''}];
+  const e={id:'e_fac_'+av.id,exId:ST.exId,journal:'VT',date:av.date,piece:av.numero,libelle:'Avoir '+av.numero+' / '+orig.numero,lignes,created:Date.now()};
+  await put('ecritures',e);
 }
 
 RENDER.facturation=async()=>{
@@ -1543,9 +1595,9 @@ RENDER.facturation=async()=>{
   const q=(window._facq||'').toLowerCase();
   const rows=ST.factures.filter(f=>!q||(f.numero+f.clientNom).toLowerCase().includes(q)).map(f=>`<tr>
     <td class="mono"><b>${f.numero}</b></td><td class="mono">${dfr(f.date)}</td><td>${f.clientNom}</td>
-    <td><span class="badge ${f.type!=='fne'?'b-gray':f.fneCertified?'b-green':''}" ${f.type==='fne'&&!f.fneCertified?'style="background:#e0913a;color:#fff"':''}>${f.type!=='fne'?'Simple':f.fneCertified?'FNE ✓ DGI':'FNE ⏳ provisoire'}</span></td>
+    <td><span class="badge ${f.type==='simple'?'b-gray':f.type==='avoir'?'':f.fneCertified?'b-green':''}" ${f.type==='avoir'?'style="background:#8a63d2;color:#fff"':f.type==='fne'&&!f.fneCertified?'style="background:#e0913a;color:#fff"':''}>${f.type==='simple'?'Simple':f.type==='avoir'?'Avoir '+(f.fneCertified?'✓':''):f.fneCertified?'FNE ✓ DGI':'FNE ⏳ provisoire'}</span></td>
     <td class="ta-r mono">${F0(f.ht)}</td><td class="ta-r mono">${F0(f.tva)}</td><td class="ta-r mono"><b>${F0(f.ttc)}</b></td>
-    <td class="ta-c"><button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`).join('');
+    <td class="ta-c">${f.type==='fne'?`<button class="linkbtn" title="Avoir" onclick="avoirFacture('${f.id}')">↩</button> `:''}<button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`).join('');
   const tHT=ST.factures.reduce((s,f)=>s+f.ht,0),tTVA=ST.factures.reduce((s,f)=>s+f.tva,0),tTTC=ST.factures.reduce((s,f)=>s+f.ttc,0);
   document.getElementById('p-facturation').innerHTML=`
   <div class="grid kpis">
@@ -1561,7 +1613,7 @@ RENDER.facturation=async()=>{
 async function nextFacNum(type){
   const key='facSeq_'+curEx().id;const meta=await getOne('meta',key);let seq=meta?meta.value:0;seq++;
   await put('meta',{id:key,value:seq});
-  const pre=type==='fne'?'FNE':'FAC';const yr=(curEx().debut||today()).slice(0,4);
+  const pre=type==='fne'?'FNE':type==='avoir'?'AV':'FAC';const yr=(curEx().debut||today()).slice(0,4);
   return `${pre}-${yr}-${String(seq).padStart(4,'0')}`;
 }
 function newFacture(type){editFacture(null,type);}
@@ -1637,7 +1689,7 @@ async function saveFacture(id,type){
   if(type==='fne'){
     if(id){const o=ST.factures.find(f=>f.id===id);fac.fneRef=o.fneRef;fac.fneToken=o.fneToken;fac.fneId=o.fneId;fac.fneCertified=o.fneCertified;msg='FNE '+numero+' mise à jour.';}
     else{const c=await certifyFNE(fac);
-      if(c.ok){fac.fneRef=c.ref;fac.fneToken=c.token;fac.fneId=c.id;fac.fneBalance=c.balance;fac.fneCertified=true;msg='FNE certifiée DGI · '+c.ref+(c.balance!=null?' · stickers restants '+c.balance:'');}
+      if(c.ok){fac.fneRef=c.ref;fac.fneToken=c.token;fac.fneId=c.id;fac.fneBalance=c.balance;fac.fneItems=c.items||[];fac.fneCertified=true;msg='FNE certifiée DGI · '+c.ref+(c.balance!=null?' · stickers restants '+c.balance:'');}
       else{fac.fneRef=genFneRef(numero);fac.fneCertified=false;fac.fneWarn=c.reason;msg='FNE enregistrée NON certifiée ('+c.reason+') · réf provisoire '+fac.fneRef;}}
   } else msg='Facture '+numero+' enregistrée.';
   await put('factures',fac);
