@@ -192,11 +192,35 @@ tbody tr:hover{background:#fbfcfe}
   </div>
 </div>
 
+<!-- SÉLECTION ENTREPRISE (SaaS) -->
+<div id="entpick" style="display:none;position:fixed;inset:0;background:linear-gradient(135deg,var(--noir),#101020);z-index:99;align-items:center;justify-content:center">
+  <div class="lcard" style="width:440px">
+    <div class="brand"><div class="logo">SX</div><div><h1>SANIX <span>ComptaPro</span></h1></div></div>
+    <div class="tag" style="margin-bottom:14px">Sélectionnez ou créez une entreprise</div>
+    <div id="entList" style="display:flex;flex-direction:column;gap:8px;max-height:46vh;overflow:auto"></div>
+    <button class="btn full" style="margin-top:14px;background:var(--noir-2)" onclick="toggleNewEnt()">+ Nouvelle entreprise</button>
+    <div id="entNewForm" style="display:none;margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="fld"><label>Raison sociale *</label><input id="enR" placeholder="Ex : PARTNER IMMO CI"></div>
+      <div class="fld"><label>NCC (identifiant contribuable)</label><input id="enN" placeholder="Ex : 2401234 A"></div>
+      <div class="fld"><label>RCCM</label><input id="enM" placeholder="Ex : CI-ABJ-2026-B-1234"></div>
+      <button class="btn full" onclick="submitNewEnt()">Créer et ouvrir</button>
+    </div>
+    <div class="err" id="enErr"></div>
+  </div>
+</div>
+<style>
+.entitem{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;transition:.15s}
+.entitem:hover{border-color:var(--cuivre);box-shadow:0 6px 18px rgba(184,115,51,.12)}
+.entlogo{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--cuivre),var(--cuivre-d));display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800}
+.entmeta{font-size:11px;color:var(--mut);margin-top:2px}
+</style>
+
 <!-- APP -->
 <div id="app"><div class="shell">
   <div class="nav-backdrop" id="navBack" onclick="toggleNav()"></div>
   <aside class="side">
     <div class="top"><div class="brand"><div class="logo">SX</div><div><h1>ComptaPro</h1><div class="tag">SYSCOHADA · FCFA</div></div></div></div>
+    <div class="exbar"><span>Entreprise</span><b id="entLabel" style="flex:1">—</b><button class="linkbtn" title="Changer d'entreprise" onclick="openEntSwitch()">⇄</button></div>
     <div class="exbar"><span>Exercice</span><b id="exLabel">—</b></div>
     <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span></div>
     <nav class="nav" id="nav">
@@ -314,7 +338,9 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_NAME='sanix_comptapro', DB_VER=6;
+const DB_BASE='sanix_comptapro', DB_VER=6;
+let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
+let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
 const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','audit','users','meta'];
 
@@ -331,6 +357,90 @@ function del(store,id){return new Promise((res,rej)=>{const r=tx(store,'readwrit
 function all(store){return new Promise((res,rej)=>{const r=tx(store).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=rej;});}
 function getOne(store,id){return new Promise((res,rej)=>{const r=tx(store).get(id);r.onsuccess=()=>res(r.result);r.onerror=rej;});}
 const uid=(p='id')=>p+'_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ============================================================
+   SaaS multi-entreprises · registre global (base séparée)
+   ============================================================ */
+const REG_NAME='sanix_registry', REG_VER=1;
+let REG=null;
+function ridb(){return new Promise((res,rej)=>{
+  const r=indexedDB.open(REG_NAME,REG_VER);
+  r.onupgradeneeded=e=>{const d=e.target.result;
+    if(!d.objectStoreNames.contains('entreprises'))d.createObjectStore('entreprises',{keyPath:'id'});
+    if(!d.objectStoreNames.contains('memberships'))d.createObjectStore('memberships',{keyPath:'id'});};
+  r.onsuccess=e=>{REG=e.target.result;res(REG);};
+  r.onerror=rej;
+});}
+function rtx(store,mode='readonly'){return REG.transaction(store,mode).objectStore(store);}
+function rput(store,obj){return new Promise((res,rej)=>{const r=rtx(store,'readwrite').put(obj);r.onsuccess=()=>res(obj);r.onerror=rej;});}
+function rall(store){return new Promise((res,rej)=>{const r=rtx(store).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=rej;});}
+function rdel(store,id){return new Promise((res,rej)=>{const r=rtx(store,'readwrite').delete(id);r.onsuccess=()=>res();r.onerror=rej;});}
+function setActiveEnt(id){ACTIVE_ENT=id;localStorage.setItem('sanix_active_ent',id);DB_NAME=DB_BASE+'__'+id;}
+async function listEntreprises(){await ridb();return (await rall('entreprises')).sort((a,b)=>(a.raison||'').localeCompare(b.raison||''));}
+async function createEntreprise(o){
+  await ridb();
+  const ent={id:uid('ent'),raison:o.raison,ncc:o.ncc||'',rccm:o.rccm||'',devise:'XOF',
+    createdAt:new Date().toISOString(),by:(ST.user&&ST.user.login)||''};
+  await rput('entreprises',ent);
+  return ent;
+}
+async function deleteEntreprise(id){
+  if(!confirm('Supprimer cette entreprise du registre ? Les données locales resteront mais deviendront inaccessibles.'))return;
+  await ridb();await rdel('entreprises',id);
+  if(ACTIVE_ENT===id){localStorage.removeItem('sanix_active_ent');ACTIVE_ENT=null;}
+  openEntPicker(false);
+}
+
+/* ---- écran de sélection / création d'entreprise ---- */
+async function afterLogin(){
+  const list=await listEntreprises();
+  if(ACTIVE_ENT && list.some(e=>e.id===ACTIVE_ENT)){
+    document.getElementById('login').style.display='none';
+    document.getElementById('app').style.display='block';
+    if(DB){DB.close();DB=null;}
+    await boot();await paintEntLabel();
+  }else{
+    document.getElementById('login').style.display='none';
+    openEntPicker(!list.length);
+  }
+}
+async function openEntSwitch(){
+  document.getElementById('app').style.display='none';
+  if(DB){DB.close();DB=null;}
+  openEntPicker(false);
+}
+async function openEntPicker(forceCreate){
+  const ov=document.getElementById('entpick');ov.style.display='flex';
+  const list=await listEntreprises();
+  const wrap=document.getElementById('entList');
+  wrap.innerHTML = list.length
+    ? list.map(e=>'<div class="entitem" onclick="pickEnt(\''+e.id+'\')">'
+        +'<div class="entlogo">'+((e.raison||'?').slice(0,2).toUpperCase())+'</div>'
+        +'<div style="flex:1"><b>'+e.raison+'</b><div class="entmeta">NCC '+(e.ncc||'—')+' · '+e.devise+'</div></div>'
+        +'<button class="linkbtn" onclick="event.stopPropagation();deleteEntreprise(\''+e.id+'\')">✕</button></div>').join('')
+    : '<div class="entmeta" style="text-align:center;padding:14px">Aucune entreprise. Créez la première.</div>';
+  document.getElementById('entNewForm').style.display=(forceCreate||!list.length)?'block':'none';
+  document.getElementById('enErr').textContent='';
+}
+async function pickEnt(id){
+  setActiveEnt(id);
+  document.getElementById('entpick').style.display='none';
+  document.getElementById('app').style.display='block';
+  if(DB){DB.close();DB=null;}
+  await boot();await paintEntLabel();
+}
+async function submitNewEnt(){
+  const raison=document.getElementById('enR').value.trim();
+  if(!raison){document.getElementById('enErr').textContent='Raison sociale requise.';return;}
+  localStorage.setItem('sanix_seed_clean','1');
+  const ent=await createEntreprise({raison,ncc:document.getElementById('enN').value.trim(),rccm:document.getElementById('enM').value.trim()});
+  await pickEnt(ent.id);
+}
+function toggleNewEnt(){const f=document.getElementById('entNewForm');f.style.display=f.style.display==='none'?'block':'none';}
+async function paintEntLabel(){
+  const list=await listEntreprises();const e=list.find(x=>x.id===ACTIVE_ENT);
+  const el=document.getElementById('entLabel');if(el)el.textContent=e?e.raison:'—';
+}
 
 /* ---- état ---- */
 let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],user:null,exId:null};
@@ -382,7 +492,8 @@ async function seed(){
   const ex={id:uid('ex'),libelle:'Exercice 2026',debut:'2026-01-01',fin:'2026-12-31',statut:'ouvert'};
   await put('exercices',ex);
   await put('meta',{id:'exCourant',value:ex.id});
-  // tiers démo
+  // tiers + écritures démo — désactivés par défaut en SaaS (nouvelle entreprise = livres vierges)
+  if(localStorage.getItem('sanix_allow_demo')==='1'){
   const cl={id:uid('t'),type:'client',nom:'ETS KOUAME NEGOCE','compte':'4111'+'001',tel:'+225 07 00 00 00 01'};
   const fo={id:uid('t'),type:'fournisseur',nom:'SGMT SARL',compte:'4011'+'001',tel:'+225 27 00 00 00 02'};
   await put('tiers',cl);await put('tiers',fo);
@@ -408,6 +519,7 @@ async function seed(){
   await put('ecritures',mkE('BQ','2026-02-10','Frais bancaires',[
     {compte:'6312',libelle:'Frais',debit:35000,credit:0,lettre:''},
     {compte:'5211',libelle:'Banque',debit:0,credit:35000,lettre:''}]));
+  }
   await put('meta',{id:'seeded',value:true});
 }
 
@@ -469,7 +581,7 @@ async function doLogin(){
   const u=document.getElementById('lu').value.trim().toUpperCase(),p=document.getElementById('lp').value;
   await idb();await seedUsers();
   const usr=(await all('users')).find(x=>x.login.toUpperCase()===u);
-  if(usr&&usr.hash===hashPwd(p)){ST.user={login:usr.login,role:usr.role};document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';await boot();}
+  if(usr&&usr.hash===hashPwd(p)){ST.user={login:usr.login,role:usr.role};await afterLogin();}
   else document.getElementById('lerr').textContent='Identifiants incorrects.';
 }
 function logout(){location.reload();}
@@ -1681,7 +1793,7 @@ function xhrJSON(method,url,headers,body){return new Promise((res,rej)=>{
 });}
 const SB_TABLE=s=>'sanix_compta_'+s;
 async function sbPush(cfg,store){
-  const rows=(await all(store)).map(r=>({id:r.id,payload:r}));
+  const rows=(await all(store)).map(r=>({id:r.id,ent:ACTIVE_ENT,payload:r}));
   if(!rows.length)return 0;
   const h={'apikey':cfg.key,'Authorization':'Bearer '+cfg.key,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
   await xhrJSON('POST',cfg.url+'/rest/v1/'+SB_TABLE(store),h,rows);
@@ -1689,18 +1801,32 @@ async function sbPush(cfg,store){
 }
 async function sbPull(cfg,store){
   const h={'apikey':cfg.key,'Authorization':'Bearer '+cfg.key};
-  const data=await xhrJSON('GET',cfg.url+'/rest/v1/'+SB_TABLE(store)+'?select=id,payload',h,null);
+  const q=cfg.url+'/rest/v1/'+SB_TABLE(store)+'?select=id,payload&ent=eq.'+encodeURIComponent(ACTIVE_ENT||'');
+  const data=await xhrJSON('GET',q,h,null);
   let n=0;for(const row of data){if(row.payload){await put(store,row.payload);n++;}}
   return n;
+}
+async function sbSyncRegistry(cfg){
+  await ridb();
+  const auth={'apikey':cfg.key,'Authorization':'Bearer '+cfg.key};
+  const ents=await rall('entreprises');
+  if(ents.length){
+    const h={...auth,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'};
+    await xhrJSON('POST',cfg.url+'/rest/v1/sanix_entreprises',h,ents.map(e=>({id:e.id,raison:e.raison,ncc:e.ncc,rccm:e.rccm,devise:e.devise})));
+  }
+  const remote=await xhrJSON('GET',cfg.url+'/rest/v1/sanix_entreprises?select=*',auth,null);
+  for(const r of remote)await rput('entreprises',{id:r.id,raison:r.raison,ncc:r.ncc||'',rccm:r.rccm||'',devise:r.devise||'XOF',createdAt:r.created_at||new Date().toISOString()});
 }
 async function syncNow(silent){
   const cfg=await sbCfg();
   if(!cfg||!cfg.url||!cfg.key){if(!silent)toast('Configurez Supabase d\'abord.');return;}
+  if(!ACTIVE_ENT){if(!silent)toast('Sélectionnez une entreprise.');return;}
   if(typeof navigator!=='undefined'&&navigator.onLine===false){if(!silent)toast('Hors-ligne : sync différée.');return;}
   if(!silent)toast('Synchronisation en cours…');
   let up=0,down=0;
   try{
-    for(const s of STORES){if(s==='meta')continue;up+=await sbPush(cfg,s);down+=await sbPull(cfg,s);}
+    await sbSyncRegistry(cfg);
+    for(const s of STORES){if(s==='meta'||s==='audit')continue;up+=await sbPush(cfg,s);down+=await sbPull(cfg,s);}
     await put('meta',{id:'lastSync',value:new Date().toISOString()});
     await loadAll();if(document.getElementById('p-parametrage'))RENDER.parametrage();
     updateNetBadge();
@@ -1718,15 +1844,38 @@ function updateNetBadge(){const b=document.getElementById('netBadge');if(!b)retu
   const on=typeof navigator==='undefined'||navigator.onLine!==false;
   b.textContent=on?'● en ligne':'● hors-ligne';b.style.color=on?'#7be0af':'#ff9a8f';}
 
-const SB_SQL=`-- À exécuter dans Supabase (SQL editor)
+const SB_SQL=`-- SANIX ComptaPro · schéma SaaS multi-entreprises (SQL editor Supabase)
+-- 1) Tables métier : clé composite (ent,id)
 do $$ declare t text; begin
-  foreach t in array array['comptes','tiers','ecritures','exercices','journaux','factures','users']
-  loop execute format('create table if not exists sanix_compta_%s (id text primary key, payload jsonb, updated_at timestamptz default now());',t);
-  execute format('alter table sanix_compta_%s enable row level security;',t); end loop; end $$;`;
+  foreach t in array array['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','users']
+  loop
+    execute format('create table if not exists sanix_compta_%s (ent text not null, id text not null, payload jsonb, updated_at timestamptz default now(), primary key(ent,id));', t);
+    execute format('alter table sanix_compta_%s enable row level security;', t);
+  end loop;
+end $$;
+
+-- 2) Registre entreprises + droits d'accès
+create table if not exists sanix_entreprises (id text primary key, raison text, ncc text, rccm text, devise text default 'XOF', created_at timestamptz default now());
+create table if not exists sanix_memberships (user_id uuid not null, ent text not null, role text default 'admin', primary key(user_id,ent));
+alter table sanix_entreprises enable row level security;
+alter table sanix_memberships enable row level security;
+
+-- 3) Isolation par tenant (REQUIERT Supabase Auth · auth.uid())
+do $$ declare t text; begin
+  foreach t in array array['comptes','tiers','ecritures','exercices','journaux','factures','immos','centres','budgets','pieces','users']
+  loop
+    execute format('drop policy if exists tenant_iso on sanix_compta_%s;', t);
+    execute format('create policy tenant_iso on sanix_compta_%s using (ent in (select ent from sanix_memberships where user_id = auth.uid())) with check (ent in (select ent from sanix_memberships where user_id = auth.uid()));', t);
+  end loop;
+end $$;
+create policy own_memberships on sanix_memberships using (user_id = auth.uid());
+create policy read_entreprises on sanix_entreprises for select using (id in (select ent from sanix_memberships where user_id = auth.uid()));
+
+-- ATTENTION : clé anon SEULE = pas d'isolation. Activez Supabase Auth (JWT).`;
 
 async function backupExport(){
   const dump={};for(const s of STORES)dump[s]=await all(s);
-  const b=new Blob([JSON.stringify(dump)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sanix_comptapro_backup_'+today()+'.json';a.click();toast('Sauvegarde générée.');
+  const b=new Blob([JSON.stringify(dump)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='sanix_comptapro_'+(ACTIVE_ENT||'base')+'_backup_'+today()+'.json';a.click();toast('Sauvegarde générée.');
 }
 function backupImport(file){if(!file)return;const rd=new FileReader();rd.onload=async()=>{try{const d=JSON.parse(rd.result);
   for(const s of STORES)if(d[s])for(const rec of d[s])await put(s,rec);
