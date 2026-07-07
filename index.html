@@ -435,6 +435,7 @@ async function openEntPicker(forceCreate){
     return '<div class="entcard" onclick="pickEnt(\''+e.id+'\')">'
      +'<div class="entrow"><div class="entlogo">'+((e.raison||'?').slice(0,2).toUpperCase())+'</div>'
      +'<div style="flex:1"><b>'+e.raison+'</b><div class="entmeta">NCC '+(e.ncc||'—')+'</div></div>'
+     +'<button class="linkbtn" title="Bilan SYSCOHADA" onclick="event.stopPropagation();printBilanEnt(\''+e.id+'\')">📄</button>'
      +'<button class="linkbtn" title="Retirer" onclick="event.stopPropagation();deleteEntreprise(\''+e.id+'\')">✕</button></div>'
      +'<div class="entkpi">'
        +'<div><span>Résultat</span><b class="'+(pos?'kg':'kr')+'">'+F0(k.resultat)+'</b></div>'
@@ -2606,7 +2607,343 @@ function dlPiece(id){const p=ST.pieces.find(x=>x.id===id);const a=document.creat
 async function delPiece(id){if(!confirm('Supprimer cette pièce ?'))return;await del('pieces',id);await loadAll();RENDER.ged();toast('Pièce supprimée.');}
 
 /* ---- Liasse fiscale ---- */
+async function soldesForEx(exId){const m={};(await all('ecritures')).filter(e=>e.exId===exId).forEach(e=>(e.lignes||[]).forEach(l=>{const c=l.compte;if(!m[c])m[c]={debit:0,credit:0};m[c].debit+=+l.debit||0;m[c].credit+=+l.credit||0;}));return m;}
+function prevEx(){const cur=curEx();return ST.exercices.filter(e=>e.fin&&cur.debut&&e.fin<cur.debut).sort((a,b)=>b.fin.localeCompare(a.fin))[0]||null;}
+async function printBilanEnt(entId){
+  const db=await openNamed(DB_BASE+'__'+entId);
+  const socM=await getOneFrom(db,'meta','societe');const s=socM?socM.value:{nom:'',sigle:'',ncc:'',rccm:'',adresse:''};
+  const exs=await getAllFrom(db,'exercices');const curM=await getOneFrom(db,'meta','exCourant');
+  const curId=curM?curM.value:(exs[0]&&exs[0].id);const cur=exs.find(e=>e.id===curId)||{};
+  const ecr=await getAllFrom(db,'ecritures');db.close();
+  const mFor=x=>{const m={};ecr.filter(e=>e.exId===x).forEach(e=>(e.lignes||[]).forEach(l=>{const c=l.compte;if(!m[c])m[c]={debit:0,credit:0};m[c].debit+=+l.debit||0;m[c].credit+=+l.credit||0;}));return m;};
+  const pe=exs.filter(e=>e.fin&&cur.debut&&e.fin<cur.debut).sort((a,b)=>b.fin.localeCompare(a.fin))[0]||null;
+  const comp=(m)=>{const p=(pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(pre.some(pp=>c.startsWith(pp)))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
+    const incorp=p(['20','21'],'d')-p(['280','281','2081','2091'],'c'),corp=p(['22','23','24'],'d')-p(['282','283','284','292','293','294'],'c'),fin=p(['26','27'],'d')-p(['296','297'],'c');
+    const immoNet=incorp+corp+fin,stocks=p(['3'],'d'),clients=p(['41'],'d'),autresC=p(['42','43','44','45','46','47','48'],'d')-p(['49'],'c');
+    const circ=stocks+clients+autresC,treso=p(['50','51','52','53','54','57','58'],'d')-p(['59'],'c'),totalActif=immoNet+circ+treso;
+    const resultat=p(['7'],'c')-p(['6'],'d'),capital=p(['10'],'c'),reserves=p(['11','14','15'],'c'),ran=p(['12'],'c'),capPropres=capital+reserves+ran+resultat;
+    const detFin=p(['16','17','18'],'c'),fourn=p(['40'],'c'),fisSoc=p(['42','43','44'],'c'),autresD=p(['45','46','47','48','419'],'c'),passifCirc=fourn+fisSoc+autresD,tresoP=p(['561','564','565'],'c'),totalPassif=capPropres+detFin+passifCirc+tresoP;
+    const ventesM=p(['701'],'c'),marge=ventesM-(p(['601'],'d')+p(['6031'],'d')),ca=p(['70'],'c'),conso=p(['602','604','605','606','608','61','62'],'d');
+    const va=marge+(ca-ventesM)+p(['73'],'c')+p(['72'],'c')-conso,ebe=va+p(['71'],'c')-p(['64'],'d')-p(['66'],'d');
+    const rexpl=ebe+p(['75','78','79'],'c')-p(['65'],'d')-p(['68'],'d'),rfin=p(['77'],'c')-p(['67'],'d'),rao=rexpl+rfin,rhao=p(['82','84','86','88'],'c')-p(['81','83','85','87'],'d'),impot=p(['89'],'d'),net=rao+rhao-impot;
+    return {incorp,corp,fin,immoNet,stocks,clients,autresC,circ,treso,totalActif,resultat,capital,reserves,ran,capPropres,detFin,fourn,fisSoc,autresD,passifCirc,tresoP,totalPassif,marge,ca,va,ebe,rexpl,rfin,rao,rhao,impot,net};};
+  const N=comp(mFor(curId)),P=pe?comp(mFor(pe.id)):comp({});
+  const fm=v=>v?Math.round(v).toLocaleString('fr-FR').replace(/\u202f/g,' '):'0';
+  const L=(r,l,k,st)=>`<tr class="${st?'st':''}"><td class="r">${r}</td><td>${l}</td><td class="n">${fm(N[k])}</td><td class="n">${fm(P[k])}</td></tr>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Bilan ${s.nom}</title><style>body{font-family:Arial;font-size:11px;margin:18px}h2{text-align:center;font-size:14px;margin:6px 0}.sub{text-align:center;margin-bottom:10px}table{width:100%;border-collapse:collapse;margin-bottom:16px}td,th{border:1px solid #000;padding:3px 6px}th{background:#eee;text-align:left}.r{width:38px;font-weight:bold;text-align:center}.n{text-align:right;font-family:monospace;width:120px}.st td{font-weight:bold;background:#f4f4f4}.id{border:1px solid #000;padding:6px;margin-bottom:12px}@media print{.np{display:none}}</style></head><body>
+  <div style="text-align:center;font-weight:bold">RÉPUBLIQUE DE CÔTE D'IVOIRE — DGI</div><div class="sub">États financiers normalisés SYSCOHADA</div>
+  <div class="id"><b>${s.nom}</b> — Sigle : ${s.sigle||'—'}<br>NCC : ${s.ncc} · RCCM : ${s.rccm}<br>${s.adresse||''}<br>Exercice clos : ${dfr(cur.fin||'')} · N-1 : ${pe?dfr(pe.fin):'—'}</div>
+  <h2>BILAN — SYSTÈME NORMAL</h2><table><tr><th class="r">REF</th><th>ACTIF (net)</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('AX','Immobilisations incorporelles','incorp')}${L('AY','Immobilisations corporelles','corp')}${L('AK','Immobilisations financières','fin')}${L('AZ','TOTAL ACTIF IMMOBILISÉ','immoNet',1)}
+  ${L('BB','Stocks et en-cours','stocks')}${L('BH','Clients','clients')}${L('BI','Autres créances','autresC')}${L('BK','TOTAL ACTIF CIRCULANT','circ',1)}${L('BT','TRÉSORERIE-ACTIF','treso',1)}${L('BZ','TOTAL GÉNÉRAL ACTIF','totalActif',1)}</table>
+  <table><tr><th class="r">REF</th><th>PASSIF</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('CA','Capital','capital')}${L('CG','Réserves / primes','reserves')}${L('CH','Report à nouveau','ran')}${L('CJ','Résultat net','resultat')}${L('CP','TOTAL CAPITAUX PROPRES','capPropres',1)}${L('DD','Dettes financières','detFin',1)}${L('DJ','Fournisseurs','fourn')}${L('DK','Dettes fiscales et sociales','fisSoc')}${L('DM','Autres dettes','autresD')}${L('DP','TOTAL PASSIF CIRCULANT','passifCirc',1)}${L('DT','TRÉSORERIE-PASSIF','tresoP',1)}${L('DZ','TOTAL GÉNÉRAL PASSIF','totalPassif',1)}</table>
+  <h2>COMPTE DE RÉSULTAT</h2><table><tr><th class="r">REF</th><th>LIBELLÉ</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('XA','Marge commerciale','marge',1)}${L('XB','Chiffre d affaires','ca')}${L('XC','Valeur ajoutée','va',1)}${L('XD','EBE','ebe',1)}${L('XE','Résultat d exploitation','rexpl',1)}${L('XF','Résultat financier','rfin')}${L('XG','Résultat activités ordinaires','rao',1)}${L('XH','Résultat HAO','rhao')}${L('','Impôts sur le résultat','impot')}${L('XI','RÉSULTAT NET','net',1)}</table>
+  <div style="font-size:10px">Contrôle Actif=Passif N : ${fm(N.totalActif)} / ${fm(N.totalPassif)}. Postes agrégés.</div>
+  <button class="np" onclick="window.print()" style="margin-top:10px;padding:8px 16px">Imprimer</button></body></html>`);
+  w.document.close();
+}
 async function printLiasseNorm(){
+  const s=await societe();const pe=prevEx();
+  const mN=soldesParCompte();const mP=pe?await soldesForEx(pe.id):{};
+  const fm=v=>v?Math.round(v).toLocaleString('fr-FR').replace(/\u202f/g,' '):'0';
+  const compute=(m)=>{const p=(pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(pre.some(pp=>c.startsWith(pp)))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
+    const incorp=p(['20','21'],'d')-p(['280','281','2081','2091'],'c');
+    const corp=p(['22','23','24'],'d')-p(['282','283','284','292','293','294'],'c');
+    const fin=p(['26','27'],'d')-p(['296','297'],'c');
+    const aFrais=p(['201'],'d')-p(['2801','2901'],'c');
+    const aBrevet=p(['211','212','213','214','216','217','218'],'d')-p(['2812','2813','2814','2816','2817','2818','2912'],'c');
+    const aFonds=p(['215'],'d')-p(['2815'],'c');
+    const aTerrain=p(['22'],'d')-p(['292'],'c');
+    const aBatiment=p(['231','232','233','237','238'],'d')-p(['2831','2931'],'c');
+    const aAmenag=p(['234','235'],'d')-p(['2834'],'c');
+    const aMateriel=p(['241','242','243','244','246','247','248'],'d')-p(['2841','2844'],'c');
+    const aTransport=p(['245'],'d')-p(['2845'],'c');
+    const aTitres=p(['26'],'d')-p(['296'],'c');
+    const aAutresFin=p(['27'],'d')-p(['297'],'c');
+    const immoNet=incorp+corp+fin;
+    const stocks=p(['3'],'d'),clients=p(['41'],'d'),autresC=p(['42','43','44','45','46','47','48'],'d')-p(['49'],'c');
+    const circHAO=p(['485','488'],'d');
+    const circ=stocks+clients+autresC+circHAO;
+    const titresP=p(['50'],'d')-p(['590'],'c'),valEnc=p(['51'],'d'),banques=p(['52','53','54','57','58'],'d')-p(['591'],'c');
+    const treso=titresP+valEnc+banques;const ecartA=p(['478'],'d');
+    const totalActif=immoNet+circ+treso+ecartA;
+    const produits=p(['7'],'c'),charges=p(['6'],'d'),resultat=produits-charges;
+    const capital=p(['10'],'c'),reserves=p(['11','14','15'],'c'),ran=p(['12'],'c');
+    const capPropres=capital+reserves+ran+resultat;
+    const detLoc=p(['173'],'c'),provRC=p(['19'],'c'),detHAO=p(['481','484'],'c'),ecartP=p(['479'],'c');
+    const detFin=p(['16','17','18'],'c');
+    const fourn=p(['40'],'c'),fisSoc=p(['42','43','44'],'c'),autresD=p(['45','46','47','48','419'],'c');
+    const passifCirc=fourn+fisSoc+autresD+detHAO;const tresoP=p(['561','564','565'],'c');
+    const totalPassif=capPropres+detFin+provRC+passifCirc+tresoP+ecartP;
+    const ventesM=p(['701'],'c'),achatsM=p(['601'],'d')+p(['6031'],'d'),marge=ventesM-achatsM;
+    const ca=p(['70'],'c'),conso=p(['602','604','605','606','608','61','62'],'d');
+    const va=marge+(ca-ventesM)+p(['73'],'c')+p(['72'],'c')-conso;
+    const ebe=va+p(['71'],'c')-p(['64'],'d')-p(['66'],'d');
+    const rexpl=ebe+p(['75','78','79'],'c')-p(['65'],'d')-p(['68'],'d');
+    const rfin=p(['77'],'c')-p(['67'],'d');const rao=rexpl+rfin;
+    const rhao=p(['82','84','86','88'],'c')-p(['81','83','85','87'],'d');
+    const impot=p(['89'],'d');const net=rao+rhao-impot;
+    const rAchM=-p(['601'],'d'),rVarM=-p(['6031'],'d'),tVentesPF=p(['702','703'],'c'),tTravaux=p(['705','706'],'c'),tAccess=p(['707'],'c');
+    const tProdStk=p(['73'],'c'),tProdImm=p(['72'],'c'),tSubv=p(['71'],'c'),tAutresP=p(['75'],'c'),tTransfE=p(['781'],'c');
+    const rAchMP=-p(['602'],'d'),rVarMP=-p(['6032'],'d'),rAutresAch=-p(['604','605','606','608'],'d'),rVarAutres=-p(['6033'],'d');
+    const rTransport=-p(['61'],'d'),rServ=-p(['62'],'d'),rImpots=-p(['64'],'d'),rAutresCh=-p(['65'],'d'),rPerso=-p(['66'],'d');
+    const tReprises=p(['791','798','759'],'c'),rDot=-p(['681','691'],'d'),tRevFin=p(['77'],'c'),rFraisFin=-p(['67'],'d');
+    const tProdHAO=p(['82','84','86','88'],'c'),rChHAO=-p(['81','83','85'],'d'),rParticip=-p(['87'],'d'),ventesM2=p(['701'],'c');
+    return {incorp,corp,fin,aFrais,aBrevet,aFonds,aTerrain,aBatiment,aAmenag,aMateriel,aTransport,aTitres,aAutresFin,immoNet,circHAO,titresP,valEnc,banques,ecartA,detLoc,provRC,detHAO,ecartP,stocks,clients,autresC,circ,treso,totalActif,resultat,capital,reserves,ran,capPropres,detFin,fourn,fisSoc,autresD,passifCirc,tresoP,totalPassif,marge,ca,va,ebe,rexpl,rfin,rao,rhao,impot,net,ventesM:ventesM2,rAchM,rVarM,tVentesPF,tTravaux,tAccess,tProdStk,tProdImm,tSubv,tAutresP,tTransfE,rAchMP,rVarMP,rAutresAch,rVarAutres,rTransport,rServ,rImpots,rAutresCh,rPerso,tReprises,rDot,tRevFin,rFraisFin,tProdHAO,rChHAO,rParticip};
+  };
+  const N=compute(mN),P=compute(mP);
+  const t_ouv=P.treso-P.tresoP;
+  const t_cafg=N.net-N.rDot-N.tReprises;
+  const t_vStock=-(N.stocks-P.stocks);
+  const t_vCreance=-((N.clients+N.autresC)-(P.clients+P.autresC));
+  const t_vPassif=(N.passifCirc-P.passifCirc);
+  const t_oper=t_cafg+t_vStock+t_vCreance+t_vPassif;
+  const t_invest=-((N.immoNet-P.immoNet)-N.rDot);
+  const t_capital=(N.capital+N.reserves-P.capital-P.reserves);
+  const t_detFin=(N.detFin-P.detFin);
+  const t_fin=t_capital+t_detFin;
+  const t_periode=t_oper+t_invest+t_fin;
+  const t_clot=t_ouv+t_periode;
+  const t_ctrl=N.treso-N.tresoP;
+  const pv=(m,pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(c.startsWith(pre))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
+  const NR=(lib,pre,sens)=>`<tr><td>${lib}</td><td class="n">${fm(pv(mN,pre,sens))}</td><td class="n">${fm(pv(mP,pre,sens))}</td></tr>`;
+  const L=(ref,lib,k,strong)=>`<tr class="${strong?'st':''}"><td class="r">${ref}</td><td>${lib}</td><td class="n">${fm(N[k])}</td><td class="n">${fm(P[k])}</td></tr>`;
+  const yEx=+((curEx().debut||today()).slice(0,4));let r3a='',r3c='',b3aO=0,b3aA=0,b3aC=0,c3O=0,c3D=0,c3C=0;
+  (ST.immos||[]).forEach(im=>{const pa=planAmort(im);const cur=pa.find(x=>x.an===yEx)||pa[pa.length-1]||{cumul:0,dot:0};
+    const acqY=String((im.dateAcq||'').slice(0,4))===String(yEx),bo=acqY?0:im.valeur,ba=acqY?im.valeur:0,dot=dotationExercice(im),cc=cur.cumul,co=cc-dot;
+    b3aO+=bo;b3aA+=ba;b3aC+=im.valeur;c3O+=co;c3D+=dot;c3C+=cc;
+    r3a+='<tr><td>'+im.libelle+'</td><td class="n">'+fm(bo)+'</td><td class="n">'+fm(ba)+'</td><td class="n">'+fm(im.valeur)+'</td></tr>';
+    r3c+='<tr><td>'+im.libelle+'</td><td class="n">'+fm(co)+'</td><td class="n">'+fm(dot)+'</td><td class="n">'+fm(cc)+'</td></tr>';});
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Liasse ${s.nom}</title><style>
+  body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:18px}
+  h2{text-align:center;font-size:14px;margin:6px 0}.sub{text-align:center;font-size:11px;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}td,th{border:1px solid #000;padding:3px 6px}
+  th{background:#eee;text-align:left}.r{width:38px;font-weight:bold;text-align:center}.n{text-align:right;font-family:monospace;width:120px}
+  .st td{font-weight:bold;background:#f4f4f4}.id{border:1px solid #000;padding:6px;margin-bottom:12px}
+  .cover{page-break-after:always;position:relative;border:3px solid #000;min-height:960px;padding:30px 40px;box-sizing:border-box}
+  .cover:before{content:"";position:absolute;left:0;top:0;width:22px;height:46%;background:#F77F00}
+  .cover:after{content:"";position:absolute;left:0;bottom:0;width:22px;height:46%;background:#009E60}
+  .hd1{font-weight:bold;font-size:15px}.flag{display:flex;width:120px;height:70px;margin:18px auto;border:1px solid #999}
+  .flag span{flex:1}.greenbox{border:1px dotted #009E60;color:#2e7d32;text-align:center;padding:26px;margin:40px 0;font-weight:bold;line-height:1.8}
+  .orange{color:#F77F00;text-align:center;font-weight:bold;font-size:13px;letter-spacing:1px;margin-bottom:30px}
+  .cvid{text-align:center;line-height:1.9;font-size:12px;margin:20px 0}
+  .docs{width:70%;margin:20px auto}.docs td{border:1px solid #000;padding:4px 8px}.docs td:last-child{width:40px;text-align:center;font-weight:bold}
+  @media print{.np{display:none}}</style></head><body>
+  <div class="cover">
+    <div style="text-align:center"><div class="hd1">RÉPUBLIQUE DE CÔTE D'IVOIRE</div><div>Union — Discipline — Travail</div>
+    <div class="hd1" style="margin-top:8px">MINISTÈRE EN CHARGE DES FINANCES</div><div class="hd1">DIRECTION GÉNÉRALE DES IMPÔTS</div></div>
+    <div class="flag"><span style="background:#F77F00"></span><span style="background:#fff"></span><span style="background:#009E60"></span></div>
+    <div class="greenbox">SUPPORT NORMALISÉ DE COLLECTE DES<br>ÉTATS FINANCIERS DU SYSTÈME COMPTABLE OHADA<br>(SYSCOHADA)</div>
+    <div class="orange">LIASSE SYSTÈME NORMAL</div>
+    <div class="cvid">DÉSIGNATION DE L'ENTITÉ : <b>${s.nom}</b><br>SIGLE USUEL : ${s.sigle||'—'}<br>ADRESSE COMPLÈTE : ${s.adresse||''}<br>N° COMPTE CONTRIBUABLE (NCC) : <b>${s.ncc}</b><br>EXERCICE CLOS LE : <b>${dfr(curEx().fin||'')}</b></div>
+    <table class="docs"><tr><td>Fiche d'identification et renseignements divers</td><td>X</td></tr><tr><td>Bilan</td><td>X</td></tr><tr><td>Compte de résultat</td><td>X</td></tr><tr><td>Tableau des flux de trésorerie</td><td>X</td></tr><tr><td>Notes annexes</td><td>X</td></tr><tr><td>États supplémentaires DGI</td><td>X</td></tr></table>
+  </div>
+  <div style="text-align:center;font-weight:bold">RÉPUBLIQUE DE CÔTE D'IVOIRE — DGI</div>
+  <div class="sub">États financiers normalisés — Système comptable OHADA (SYSCOHADA)</div>
+  <div class="id"><b>${s.nom}</b> — Sigle : ${s.sigle||'—'}<br>NCC : ${s.ncc} · RCCM : ${s.rccm}<br>Adresse : ${s.adresse}<br>Exercice clos le : ${dfr(curEx().fin||'')} · N-1 : ${pe?dfr(pe.fin):'—'}</div>
+  <div style="page-break-after:always"><h2>FICHE R1 — IDENTIFICATION ET RENSEIGNEMENTS DIVERS</h2>
+  <table><tr><th class="r">REF</th><th>Rubrique</th><th>Valeur</th></tr>
+  <tr><td class="r">ZA</td><td>Exercice comptable</td><td>${dfr(curEx().debut||'')} au ${dfr(curEx().fin||'')}</td></tr>
+  <tr><td class="r">ZB</td><td>Date d'arrêté des comptes</td><td>${dfr(curEx().fin||'')}</td></tr>
+  <tr><td class="r">ZC</td><td>Exercice précédent clos le</td><td>${pe?dfr(pe.fin):'—'}</td></tr>
+  <tr><td class="r">—</td><td>Désignation de l'entité</td><td><b>${s.nom}</b></td></tr>
+  <tr><td class="r">—</td><td>Sigle usuel</td><td>${s.sigle||'—'}</td></tr>
+  <tr><td class="r">ZL</td><td>Adresse géographique</td><td>${s.adresse||''}</td></tr>
+  <tr><td class="r">ZK</td><td>Téléphone</td><td>${s.tel||''}</td></tr>
+  <tr><td class="r">—</td><td>Adresse e-mail</td><td>${s.email||''}</td></tr>
+  <tr><td class="r">—</td><td>NCC</td><td><b>${s.ncc}</b></td></tr>
+  <tr><td class="r">—</td><td>RCCM</td><td>${s.rccm}</td></tr>
+  <tr><td class="r">—</td><td>Forme juridique</td><td>${s.forme||''}</td></tr>
+  <tr><td class="r">—</td><td>Régime fiscal</td><td>${s.regime||''}</td></tr>
+  <tr><td class="r">—</td><td>Dirigeant</td><td>${s.dirigeant||''}</td></tr>
+  <tr><td class="r">—</td><td>Banque / RIB</td><td>${s.banque||''} ${s.rib||''}</td></tr></table>
+  <h2>FICHE R2 — ACTIVITÉ DE L'ENTITÉ</h2><table><tr><th class="r">REF</th><th>Rubrique</th><th class="n">CA HT</th><th>%</th></tr>
+  <tr><td class="r">ZY</td><td>${s.secteur||'Activité principale'}</td><td class="n">${fm(N.ca)}</td><td>100 %</td></tr>
+  <tr class="st"><td class="r">—</td><td>TOTAL</td><td class="n">${fm(N.ca)}</td><td>100 %</td></tr></table>
+  <h2>FICHE R3 — DIRIGEANTS</h2><table><tr><th>Nom et prénoms</th><th>NCC</th><th>Qualité</th></tr>
+  <tr><td>${s.dirigeant||'—'}</td><td>${s.ncc||''}</td><td>${s.forme&&s.forme.includes('SA')?'Directeur Général':'Gérant'}</td></tr></table>
+  <h2>FICHE R4 — RÉCAPITULATIF NOTES ANNEXES</h2><table><tr><th>Note</th><th>Intitulé</th><th class="n">Statut</th></tr>
+  <tr><td>7</td><td>Clients</td><td class="n">${pv(mN,'41','d')?'A':'N/A'}</td></tr>
+  <tr><td>17</td><td>Fournisseurs d'exploitation</td><td class="n">${pv(mN,'40','c')?'A':'N/A'}</td></tr>
+  <tr><td>22</td><td>Achats</td><td class="n">${pv(mN,'60','d')?'A':'N/A'}</td></tr>
+  <tr><td>24</td><td>Services extérieurs</td><td class="n">${pv(mN,'62','d')?'A':'N/A'}</td></tr>
+  <tr><td>25</td><td>Impôts et taxes</td><td class="n">${pv(mN,'64','d')?'A':'N/A'}</td></tr>
+  <tr><td>27A</td><td>Charges de personnel</td><td class="n">${pv(mN,'66','d')?'A':'N/A'}</td></tr>
+  <tr><td>3A/3C</td><td>Immobilisations</td><td class="n">${(ST.immos||[]).length?'A':'N/A'}</td></tr>
+  <tr><td>13</td><td>Capital</td><td class="n">${pv(mN,'10','c')?'A':'N/A'}</td></tr>
+  <tr><td>14</td><td>Primes et réserves</td><td class="n">${pv(mN,'11','c')||pv(mN,'12','c')?'A':'N/A'}</td></tr></table></div>
+  <h2>BILAN — SYSTÈME NORMAL</h2>
+  <table><tr><th class="r">REF</th><th>ACTIF (net)</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('AD','Frais de développement et prospection','aFrais')}
+  ${L('AE','Brevets, licences, logiciels, droits similaires','aBrevet')}
+  ${L('AF','Fonds commercial et droit au bail','aFonds')}
+  ${L('AI','Terrains','aTerrain')}
+  ${L('AK','Bâtiments','aBatiment')}
+  ${L('AL','Aménagements, agencements et installations','aAmenag')}
+  ${L('AM','Matériel, mobilier et actifs biologiques','aMateriel')}
+  ${L('AN','Matériel de transport','aTransport')}
+  ${L('AR','Titres de participation','aTitres')}
+  ${L('AS','Autres immobilisations financières','aAutresFin')}
+  ${L('AZ','TOTAL ACTIF IMMOBILISÉ','immoNet',1)}
+  ${L('BA','Actif circulant HAO','circHAO')}
+  ${L('BB','Stocks et en-cours','stocks')}
+  ${L('BH','Clients','clients')}
+  ${L('BI','Autres créances','autresC')}
+  ${L('BK','TOTAL ACTIF CIRCULANT','circ',1)}
+  ${L('BQ','Titres de placement','titresP')}
+  ${L('BR','Valeurs à encaisser','valEnc')}
+  ${L('BS','Banques, chèques postaux, caisse','banques')}
+  ${L('BT','TOTAL TRÉSORERIE-ACTIF','treso',1)}
+  ${L('BU','Écart de conversion-Actif','ecartA')}
+  ${L('BZ','TOTAL GÉNÉRAL ACTIF','totalActif',1)}</table>
+  <table><tr><th class="r">REF</th><th>PASSIF</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('CA','Capital','capital')}
+  ${L('CG','Réserves et primes','reserves')}
+  ${L('CH','Report à nouveau (+/−)','ran')}
+  ${L('CJ','Résultat net de l exercice','resultat')}
+  ${L('CP','TOTAL CAPITAUX PROPRES','capPropres',1)}
+  ${L('DB','Dettes de location-acquisition','detLoc')}
+  ${L('DC','Provisions pour risques et charges','provRC')}
+  ${L('DD','Dettes financières et ressources assimilées','detFin',1)}
+  ${L('DF','TOTAL RESSOURCES STABLES','capPropres',0)}
+  ${L('DH','Dettes circulantes HAO','detHAO')}
+  ${L('DJ','Fournisseurs d exploitation','fourn')}
+  ${L('DK','Dettes fiscales et sociales','fisSoc')}
+  ${L('DM','Autres dettes','autresD')}
+  ${L('DP','TOTAL PASSIF CIRCULANT','passifCirc',1)}
+  ${L('DT','TRÉSORERIE-PASSIF','tresoP',1)}
+  ${L('DV','Écart de conversion-Passif','ecartP')}
+  ${L('DZ','TOTAL GÉNÉRAL PASSIF','totalPassif',1)}</table>
+  <h2>COMPTE DE RÉSULTAT — SYSTÈME NORMAL</h2>
+  <table><tr><th class="r">REF</th><th>LIBELLÉ</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${L('TA','Ventes de marchandises','ventesM')}
+  ${L('RA','Achats de marchandises','rAchM')}
+  ${L('RB','Variation stocks marchandises','rVarM')}
+  ${L('XA','MARGE COMMERCIALE','marge',1)}
+  ${L('TB','Ventes de produits fabriqués','tVentesPF')}
+  ${L('TC','Travaux, services vendus','tTravaux')}
+  ${L('TD','Produits accessoires','tAccess')}
+  ${L('XB','CHIFFRE D AFFAIRES','ca',1)}
+  ${L('TE','Production stockée','tProdStk')}
+  ${L('TF','Production immobilisée','tProdImm')}
+  ${L('TG','Subventions d exploitation','tSubv')}
+  ${L('TH','Autres produits','tAutresP')}
+  ${L('TI','Transferts de charges exploitation','tTransfE')}
+  ${L('RC','Achats matières premières','rAchMP')}
+  ${L('RD','Variation stocks MP','rVarMP')}
+  ${L('RE','Autres achats','rAutresAch')}
+  ${L('RF','Variation stocks autres appro','rVarAutres')}
+  ${L('RG','Transports','rTransport')}
+  ${L('RH','Services extérieurs','rServ')}
+  ${L('RI','Impôts et taxes','rImpots')}
+  ${L('RJ','Autres charges','rAutresCh')}
+  ${L('XC','VALEUR AJOUTÉE','va',1)}
+  ${L('RK','Charges de personnel','rPerso')}
+  ${L('XD','EXCÉDENT BRUT D EXPLOITATION','ebe',1)}
+  ${L('TJ','Reprises et transferts de charges','tReprises')}
+  ${L('RL','Dotations amortissements et provisions','rDot')}
+  ${L('XE','RÉSULTAT D EXPLOITATION','rexpl',1)}
+  ${L('TK','Revenus financiers','tRevFin')}
+  ${L('RM','Frais financiers','rFraisFin')}
+  ${L('XF','RÉSULTAT FINANCIER','rfin',1)}
+  ${L('XG','RÉSULTAT ACTIVITÉS ORDINAIRES','rao',1)}
+  ${L('TN','Produits HAO','tProdHAO')}
+  ${L('RP','Charges HAO','rChHAO')}
+  ${L('XH','RÉSULTAT HAO','rhao',1)}
+  ${L('RQ','Participation des travailleurs','rParticip')}
+  ${L('RS','Impôts sur le résultat','impot')}
+  ${L('XI','RÉSULTAT NET','net',1)}</table>
+  <h2>TABLEAU DES FLUX DE TRÉSORERIE (TFT)</h2>
+  <table><tr><th class="r">REF</th><th>LIBELLÉ</th><th class="n">N</th></tr>
+  <tr><td class="r">ZA</td><td>Trésorerie nette au 1er janvier</td><td class="n">${fm(t_ouv)}</td></tr>
+  <tr><td class="r">FA</td><td>Capacité d'autofinancement globale (CAFG)</td><td class="n">${fm(t_cafg)}</td></tr>
+  <tr><td class="r">FC</td><td>Variation des stocks</td><td class="n">${fm(t_vStock)}</td></tr>
+  <tr><td class="r">FD</td><td>Variation des créances</td><td class="n">${fm(t_vCreance)}</td></tr>
+  <tr><td class="r">FE</td><td>Variation du passif circulant</td><td class="n">${fm(t_vPassif)}</td></tr>
+  <tr class="st"><td class="r">ZB</td><td>Flux activités opérationnelles</td><td class="n">${fm(t_oper)}</td></tr>
+  <tr><td class="r">FF</td><td>Décaissements/encaissements d'investissement</td><td class="n">${fm(t_invest)}</td></tr>
+  <tr class="st"><td class="r">ZC</td><td>Flux activités d'investissement</td><td class="n">${fm(t_invest)}</td></tr>
+  <tr><td class="r">FK</td><td>Variation capitaux propres</td><td class="n">${fm(t_capital)}</td></tr>
+  <tr><td class="r">FO</td><td>Variation dettes financières</td><td class="n">${fm(t_detFin)}</td></tr>
+  <tr class="st"><td class="r">ZF</td><td>Flux activités de financement</td><td class="n">${fm(t_fin)}</td></tr>
+  <tr class="st"><td class="r">ZG</td><td>VARIATION TRÉSORERIE PÉRIODE</td><td class="n">${fm(t_periode)}</td></tr>
+  <tr class="st"><td class="r">ZH</td><td>Trésorerie nette au 31 décembre</td><td class="n">${fm(t_clot)}</td></tr>
+  </table>
+  <div style="font-size:10px">Contrôle TFT : trésorerie clôture ${fm(t_clot)} vs bilan ${fm(t_ctrl)}.</div>
+  <h2>NOTE 7 — CLIENTS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Clients','411','d')}${NR('Clients, effets à recevoir','412','d')}${NR('Clients douteux','416','d')}${NR('Clients, produits à recevoir','418','d')}
+  <tr class="st"><td>TOTAL CLIENTS</td><td class="n">${fm(pv(mN,'41','d'))}</td><td class="n">${fm(pv(mP,'41','d'))}</td></tr></table>
+  <h2>NOTE 17 — FOURNISSEURS D'EXPLOITATION</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Fournisseurs, dettes en compte','401','c')}${NR('Fournisseurs, effets à payer','402','c')}${NR('Fournisseurs, factures non parvenues','408','c')}
+  <tr class="st"><td>TOTAL FOURNISSEURS</td><td class="n">${fm(pv(mN,'40','c'))}</td><td class="n">${fm(pv(mP,'40','c'))}</td></tr></table>
+  <h2>NOTE 22 — ACHATS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Achats de marchandises','601','d')}${NR('Achats de matières premières','602','d')}${NR('Matières et fournitures','604','d')}${NR('Fournitures non stockables (eau, électricité)','605','d')}${NR('Achats d\'emballages','608','d')}
+  <tr class="st"><td>TOTAL ACHATS</td><td class="n">${fm(pv(mN,'60','d'))}</td><td class="n">${fm(pv(mP,'60','d'))}</td></tr></table>
+  <h2>NOTE 24 — SERVICES EXTÉRIEURS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Sous-traitance','621','d')}${NR('Locations et charges locatives','622','d')}${NR('Entretien, réparations','624','d')}${NR('Primes d\'assurance','625','d')}${NR('Publicité, relations publiques','627','d')}${NR('Frais de télécommunications','628','d')}
+  <tr class="st"><td>TOTAL SERVICES EXTÉRIEURS</td><td class="n">${fm(pv(mN,'62','d'))}</td><td class="n">${fm(pv(mP,'62','d'))}</td></tr></table>
+  <h2>NOTE 25 — IMPÔTS ET TAXES</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Impôts et taxes directs','641','d')}${NR('Impôts et taxes indirects','645','d')}${NR('Droits d\'enregistrement','646','d')}
+  <tr class="st"><td>TOTAL IMPÔTS ET TAXES</td><td class="n">${fm(pv(mN,'64','d'))}</td><td class="n">${fm(pv(mP,'64','d'))}</td></tr></table>
+  <h2>NOTE 27A — CHARGES DE PERSONNEL</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Rémunérations directes','661','d')}${NR('Indemnités forfaitaires','663','d')}${NR('Charges sociales','664','d')}
+  <tr class="st"><td>TOTAL CHARGES PERSONNEL</td><td class="n">${fm(pv(mN,'66','d'))}</td><td class="n">${fm(pv(mP,'66','d'))}</td></tr></table>
+  <h2>NOTE 3A — IMMOBILISATIONS (BRUTES)</h2><table><tr><th>Rubrique</th><th class="n">Brut ouverture</th><th class="n">Acquisitions</th><th class="n">Brut clôture</th></tr>
+  ${r3a||'<tr><td colspan=4 style="text-align:center">Aucune immobilisation</td></tr>'}
+  <tr class="st"><td>TOTAL GÉNÉRAL</td><td class="n">${fm(b3aO)}</td><td class="n">${fm(b3aA)}</td><td class="n">${fm(b3aC)}</td></tr></table>
+  <h2>NOTE 3C — IMMOBILISATIONS (AMORTISSEMENTS)</h2><table><tr><th>Rubrique</th><th class="n">Cumul ouverture</th><th class="n">Dotation exercice</th><th class="n">Cumul clôture</th></tr>
+  ${r3c||'<tr><td colspan=4 style="text-align:center">Aucune immobilisation</td></tr>'}
+  <tr class="st"><td>TOTAL GÉNÉRAL</td><td class="n">${fm(c3O)}</td><td class="n">${fm(c3D)}</td><td class="n">${fm(c3C)}</td></tr></table>
+  <h2>NOTE 13 — CAPITAL</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Capital social','101','c')}${NR('Capital par dotation','102','c')}${NR('Primes liées au capital','105','c')}
+  <tr class="st"><td>TOTAL CAPITAL</td><td class="n">${fm(pv(mN,'10','c'))}</td><td class="n">${fm(pv(mP,'10','c'))}</td></tr></table>
+  <h2>NOTE 14 — PRIMES ET RÉSERVES</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Réserves indisponibles','111','c')}${NR('Réserves libres','118','c')}${NR('Report à nouveau','12','c')}
+  <tr class="st"><td>TOTAL PRIMES ET RÉSERVES</td><td class="n">${fm(pv(mN,'11','c')+pv(mN,'12','c'))}</td><td class="n">${fm(pv(mP,'11','c')+pv(mP,'12','c'))}</td></tr></table>
+  <h2>NOTE 11 — DISPONIBILITÉS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Banques locales','52','d')}${NR('Chèques postaux','53','d')}${NR('Autres établissements financiers','54','d')}${NR('Caisse','57','d')}${NR('Caisse électronique / mobile','58','d')}
+  <tr class="st"><td>TOTAL DISPONIBILITÉS</td><td class="n">${fm(pv(mN,'52','d')+pv(mN,'53','d')+pv(mN,'54','d')+pv(mN,'57','d')+pv(mN,'58','d'))}</td><td class="n">${fm(pv(mP,'52','d')+pv(mP,'53','d')+pv(mP,'54','d')+pv(mP,'57','d')+pv(mP,'58','d'))}</td></tr></table>
+  <h2>NOTE 18 — DETTES FISCALES ET SOCIALES</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('État, TVA due','4441','c')}${NR('État, impôts sur le résultat','444','c')}${NR('État, retenues à la source','447','c')}${NR('Organismes sociaux (CNPS)','43','c')}${NR('Personnel','42','c')}
+  <tr class="st"><td>TOTAL DETTES FISCALES ET SOCIALES</td><td class="n">${fm(pv(mN,'42','c')+pv(mN,'43','c')+pv(mN,'44','c'))}</td><td class="n">${fm(pv(mP,'42','c')+pv(mP,'43','c')+pv(mP,'44','c'))}</td></tr></table>
+  <h2>NOTE 8 — STOCKS ET EN-COURS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Marchandises','31','d')}${NR('Matières premières et fournitures liées','32','d')}${NR('Autres approvisionnements','33','d')}${NR('En-cours','34','d')}${NR('Produits fabriqués','36','d')}
+  <tr class="st"><td>TOTAL STOCKS</td><td class="n">${fm(pv(mN,'3','d'))}</td><td class="n">${fm(pv(mP,'3','d'))}</td></tr></table>
+  <h2>NOTE 16 — DETTES FINANCIÈRES ET RESSOURCES ASSIMILÉES</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Emprunts obligataires','161','c')}${NR('Emprunts établissements de crédit','162','c')}${NR('Dettes de location-acquisition','173','c')}${NR('Autres dettes financières','165','c')}${NR('Provisions financières risques et charges','19','c')}
+  <tr class="st"><td>TOTAL DETTES FINANCIÈRES</td><td class="n">${fm(pv(mN,'16','c')+pv(mN,'17','c')+pv(mN,'18','c')+pv(mN,'19','c'))}</td><td class="n">${fm(pv(mP,'16','c')+pv(mP,'17','c')+pv(mP,'18','c')+pv(mP,'19','c'))}</td></tr></table>
+  <h2>NOTE 21 — CHIFFRE D'AFFAIRES ET AUTRES PRODUITS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Ventes de marchandises','701','c')}${NR('Ventes de produits fabriqués','702','c')}${NR('Travaux et services vendus','704','c')}${NR('Produits accessoires','707','c')}${NR('Subventions d exploitation','71','c')}${NR('Autres produits','75','c')}${NR('Revenus financiers','77','c')}
+  <tr class="st"><td>TOTAL PRODUITS</td><td class="n">${fm(pv(mN,'70','c')+pv(mN,'71','c')+pv(mN,'75','c')+pv(mN,'77','c'))}</td><td class="n">${fm(pv(mP,'70','c')+pv(mP,'71','c')+pv(mP,'75','c')+pv(mP,'77','c'))}</td></tr></table>
+  <h2>NOTE 23 — TRANSPORTS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Transports sur ventes','612','d')}${NR('Transports pour compte de tiers','613','d')}${NR('Transport du personnel','614','d')}${NR('Voyages et déplacements','618','d')}
+  <tr class="st"><td>TOTAL TRANSPORTS</td><td class="n">${fm(pv(mN,'61','d'))}</td><td class="n">${fm(pv(mP,'61','d'))}</td></tr></table>
+  <h2>NOTE 3B — BIENS PRIS EN LOCATION-ACQUISITION</h2><table><tr><th>Rubrique</th><th class="n">Brut ouverture</th><th class="n">Acquisitions</th><th class="n">Brut clôture</th></tr>
+  <tr><td>Immobilisations en location-acquisition (232/237)</td><td class="n">${fm(pv(mP,'232','d'))}</td><td class="n">0</td><td class="n">${fm(pv(mN,'232','d')+pv(mN,'237','d'))}</td></tr></table>
+  <h2>NOTE 3D — PLUS ET MOINS-VALUES DE CESSION</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Produits des cessions d immobilisations','82','c')}${NR('Valeurs comptables des cessions','81','d')}
+  <tr class="st"><td>RÉSULTAT SUR CESSIONS</td><td class="n">${fm(pv(mN,'82','c')-pv(mN,'81','d'))}</td><td class="n">${fm(pv(mP,'82','c')-pv(mP,'81','d'))}</td></tr></table>
+  <h2>NOTE 12 — DÉPRÉCIATIONS ET PROVISIONS</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Dépréciations immobilisations','29','c')}${NR('Dépréciations stocks','39','c')}${NR('Dépréciations créances','49','c')}${NR('Dépréciations trésorerie','59','c')}
+  <tr class="st"><td>TOTAL DÉPRÉCIATIONS</td><td class="n">${fm(pv(mN,'29','c')+pv(mN,'39','c')+pv(mN,'49','c')+pv(mN,'59','c'))}</td><td class="n">${fm(pv(mP,'29','c')+pv(mP,'39','c')+pv(mP,'49','c')+pv(mP,'59','c'))}</td></tr></table>
+  <h2>NOTE 19 — AUTRES DETTES ET PROVISIONS COURT TERME</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Dettes sur acquisitions immobilisations','481','c')}${NR('Créditeurs divers','47','c')}${NR('Produits constatés d avance','477','c')}${NR('Provisions risques court terme','499','c')}
+  <tr class="st"><td>TOTAL AUTRES DETTES</td><td class="n">${fm(pv(mN,'47','c')+pv(mN,'481','c'))}</td><td class="n">${fm(pv(mP,'47','c')+pv(mP,'481','c'))}</td></tr></table>
+  <h2>NOTE 27B — EFFECTIFS ET MASSE SALARIALE</h2><table><tr><th>Libellé</th><th class="n">N</th><th class="n">N-1</th></tr>
+  ${NR('Masse salariale (charges personnel)','66','d')}
+  <tr><td>Effectif déclaré</td><td class="n">${(ST.employes||[]).length||'—'}</td><td class="n">—</td></tr>
+  <tr class="st"><td>TOTAL MASSE SALARIALE</td><td class="n">${fm(pv(mN,'66','d'))}</td><td class="n">${fm(pv(mP,'66','d'))}</td></tr></table>
+  <div style="font-size:10px;text-align:center;margin-top:14px">— FIN DE LA LIASSE — ${s.nom} — Exercice clos ${dfr(curEx().fin||'')} —</div>
+  <div style="font-size:10px">Contrôle Actif=Passif N : ${fm(N.totalActif)} / ${fm(N.totalPassif)}. Postes agrégés. Notes détaillées : ventilation 4 chiffres requise.</div>
+  <button class="np" onclick="window.print()" style="margin-top:10px;padding:8px 16px">Imprimer</button>
+  </body></html>`);
+  w.document.close();
+}
+async function printLiasseNorm_OLD(){
   const s=await societe();const m=soldesParCompte();
   const p=(pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(pre.some(pp=>c.startsWith(pp)))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
   const fm=v=>Math.round(v||0).toLocaleString('fr-FR').replace(/\u202f/g,' ');
@@ -2697,7 +3034,7 @@ async function printLiasseNorm(){
   w.document.close();
 }
 RENDER.liasse=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="printLiasseNorm()">🖨 Bilan + Résultat normalisés</button> <button class="btn sm gh" onclick="exportLiassePDF()">⭳ Liasse PDF</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="printLiasseNorm()">🖨 Bilan + Résultat normalisés</button> <button class="btn sm gh" onclick="exportLiasseXLS()">⭳ Excel DGIci</button> <button class="btn sm gh" onclick="exportLiassePDF()">⭳ Liasse PDF</button>`;
   const m=soldesParCompte();
   const cl=(c,sens)=>{let s=0;for(const n in m)if(n[0]===c)s+=sens==='c'?m[n].credit-m[n].debit:m[n].debit-m[n].credit;return s;};
   const produits=cl('7','c'),charges=cl('6','d'),resultat=produits-charges;
@@ -2754,6 +3091,34 @@ function sigCard(m){
   ${row('Impôt sur le résultat (89)',-impot)}
   ${row('RÉSULTAT NET',net,1)}
   </tbody></table></div></div>`;
+}
+async function exportLiasseXLS(){
+  const s=await societe();const pe=prevEx();
+  const mN=soldesParCompte();const mP=pe?await soldesForEx(pe.id):{};
+  const p=(m,pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(pre.some(q=>c.startsWith(q)))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
+  const R=(m)=>{const immo=p(m,['20','21','22','23','24','26','27'],'d')-p(m,['28','29'],'c');
+    const stk=p(m,['3'],'d'),cli=p(m,['41'],'d'),acr=p(m,['42','43','44','45','46','47','48'],'d')-p(m,['49'],'c');
+    const tre=p(m,['50','51','52','53','54','57','58'],'d')-p(m,['59'],'c');const ta=immo+stk+cli+acr+tre;
+    const res=p(m,['7'],'c')-p(m,['6'],'d'),cap=p(m,['10'],'c'),rsv=p(m,['11','14','15'],'c'),ran=p(m,['12'],'c'),cp=cap+rsv+ran+res;
+    const df=p(m,['16','17','18'],'c'),fo=p(m,['40'],'c'),fs=p(m,['42','43','44'],'c'),ad=p(m,['45','46','47','48','419'],'c'),tp=p(m,['561','564','565'],'c');
+    const ca=p(m,['70'],'c'),marge=p(m,['701'],'c')-p(m,['601'],'d'),conso=p(m,['602','604','605','606','608','61','62'],'d');
+    const va=marge+(ca-p(m,['701'],'c'))+p(m,['73','72'],'c')-conso,ebe=va+p(m,['71'],'c')-p(m,['64'],'d')-p(m,['66'],'d');
+    const rex=ebe+p(m,['75','78','79'],'c')-p(m,['65'],'d')-p(m,['68'],'d'),rfi=p(m,['77'],'c')-p(m,['67'],'d');
+    return {immo,stk,cli,acr,tre,ta,res,cap,rsv,ran,cp,df,fo,fs,ad,tp,tot:cp+df+fo+fs+ad+tp,ca,marge,va,ebe,rex,rfi,rao:rex+rfi,net:res};};
+  const N=R(mN),P=R(mP);
+  const row=(ref,lib,kN,kP)=>`<tr><td>${ref}</td><td>${lib}</td><td>${Math.round(kN)}</td><td>${Math.round(kP)}</td></tr>`;
+  const xls=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body>
+  <table border=1><tr><td colspan=4><b>${s.nom} — NCC ${s.ncc} — Exercice ${dfr(curEx().fin||'')}</b></td></tr>
+  <tr><th>REF</th><th>ACTIF</th><th>N</th><th>N-1</th></tr>
+  ${row('AZ','Total actif immobilisé',N.immo,P.immo)}${row('BB','Stocks',N.stk,P.stk)}${row('BH','Clients',N.cli,P.cli)}${row('BI','Autres créances',N.acr,P.acr)}${row('BT','Trésorerie-actif',N.tre,P.tre)}${row('BZ','TOTAL ACTIF',N.ta,P.ta)}
+  <tr><th>REF</th><th>PASSIF</th><th>N</th><th>N-1</th></tr>
+  ${row('CA','Capital',N.cap,P.cap)}${row('CG','Réserves',N.rsv,P.rsv)}${row('CH','Report à nouveau',N.ran,P.ran)}${row('CJ','Résultat net',N.res,P.res)}${row('CP','Total capitaux propres',N.cp,P.cp)}${row('DD','Dettes financières',N.df,P.df)}${row('DJ','Fournisseurs',N.fo,P.fo)}${row('DK','Dettes fiscales sociales',N.fs,P.fs)}${row('DM','Autres dettes',N.ad,P.ad)}${row('DZ','TOTAL PASSIF',N.tot,P.tot)}
+  <tr><th>REF</th><th>COMPTE DE RÉSULTAT</th><th>N</th><th>N-1</th></tr>
+  ${row('XA','Marge commerciale',N.marge,P.marge)}${row('XB','Chiffre d affaires',N.ca,P.ca)}${row('XC','Valeur ajoutée',N.va,P.va)}${row('XD','EBE',N.ebe,P.ebe)}${row('XE','Résultat exploitation',N.rex,P.rex)}${row('XF','Résultat financier',N.rfi,P.rfi)}${row('XG','Résultat activités ordinaires',N.rao,P.rao)}${row('XI','RÉSULTAT NET',N.net,P.net)}
+  </table></body></html>`;
+  const blob=new Blob([xls],{type:'application/vnd.ms-excel'});const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);a.download='Liasse_'+(s.nom||'entite').replace(/[^a-zA-Z0-9]/g,'_')+'_'+(curEx().fin||'').slice(0,4)+'.xls';a.click();
+  toast('Export Excel généré.');
 }
 async function exportLiassePDF(){
   toast('Génération de la liasse…');
