@@ -1697,6 +1697,7 @@ async function editAchat(id){
         <div><label>N° pièce fournisseur</label><input id="aPiece" value="${a?(a.piece||''):''}" placeholder="Facture n°"></div>
       </div>
       <div class="frow c3"><div><label>Date</label><input type="date" id="aDate" value="${a?a.date:today()}"></div><div><label>Échéance</label><input type="date" id="aEch" value="${a?(a.echeance||''):''}"></div><div><label>Nature (TVA)</label><select id="aNat"><option value="bien" ${!a||a.nature==='bien'?'selected':''}>Bien / marchandise → 4452</option><option value="service" ${a&&a.nature==='service'?'selected':''}>Service → 4453 (exig. paiement)</option><option value="immo" ${a&&a.nature==='immo'?'selected':''}>Immobilisation → 4451</option></select></div></div>
+      <div class="frow c2"><div><label>Retenue à la source</label><select id="aRas"><option value="0">Aucune</option><option value="7.5" ${a&&a.rasRate==7.5?'selected':''}>BNC / prestation 7,5%</option><option value="12" ${a&&a.rasRate==12?'selected':''}>Loyer (IRF) 12%</option><option value="10" ${a&&a.rasRate==10?'selected':''}>Autre 10%</option></select></div><div><label>Base retenue</label><select id="aRasB"><option value="ht" ${!a||a.rasBase!=='ttc'?'selected':''}>HT</option><option value="ttc" ${a&&a.rasBase==='ttc'?'selected':''}>TTC</option></select></div></div>
       <div class="tbl-wrap"><table class="lines"><thead><tr><th>Désignation</th><th style="width:150px">Compte charge</th><th style="width:130px">Montant HT</th><th style="width:70px">TVA%</th><th style="width:34px"></th></tr></thead><tbody id="alBody"></tbody></table></div>
       <div style="margin-top:8px"><button class="btn sm gh" onclick="addALine()">+ Ligne</button></div>
       <div class="balbar" style="flex-direction:column;align-items:flex-end;gap:4px">
@@ -2605,8 +2606,98 @@ function dlPiece(id){const p=ST.pieces.find(x=>x.id===id);const a=document.creat
 async function delPiece(id){if(!confirm('Supprimer cette pièce ?'))return;await del('pieces',id);await loadAll();RENDER.ged();toast('Pièce supprimée.');}
 
 /* ---- Liasse fiscale ---- */
+async function printLiasseNorm(){
+  const s=await societe();const m=soldesParCompte();
+  const p=(pre,sens)=>{let x=0;for(const n in m){const c=String(n);if(pre.some(pp=>c.startsWith(pp)))x+=sens==='c'?(m[n].credit-m[n].debit):(m[n].debit-m[n].credit);}return x;};
+  const fm=v=>Math.round(v||0).toLocaleString('fr-FR').replace(/\u202f/g,' ');
+  // ACTIF net
+  const incorp=p(['20','21'],'d'), corp=p(['22','23','24'],'d')+p(['245'],'d'), fin=p(['26','27'],'d');
+  const amortInc=p(['280','281','290','291'],'c'), amortCorp=p(['282','283','284','292','293','294'],'c');
+  const immoNet=incorp+corp+fin-amortInc-amortCorp;
+  const stocks=p(['3'],'d'), clients=p(['41'],'d'), autresC=p(['42','43','44','45','46','47','48'],'d');
+  const circ=stocks+clients+autresC;
+  const treso=p(['50','51','52','53','54','57','58'],'d')-p(['59'],'c');
+  const totalActif=immoNet+circ+treso;
+  // PASSIF
+  const produits=p(['7'],'c'), charges=p(['6'],'d'), resultat=produits-charges;
+  const capital=p(['10'],'c'), reserves=p(['11','14','15'],'c'), ran=p(['12'],'c');
+  const capPropres=capital+reserves+ran+resultat;
+  const detFin=p(['16','17','18'],'c');
+  const fourn=p(['40'],'c'), fisSoc=p(['42','43','44'],'c'), autresD=p(['45','46','47','48','419'],'c');
+  const passifCirc=fourn+fisSoc+autresD;
+  const tresoP=p(['561','564','565','52'],'c');
+  const totalPassif=capPropres+detFin+passifCirc+tresoP;
+  // COMPTE DE RÉSULTAT (SIG)
+  const ventesM=p(['701'],'c'),achatsM=p(['601'],'d')+p(['6031'],'d'),marge=ventesM-achatsM;
+  const ca=p(['70'],'c'),prodStk=p(['73'],'c'),prodImm=p(['72'],'c');
+  const conso=p(['602','604','605','606','608','61','62'],'d');
+  const va=marge+(ca-ventesM)+prodStk+prodImm-conso;
+  const ebe=va+p(['71'],'c')-p(['64'],'d')-p(['66'],'d');
+  const rexpl=ebe+p(['75','78','79'],'c')-p(['65'],'d')-p(['68'],'d');
+  const rfin=p(['77'],'c')-p(['67'],'d');
+  const rao=rexpl+rfin;
+  const rhao=p(['82','84','86','88'],'c')-p(['81','83','85','87'],'d');
+  const impot=p(['89'],'d');const net=rao+rhao-impot;
+  const L=(ref,lib,val,strong)=>`<tr class="${strong?'st':''}"><td class="r">${ref}</td><td>${lib}</td><td class="n">${fm(val)}</td></tr>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>Liasse ${s.nom}</title><style>
+  body{font-family:Arial,sans-serif;font-size:11px;color:#000;margin:18px}
+  h2{text-align:center;font-size:14px;margin:4px 0}.sub{text-align:center;font-size:11px;margin-bottom:10px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}td,th{border:1px solid #000;padding:3px 6px}
+  th{background:#eee;text-align:left}.r{width:38px;font-weight:bold;text-align:center}.n{text-align:right;font-family:monospace;width:130px}
+  .st td{font-weight:bold;background:#f4f4f4}.hd{font-weight:bold}.mono{font-family:monospace}
+  .id{border:1px solid #000;padding:6px;margin-bottom:12px;font-size:11px}@media print{.np{display:none}}</style></head><body>
+  <div style="text-align:center;font-weight:bold">RÉPUBLIQUE DE CÔTE D'IVOIRE — DGI</div>
+  <div class="sub">États financiers normalisés — Système comptable OHADA (SYSCOHADA)</div>
+  <div class="id"><b>${s.nom}</b> — Sigle : ${s.sigle||'—'}<br>NCC : ${s.ncc} · RCCM : ${s.rccm}<br>Adresse : ${s.adresse}<br>Exercice clos le : ${dfr(curEx().fin||'')} · Durée : 12 mois</div>
+  <h2>BILAN — SYSTÈME NORMAL</h2>
+  <table><tr><th class="r">REF</th><th>ACTIF (net)</th><th class="n">Montant N</th></tr>
+  ${L('AX','Immobilisations incorporelles',incorp-amortInc)}
+  ${L('AX','Immobilisations corporelles',corp-amortCorp)}
+  ${L('AX','Immobilisations financières',fin)}
+  ${L('AZ','TOTAL ACTIF IMMOBILISÉ',immoNet,1)}
+  ${L('BB','Stocks et en-cours',stocks)}
+  ${L('BH','Clients',clients)}
+  ${L('BI','Autres créances',autresC)}
+  ${L('BK','TOTAL ACTIF CIRCULANT',circ,1)}
+  ${L('BT','TOTAL TRÉSORERIE-ACTIF',treso,1)}
+  ${L('BZ','TOTAL GÉNÉRAL ACTIF',totalActif,1)}
+  </table>
+  <table><tr><th class="r">REF</th><th>PASSIF</th><th class="n">Montant N</th></tr>
+  ${L('CA','Capital',capital)}
+  ${L('CG','Réserves / primes',reserves)}
+  ${L('CH','Report à nouveau',ran)}
+  ${L('CJ','Résultat net de l\'exercice',resultat)}
+  ${L('CP','TOTAL CAPITAUX PROPRES',capPropres,1)}
+  ${L('DD','Dettes financières',detFin,1)}
+  ${L('DF','TOTAL RESSOURCES STABLES',capPropres+detFin,1)}
+  ${L('DJ','Fournisseurs d\'exploitation',fourn)}
+  ${L('DK','Dettes fiscales et sociales',fisSoc)}
+  ${L('DM','Autres dettes',autresD)}
+  ${L('DP','TOTAL PASSIF CIRCULANT',passifCirc,1)}
+  ${L('DT','TRÉSORERIE-PASSIF',tresoP,1)}
+  ${L('DZ','TOTAL GÉNÉRAL PASSIF',totalPassif,1)}
+  </table>
+  <h2>COMPTE DE RÉSULTAT — SYSTÈME NORMAL</h2>
+  <table><tr><th class="r">REF</th><th>LIBELLÉ</th><th class="n">Montant N</th></tr>
+  ${L('XA','Marge commerciale',marge,1)}
+  ${L('XB','Chiffre d\'affaires',ca)}
+  ${L('XC','Valeur ajoutée',va,1)}
+  ${L('XD','Excédent brut d\'exploitation',ebe,1)}
+  ${L('XE','Résultat d\'exploitation',rexpl,1)}
+  ${L('XF','Résultat financier',rfin)}
+  ${L('XG','Résultat des activités ordinaires',rao,1)}
+  ${L('XH','Résultat HAO',rhao)}
+  ${L('','Impôts sur le résultat',-impot)}
+  ${L('XI','RÉSULTAT NET',net,1)}
+  </table>
+  <div style="font-size:10px;margin-top:8px">Postes agrégés (grands totaux). Notes annexes détaillées, TFT et états DGI : ventilation 4 chiffres requise. Contrôle équilibre Actif=Passif : ${fm(totalActif)} vs ${fm(totalPassif)}.</div>
+  <button class="np" onclick="window.print()" style="margin-top:10px;padding:8px 16px">Imprimer</button>
+  </body></html>`);
+  w.document.close();
+}
 RENDER.liasse=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="exportLiassePDF()">⭳ Générer la liasse PDF</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="printLiasseNorm()">🖨 Bilan + Résultat normalisés</button> <button class="btn sm gh" onclick="exportLiassePDF()">⭳ Liasse PDF</button>`;
   const m=soldesParCompte();
   const cl=(c,sens)=>{let s=0;for(const n in m)if(n[0]===c)s+=sens==='c'?m[n].credit-m[n].debit:m[n].debit-m[n].credit;return s;};
   const produits=cl('7','c'),charges=cl('6','d'),resultat=produits-charges;
