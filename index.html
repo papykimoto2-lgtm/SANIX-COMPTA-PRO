@@ -528,6 +528,28 @@ const PLAN=[
   // Classe 7 — produits
   ['701','Ventes de marchandises','R'],['702','Ventes de produits finis','R'],['706','Services vendus','R'],
   ['707','Produits accessoires','R'],['771','Produits financiers','R'],['775','Produits de cessions','R'],
+  // --- Complément SYSCOHADA (alimentation liasse complète) ---
+  ['105','Primes liées au capital','P'],['111','Réserve légale','P'],['118','Autres réserves','P'],['119','Report à nouveau débiteur','A'],
+  ['141','Subventions d\'investissement','P'],['151','Provisions réglementées','P'],
+  ['161','Emprunts obligataires','P'],['166','Intérêts courus','P'],['173','Dettes de location-acquisition','P'],['181','Dettes liées à des participations','P'],['191','Provisions pour risques et charges','P'],
+  ['201','Frais de développement','A'],['215','Fonds commercial','A'],['218','Autres immobilisations corporelles','A'],
+  ['231','Bâtiments industriels','A'],['234','Aménagements et installations','A'],['261','Titres de participation','A'],['271','Prêts et créances immobilisés','A'],
+  ['2844','Amort. matériel et outillage','A'],['2845','Amort. matériel de transport','A'],['291','Déprec. immobilisations','A'],
+  ['361','Produits finis','A'],['381','Marchandises en cours de route','A'],['391','Déprec. stocks','A'],
+  ['408','Fournisseurs, factures non parvenues','P'],['416','Clients douteux','A'],['418','Clients, produits à recevoir','A'],
+  ['4453','TVA en attente (services)','A'],['4449','État, crédit de TVA à reporter','A'],['444','État, impôt sur le résultat','P'],
+  ['445','État, TVA récupérable sur immobilisations','A'],['4451','TVA récupérable sur immobilisations','A'],
+  ['477','Produits constatés d\'avance','P'],['478','Écart de conversion-Actif','A'],['479','Écart de conversion-Passif','P'],
+  ['481','Fournisseurs d\'investissement','P'],['485','Créances sur cessions d\'immobilisations','A'],['499','Provisions pour risques à court terme','P'],
+  ['501','Titres de placement','A'],['511','Valeurs à encaisser','A'],['531b','Effets à encaisser','A'],['561','Crédits de trésorerie','P'],['565','Escompte de crédits ordinaires','P'],['591','Déprec. titres de placement','A'],
+  ['603','Variation stocks marchandises','C'],['604','Achats stockés matières','C'],['606','Achats non stockés','C'],['608','Achats d\'emballages','C'],
+  ['612','Transports sur ventes','C'],['621','Sous-traitance','C'],['628','Frais de télécommunications','C'],['632','Rémunérations d\'intermédiaires','C'],['633','Frais de formation','C'],
+  ['645','Impôts et taxes indirects','C'],['646','Droits d\'enregistrement','C'],['651','Pertes sur créances','C'],['658','Charges diverses','C'],
+  ['663','Indemnités et avantages','C'],['671','Intérêts des emprunts','C'],['674','Autres intérêts','C'],['691','Dotations aux provisions','C'],
+  ['703','Ventes en l\'état','R'],['704','Travaux facturés','R'],['705','Études et prestations','R'],['713','Variation stocks produits','R'],['721','Production immobilisée','R'],
+  ['711','Subventions d\'exploitation','R'],['758','Produits divers','R'],['781','Transferts de charges','R'],['791','Reprises de provisions','R'],
+  ['812','Valeurs comptables cessions courantes','C'],['822','Produits cessions courantes','R'],['848','Autres produits HAO','R'],['858','Autres charges HAO','C'],
+  ['871','Participation des travailleurs','C'],['891','Impôts sur le résultat','C'],
 ];
 const CLASS_LABEL={'1':'Ressources durables','2':'Actif immobilisé','3':'Stocks','4':'Tiers','5':'Trésorerie','6':'Charges','7':'Produits','8':'Autres'};
 
@@ -638,8 +660,9 @@ async function doLogin(){
 }
 function logout(){location.reload();}
 
+async function ensurePlan(){for(const[num,lib,t]of PLAN){if(!ST.comptes.some(c=>c.numero===num))await put('comptes',{id:'c_'+num,numero:num,libelle:lib,type:t,classe:num[0]});}}
 async function boot(){
-  await idb();await seed();await seedUsers();await loadAll();
+  await idb();await seed();await seedUsers();await loadAll();await ensurePlan();await loadAll();
   document.getElementById('who').textContent=ST.user.login+' · '+ST.user.role;
   document.getElementById('exLabel').textContent=curEx().libelle||'—';
   // masquer Paramétrage hors admin
@@ -2776,6 +2799,21 @@ async function printLiasseNorm(){
   <tr><td>3A/3C</td><td>Immobilisations</td><td class="n">${(ST.immos||[]).length?'A':'N/A'}</td></tr>
   <tr><td>13</td><td>Capital</td><td class="n">${pv(mN,'10','c')?'A':'N/A'}</td></tr>
   <tr><td>14</td><td>Primes et réserves</td><td class="n">${pv(mN,'11','c')||pv(mN,'12','c')?'A':'N/A'}</td></tr></table></div>
+  <div style="page-break-after:always"><h2>NOTE 2 — INFORMATIONS OBLIGATOIRES</h2>
+  <div style="font-size:11px;line-height:1.6;text-align:justify">
+  <b>A — Déclaration de conformité au SYSCOHADA.</b> L'entité tient sa comptabilité suivant l'Acte uniforme OHADA révisé par le Règlement N°003/2016 du 20 décembre 2016 portant adoption d'un référentiel comptable commun. Le système normal est appliqué. Comptabilité tenue chronologiquement par date sur système informatique permettant d'éditer journaux, grand-livre et balance. Pièces numérotées. Principes respectés : prudence, transparence, importance significative, intangibilité du bilan, coût historique, continuité de l'exploitation, permanence des méthodes, spécialisation des exercices. Comptabilité tenue en français et en francs CFA.<br><br>
+  <b>B — Règles et méthodes comptables.</b><br>
+  <b>B.1 Immobilisations.</b> Évaluées au coût d'acquisition (prix d'achat + frais accessoires) ou au coût de production, après déduction des rabais, remises et escomptes.<br>
+  <b>B.2 Amortissements et dépréciations.</b> Amortissement mesuré par la consommation des avantages économiques attendus. Dépréciation constatée si valeur actuelle inférieure à la valeur nette comptable.<br>
+  <b>B.3 Stocks.</b> Coût comprenant acquisition, transformation et autres coûts. Valeur brute des fongibles selon dernier prix d'achat (rotation rapide). Provision si valeur de réalisation inférieure.<br>
+  <b>B.4 Créances.</b> Évaluées à leur valeur nominale. Provision selon risque de non-recouvrement.<br><br>
+  <b>C — Dérogations.</b> Aucune dérogation aux postulats et conventions comptables.<br>
+  <b>D — Informations complémentaires.</b> Voir bilan, compte de résultat, tableau des flux et notes annexes ci-après.
+  </div></div>
+  <div style="page-break-after:always"><h2>CONDITIONS DE RECEVABILITÉ</h2>
+  <div style="font-size:11px;line-height:1.7">
+  Reproduire à l'identique la contexture des imprimés normalisés. Fournir une liasse comprenant la fiche d'identification et les états financiers correspondant au système comptable. Ne créer aucune rubrique. N'utiliser que les codes indiqués dans les tables. États en noir et blanc. Rubriques et postes non chiffrés du Bilan, du Compte de résultat et du Tableau des flux de trésorerie non supprimés. Notes annexes non chiffrées supprimées. Chiffres exprimés en francs CFA.
+  </div></div>
   <h2>BILAN — SYSTÈME NORMAL</h2>
   <table><tr><th class="r">REF</th><th>ACTIF (net)</th><th class="n">N</th><th class="n">N-1</th></tr>
   ${L('AD','Frais de développement et prospection','aFrais')}
@@ -2938,6 +2976,10 @@ async function printLiasseNorm(){
   <tr><td>Effectif déclaré</td><td class="n">${(ST.employes||[]).length||'—'}</td><td class="n">—</td></tr>
   <tr class="st"><td>TOTAL MASSE SALARIALE</td><td class="n">${fm(pv(mN,'66','d'))}</td><td class="n">${fm(pv(mP,'66','d'))}</td></tr></table>
   <div style="font-size:10px;text-align:center;margin-top:14px">— FIN DE LA LIASSE — ${s.nom} — Exercice clos ${dfr(curEx().fin||'')} —</div>
+  <table style="margin-top:20px"><tr><th style="width:50%">États financiers signés par</th><th>Attestation de visa (Expert-comptable)</th></tr>
+  <tr><td style="height:90px;vertical-align:top">Nom : ${s.dirigeant||'—'}<br>Qualité : ${s.forme&&s.forme.includes('SA')?'Directeur Général':'Gérant'}<br>Date : ${dfr(curEx().fin||'')}<br><br>Signature :</td>
+  <td style="vertical-align:top">Nom, cabinet et n° Ordre des Experts-Comptables :<br><br>Date de signature :<br><br>Cachet et signature :</td></tr></table>
+  <div style="font-size:9px;text-align:center;margin-top:8px">Document généré par SANIX ComptaPro — à déposer sur e-impots.gouv.ci</div>
   <div style="font-size:10px">Contrôle Actif=Passif N : ${fm(N.totalActif)} / ${fm(N.totalPassif)}. Postes agrégés. Notes détaillées : ventilation 4 chiffres requise.</div>
   <button class="np" onclick="window.print()" style="margin-top:10px;padding:8px 16px">Imprimer</button>
   </body></html>`);
