@@ -237,6 +237,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp-items">
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
+      <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
       </div></div>
@@ -287,6 +288,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp-items">
       <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
       <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
+      <a data-p="staging"><span class="ic">⇵</span>Import Chantiers/Caisse</a>
       <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
       <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture</a>
       <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
@@ -310,6 +312,8 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-analyse360"></div>
       <div class="page" id="p-consolidation"></div>
       <div class="page" id="p-passerelle"></div>
+      <div class="page" id="p-staging"></div>
+      <div class="page" id="p-caisse"></div>
       <div class="page" id="p-ecritures"></div>
       <div class="page" id="p-workflow"></div>
       <div class="page" id="p-facturation"></div>
@@ -354,7 +358,7 @@ const DB_BASE='sanix_comptapro', DB_VER=8;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -514,7 +518,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -629,6 +633,10 @@ async function loadAll(){
   ST.budgets=await all('budgets');
   ST.pieces=await all('pieces');
   ST.audit=await all('audit');
+  ST.staging=await all('staging');
+  ST.caisses=await all('caisses');
+  ST.caisse_sessions=await all('caisse_sessions');
+  ST.caisse_mouvements=await all('caisse_mouvements');
   const cur=await getOne('meta','exCourant');
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
   ST.ecritures=(await all('ecritures')).filter(e=>e.exId===ST.exId).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
@@ -723,7 +731,7 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -2700,6 +2708,330 @@ function importERP(src,nom,file){if(!file)return;const rd=new FileReader();rd.on
     ok++;}
   await loadAll();RENDER.passerelle();toast(nom+' : '+ok+' importée(s), '+rej+' rejetée(s).');
 }catch(e){toast('Fichier invalide.');}};rd.readAsText(file);}
+
+/* ---- Import staging : Fiches chantier + Brouillard de caisse (SANIX/Beda) ---- */
+window._stgPage=1;window._stgSel=new Set();window._stgFiltre={kind:'',q:'',statut:'en_attente'};
+function stgCompteCaisse(){return'571';}
+function stgCompteAttente(){if(!ST.comptes.some(c=>c.numero==='4712'))return null;return'4712';}
+async function stgEnsureCompteAttente(){
+  if(!ST.comptes.some(c=>c.numero==='4712'))await put('comptes',{id:'c_4712',numero:'4712',libelle:'Compte d\'attente — import brouillard caisse à ventiler',type:'A',classe:'4'});
+}
+async function stgEnsureFournisseur(nom){
+  nom=(nom||'').trim()||'(non renseigné)';
+  let t=ST.tiers.find(x=>x.type==='fournisseur'&&x.nom.trim().toUpperCase()===nom.toUpperCase());
+  if(t)return t;
+  const n=ST.tiers.filter(x=>x.type==='fournisseur').length+1;const compte='4011'+String(n).padStart(3,'0');
+  t={id:uid('t'),type:'fournisseur',compte,nom,ncc:'',tel:'',email:'',adresse:'',delai:0,plafond:0};
+  await put('tiers',t);
+  await put('comptes',{id:'c_'+compte,numero:compte,libelle:'Fournisseur — '+nom,type:'P',classe:'4'});
+  ST.tiers.push(t);ST.comptes.push({numero:compte});
+  return t;
+}
+function importStagingFile(kind,file){
+  if(!file)return;const rd=new FileReader();
+  rd.onload=async()=>{
+    let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    let n=0;
+    for(const r of arr){
+      const st=kind==='achat_chantier'?'en_attente':(r.type==='ouverture'?'ignore':'en_attente');
+      await put('staging',{id:uid('stg'),kind,status:st,payload:r,importedAt:Date.now()});n++;
+    }
+    await loadAll();RENDER.staging();toast(n+' ligne(s) chargée(s) en staging.');
+  };rd.readAsText(file);
+}
+function stgFiltered(){
+  const f=window._stgFiltre;
+  return ST.staging.filter(s=>{
+    if(f.kind&&s.kind!==f.kind)return false;
+    if(f.statut&&s.status!==f.statut)return false;
+    if(f.q){const q=f.q.toLowerCase();const hay=JSON.stringify(s.payload).toLowerCase();if(!hay.includes(q))return false;}
+    return true;
+  });
+}
+RENDER.staging=()=>{
+  document.getElementById('pgActions').innerHTML=`
+    <label class="btn sm gh" style="cursor:pointer">⭱ JSON Chantiers<input type="file" accept=".json" style="display:none" onchange="importStagingFile('achat_chantier',this.files[0])"></label>
+    <label class="btn sm gh" style="cursor:pointer">⭱ JSON Caisse<input type="file" accept=".json" style="display:none" onchange="importStagingFile('caisse',this.files[0])"></label>
+    <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
+    <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>`;
+  const list=stgFiltered();
+  const nEnAttente=ST.staging.filter(s=>s.status==='en_attente').length;
+  const nValide=ST.staging.filter(s=>s.status==='valide').length;
+  const nRejete=ST.staging.filter(s=>s.status==='rejete').length;
+  const pageSize=80,pages=Math.max(1,Math.ceil(list.length/pageSize));
+  if(window._stgPage>pages)window._stgPage=pages;
+  const slice=list.slice((window._stgPage-1)*pageSize,window._stgPage*pageSize);
+  const rows=slice.map(s=>{
+    const p=s.payload;
+    const desc=s.kind==='achat_chantier'
+      ?`${p.chantier} — ${p.fournisseur} — ${(p.lignes||[]).length} ligne(s) — ${F0(p.total_ttc)} FCFA`
+      :`${p.mois_feuille} — ${p.libelle} — E:${F0(p.entree)} S:${F0(p.sortie)}`;
+    const badge=s.status==='valide'?'<span class="badge b-green">validé</span>':s.status==='rejete'?'<span class="badge b-gray">rejeté</span>':s.status==='ignore'?'<span class="badge b-gray">ignoré</span>':'<span class="badge b-cuivre">en attente</span>';
+    return`<tr><td class="ta-c"><input type="checkbox" data-stg="${s.id}" ${window._stgSel.has(s.id)?'checked':''} onchange="stgToggle('${s.id}',this.checked)"></td>
+    <td>${s.kind==='achat_chantier'?'Chantier':'Caisse'}</td><td>${p.date||''}</td><td>${desc}</td><td class="ta-c">${badge}</td></tr>`;
+  }).join('');
+  document.getElementById('p-staging').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">En attente</div><div class="v mono">${nEnAttente}</div></div>
+    <div class="card kpi g"><div class="lb">Validées</div><div class="v mono">${nValide}</div></div>
+    <div class="card kpi b"><div class="lb">Rejetées</div><div class="v mono">${nRejete}</div></div>
+    <div class="card kpi o"><div class="lb">Total staging</div><div class="v mono">${ST.staging.length}</div></div>
+  </div>
+  <div class="frow c3" style="margin-bottom:10px">
+    <div><label>Type</label><select onchange="window._stgFiltre.kind=this.value;window._stgPage=1;RENDER.staging()">
+      <option value="">Tous</option><option value="achat_chantier" ${window._stgFiltre.kind==='achat_chantier'?'selected':''}>Chantiers</option><option value="caisse" ${window._stgFiltre.kind==='caisse'?'selected':''}>Caisse</option></select></div>
+    <div><label>Statut</label><select onchange="window._stgFiltre.statut=this.value;window._stgPage=1;RENDER.staging()">
+      <option value="en_attente" ${window._stgFiltre.statut==='en_attente'?'selected':''}>En attente</option><option value="valide" ${window._stgFiltre.statut==='valide'?'selected':''}>Validées</option><option value="rejete" ${window._stgFiltre.statut==='rejete'?'selected':''}>Rejetées</option><option value="">Toutes</option></select></div>
+    <div><label>Recherche</label><input value="${window._stgFiltre.q}" oninput="window._stgFiltre.q=this.value;window._stgPage=1;RENDER.staging()" placeholder="Fournisseur, chantier, libellé…"></div>
+  </div>
+  <div style="margin-bottom:8px"><label><input type="checkbox" onchange="stgToggleAllVisible(this.checked)"> Sélectionner la page (${slice.length})</label> — ${window._stgSel.size} sélectionné(s) au total</div>
+  <div class="tbl-wrap"><table><thead><tr><th></th><th>Type</th><th>Date</th><th>Détail</th><th class="ta-c">Statut</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=5 class="empty">Aucune ligne — importez un JSON.</td></tr>'}</tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._stgPage=Math.max(1,window._stgPage-1);RENDER.staging()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._stgPage}/${pages}</span>
+    <button class="btn sm gh" onclick="window._stgPage=Math.min(${pages},window._stgPage+1);RENDER.staging()">Suiv. ›</button>
+  </div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:14px">
+  <b style="color:var(--cuivre-d)">Validation.</b> Chantiers → facture d'achat (compte 604) + tiers fournisseur auto-créé si absent, écriture journal AC.
+  Caisse → écriture journal CA, compte 571 en contrepartie du compte d'attente 4712 (à ventiler par l'expert-comptable). Aucune comptabilisation avant validation explicite.</div>`;
+};
+function stgToggle(id,checked){if(checked)window._stgSel.add(id);else window._stgSel.delete(id);}
+function stgToggleAllVisible(checked){
+  document.querySelectorAll('[data-stg]').forEach(cb=>{cb.checked=checked;stgToggle(cb.dataset.stg,checked);});
+}
+async function stgValiderSelection(){
+  if(exLocked()){toast('Exercice clôturé.');return;}
+  if(!window._stgSel.size){toast('Aucune sélection.');return;}
+  if(!confirm(window._stgSel.size+' ligne(s) à comptabiliser. Confirmer ?'))return;
+  await stgEnsureCompteAttente();
+  let ok=0;
+  for(const id of Array.from(window._stgSel)){
+    const s=ST.staging.find(x=>x.id===id);if(!s||s.status!=='en_attente')continue;
+    if(s.kind==='achat_chantier'){
+      const p=s.payload;const fo=await stgEnsureFournisseur(p.fournisseur);
+      const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
+      const ht=lignes.reduce((a,l)=>a+l.ht,0);
+      const numero=await nextAchatNum();
+      const ach={id:uid('a'),exId:ST.exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
+        date:p.date||today(),echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier};
+      await put('achats',ach);await genAchatEcriture(ach);ST.achats.push(ach);
+    }else{
+      const p=s.payload;const lignes=[];
+      if(p.entree>0)lignes.push({compte:'571',libelle:p.libelle,debit:Math.round(p.entree),credit:0},{compte:'4712',libelle:'À ventiler — '+p.libelle,debit:0,credit:Math.round(p.entree)});
+      if(p.sortie>0)lignes.push({compte:'4712',libelle:'À ventiler — '+p.libelle,debit:Math.round(p.sortie),credit:0},{compte:'571',libelle:p.libelle,debit:0,credit:Math.round(p.sortie)});
+      if(!lignes.length)continue;
+      await put('ecritures',{id:'e_stg_'+s.id,exId:ST.exId,journal:'CA',date:p.date||today(),piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'});
+    }
+    s.status='valide';s.valDate=today();await put('staging',s);ok++;
+  }
+  window._stgSel.clear();await loadAll();RENDER.staging();toast(ok+' ligne(s) comptabilisée(s).');
+}
+async function stgRejeterSelection(){
+  if(!window._stgSel.size){toast('Aucune sélection.');return;}
+  for(const id of Array.from(window._stgSel)){const s=ST.staging.find(x=>x.id===id);if(s&&s.status==='en_attente'){s.status='rejete';await put('staging',s);}}
+  window._stgSel.clear();await loadAll();RENDER.staging();toast('Sélection rejetée.');
+}
+
+/* ============ CAISSE — style ImmoSuite (sessions, PIN, bons E/S, écart, ventilation) ============ */
+function caisseGetSessionOuverte(caisseId){return ST.caisse_sessions.find(s=>s.caisse_id===caisseId&&s.statut==='ouverte')||null;}
+function caisseDerniereSessionCloturee(caisseId){const l=ST.caisse_sessions.filter(s=>s.caisse_id===caisseId&&s.statut==='cloturee');l.sort((a,b)=>(b.clotureeLe||'').localeCompare(a.clotureeLe||''));return l[0]||null;}
+function caisseSoldeSession(session){if(!session)return 0;
+  const mv=ST.caisse_mouvements.filter(m=>m.sessionId===session.id);
+  const e=mv.filter(m=>m.type==='entree').reduce((s,m)=>s+(+m.montant||0),0);
+  const s=mv.filter(m=>m.type==='sortie').reduce((s,m)=>s+(+m.montant||0),0);
+  return(+session.fondOuverture||0)+e-s;}
+function caisseSoldeGlobalTempsReel(){return ST.caisses.reduce((s,c)=>{const se=caisseGetSessionOuverte(c.id);return s+(se?caisseSoldeSession(se):0);},0);}
+function caisseAVentilerStats(){const l=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';});return{nb:l.length,montant:l.reduce((a,m)=>a+(+m.montant||0),0)};}
+function caisseEcartNonRegularise(){return ST.caisse_sessions.filter(s=>s.statut==='cloturee'&&(+s.ecart||0)!==0&&!s.ecartRegularise).reduce((a,s)=>a+Math.abs(+s.ecart||0),0);}
+async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisseId+'_'+type;const m=await getOne('meta',key);let seq=m?m.value:0;seq++;await put('meta',{id:key,value:seq});return(type==='entree'?'CE-':'CS-')+today().replace(/-/g,'')+'-'+String(seq).padStart(3,'0');}
+
+RENDER.caisse=()=>{
+  document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}`;
+  const solde=caisseSoldeGlobalTempsReel(),vent=caisseAVentilerStats(),ecartNR=caisseEcartNonRegularise();
+  const cards=ST.caisses.map(c=>{
+    const se=caisseGetSessionOuverte(c.id);const ouverte=!!se;
+    const badge=ouverte?'<span class="badge b-green">OUVERTE</span>':'<span class="badge b-gray">FERMÉE</span>';
+    const actions=ouverte?`
+      <button class="btn sm gh" onclick="caisseOuvrirBonModal('${c.id}','entree')">📥 Entrée</button>
+      <button class="btn sm gh" onclick="caisseOuvrirBonModal('${c.id}','sortie')">📤 Sortie</button>
+      <button class="btn sm gh" onclick="caisseAfficherBrouillard('${c.id}')">📋 Brouillard</button>
+      <button class="btn sm" style="background:var(--red)" onclick="caisseClôturerModal('${c.id}')">🔒 Clôturer</button>`
+      :`<button class="btn sm" onclick="caisseOuvrirModal('${c.id}')">🔓 Ouvrir</button>`;
+    const cfg=can('admin')?`<button class="btn sm gh" onclick="caisseConfigModal('${c.id}')">⚙</button>`:'';
+    return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div><div style="font-weight:800">${c.nom}</div><div style="font-size:11px;color:var(--mut)">Compte ${c.compte||'571'}</div></div>${badge}</div>
+      ${ouverte?`<div style="font-size:22px;font-weight:800;color:var(--cuivre-d);margin:8px 0">${F0(caisseSoldeSession(se))} FCFA</div>
+      <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Ouverte le ${se.date} par ${se.ouvertePar||'—'} · fond ${F0(se.fondOuverture)}</div>`
+      :`<div style="font-size:12px;color:var(--mut);margin:10px 0">Caisse fermée</div>`}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${actions}${cfg}</div></div>`;
+  }).join('');
+  document.getElementById('p-caisse').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi g"><div class="lb">Solde global temps réel</div><div class="v mono">${F(solde)}</div></div>
+    <div class="card kpi ${vent.nb?'r':'g'}"><div class="lb">À ventiler</div><div class="v mono">${vent.nb} mvt</div><div class="f">${F0(vent.montant)} FCFA</div></div>
+    <div class="card kpi ${ecartNR?'r':'g'}"><div class="lb">Écarts non régularisés</div><div class="v mono">${F0(ecartNR)}</div></div>
+    <div class="card kpi o"><div class="lb">Caisses actives</div><div class="v mono">${ST.caisses.length}</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px">${cards||'<div class="empty">Aucune caisse. Créez-en une.</div>'}</div>
+  ${caisseEcartsHTML()}
+  <div class="card"><h3 style="margin-top:0">🧾 Mouvements clôturés à ventiler</h3>${caisseRenderVentilationHTML()}</div>
+  <div id="caisse-brouillard-box"></div>`;
+};
+function caisseEcartsHTML(){
+  const l=ST.caisse_sessions.filter(s=>s.statut==='cloturee'&&(+s.ecart||0)!==0&&!s.ecartRegularise);
+  if(!l.length)return'';
+  const nom=id=>{const c=ST.caisses.find(x=>x.id===id);return c?c.nom:'—';};
+  return`<div class="card"><h3 style="margin-top:0">⚠ Écarts de caisse non régularisés</h3>
+  <div class="tbl-wrap"><table><thead><tr><th>Caisse</th><th>Date clôture</th><th class="ta-r">Écart</th><th></th></tr></thead><tbody>
+  ${l.map(s=>`<tr><td>${nom(s.caisseId)}</td><td class="mono">${dfr(s.date)}</td><td class="ta-r mono" style="color:var(--red)">${s.ecart>0?'+':''}${F0(s.ecart)}</td>
+  <td><button class="btn sm" onclick="caisseRegulariserEcart('${s.id}')">Régulariser</button></td></tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+function caisseRenderVentilationHTML(){
+  const l=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';})
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  if(!l.length)return'<div class="empty">Rien à ventiler.</div>';
+  const opts=ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('');
+  return`<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th></tr></thead><tbody>
+  ${l.map(m=>`<tr><td class="mono">${m.numero}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${m.motif||''}</td><td>${m.beneficiaire||''}</td><td class="ta-r mono">${F0(m.montant)}</td>
+  <td><select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
+  <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+async function caisseVentilerLigne(mvtId){
+  const sel=document.getElementById('cv-compte-'+mvtId);const compte=sel?sel.value:'';
+  if(!compte){toast('Sélectionnez un compte de contrepartie.');return;}
+  const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
+  const c=ST.caisses.find(x=>x.id===m.caisseId);const cptCaisse=(c&&c.compte)||'571';
+  const lib=(m.type==='entree'?'Entrée caisse — ':'Sortie caisse — ')+(m.motif||'')+(m.beneficiaire?' — '+m.beneficiaire:'');
+  const lignes=m.type==='entree'
+    ?[{compte:cptCaisse,libelle:lib,debit:Math.round(m.montant),credit:0},{compte,libelle:lib,debit:0,credit:Math.round(m.montant)}]
+    :[{compte,libelle:lib,debit:Math.round(m.montant),credit:0},{compte:cptCaisse,libelle:lib,debit:0,credit:Math.round(m.montant)}];
+  const eid='e_cse_'+m.id;
+  await put('ecritures',{id:eid,exId:ST.exId,journal:'CA',date:(m.date||'').slice(0,10)||today(),piece:m.numero,libelle:lib,lignes,created:Date.now()});
+  m.statut='ventile';m.compteVentile=compte;m.ecritureId=eid;m.ventilePar=ST.user.login;m.ventileLe=today();
+  await put('caisse_mouvements',m);await loadAll();RENDER.caisse();toast('Écriture générée et mouvement ventilé.');
+}
+function caisseConfigModal(caisseId){
+  const c=caisseId?ST.caisses.find(x=>x.id===caisseId):null;
+  openModal(`<div class="mh"><h3>${c?'Configurer':'Nouvelle'} caisse</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow c2"><div><label>Nom</label><input id="cc-nom" value="${c?c.nom:''}" placeholder="Ex : Caisse principale"></div>
+    <div><label>Compte trésorerie</label><input id="cc-compte" value="${c?(c.compte||'571'):'571'}"></div></div>
+    <div class="frow"><div><label>Code PIN (4 chiffres, optionnel — protège l'ouverture)</label><input id="cc-pin" maxlength="4" placeholder="Laisser vide = pas de PIN"></div></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button>${c&&can('admin')?`<button class="btn sm gh" style="color:var(--red)" onclick="caisseSupprimerCaisse('${c.id}')">Supprimer</button>`:''}<button class="btn sm" onclick="caisseSaveConfig('${caisseId||''}')">Enregistrer</button></div>`,true);
+}
+async function caisseSaveConfig(id){
+  const nom=document.getElementById('cc-nom').value.trim();if(!nom){toast('Nom obligatoire.');return;}
+  const compte=document.getElementById('cc-compte').value.trim()||'571';
+  const pin=document.getElementById('cc-pin').value.trim();
+  const c=id?ST.caisses.find(x=>x.id===id):{id:uid('cse'),createdAt:Date.now()};
+  c.nom=nom;c.compte=compte;
+  if(pin){if(!/^\d{4}$/.test(pin)){toast('PIN : 4 chiffres.');return;}c.pinHash=await hashPwd(pin);}
+  await put('caisses',c);await loadAll();closeModal();RENDER.caisse();toast('Caisse enregistrée.');
+}
+async function caisseSupprimerCaisse(id){
+  if(!can('admin')){toast('Droit refusé.');return;}
+  if(caisseGetSessionOuverte(id)){toast('Clôturez la session ouverte d\'abord.');return;}
+  if(!confirm('Supprimer cette caisse et son historique ?'))return;
+  for(const m of ST.caisse_mouvements.filter(x=>x.caisseId===id)){if(m.ecritureId)await del('ecritures',m.ecritureId);await del('caisse_mouvements',m.id);}
+  for(const s of ST.caisse_sessions.filter(x=>x.caisseId===id))await del('caisse_sessions',s.id);
+  await del('caisses',id);await loadAll();closeModal();RENDER.caisse();toast('Caisse supprimée.');
+}
+function caisseOuvrirModal(caisseId){
+  const c=ST.caisses.find(x=>x.id===caisseId);if(!c)return;
+  if(caisseGetSessionOuverte(caisseId)){toast('Déjà ouverte.');return;}
+  const der=caisseDerniereSessionCloturee(caisseId);const fond=der?(+der.fondClotureReel||0):0;
+  openModal(`<div class="mh"><h3>🔓 Ouvrir — ${c.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><div><label>Fond d'ouverture (FCFA)</label><input type="number" id="co-fond" value="${fond}"></div></div>
+    <div style="font-size:11px;color:var(--mut);margin-bottom:8px">${der?`Repris du solde de clôture du ${der.date} (${F0(fond)} FCFA).`:'Première ouverture — aucun solde antérieur.'}</div>
+    ${c.pinHash?'<div class="frow"><div><label>Code PIN</label><input type="password" id="co-pin" maxlength="4"></div></div>':''}
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="caisseOuvrir('${caisseId}')">Ouvrir</button></div>`,true);
+}
+async function caisseOuvrir(caisseId){
+  const c=ST.caisses.find(x=>x.id===caisseId);
+  if(c.pinHash){const pin=document.getElementById('co-pin').value.trim();if(!pin){toast('Saisissez le PIN.');return;}if(!(await verifyPwd(pin,c.pinHash))){toast('PIN incorrect.');return;}}
+  const fond=+document.getElementById('co-fond').value||0;
+  const s={id:uid('css'),caisseId,date:today(),fondOuverture:fond,fondClotureTheorique:null,fondClotureReel:null,ecart:null,statut:'ouverte',ouvertePar:ST.user.login,ouverteLe:new Date().toISOString()};
+  await put('caisse_sessions',s);await loadAll();closeModal();RENDER.caisse();toast('Caisse ouverte — fond '+F0(fond)+' FCFA.');
+}
+function caisseOuvrirBonModal(caisseId,type){
+  const s=caisseGetSessionOuverte(caisseId);if(!s){toast('Caisse fermée.');return;}
+  const c=ST.caisses.find(x=>x.id===caisseId);
+  openModal(`<div class="mh"><h3>${type==='entree'?'📥 Bon d\'entrée':'📤 Bon de sortie'} — ${c.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Solde actuel : <b>${F0(caisseSoldeSession(s))} FCFA</b></div>
+    <div class="frow c2"><div><label>Date</label><input type="date" id="cb-date" value="${today()}"></div><div><label>Montant (FCFA)</label><input type="number" id="cb-montant" value="0"></div></div>
+    <div class="frow"><div><label>Motif</label><input id="cb-motif" placeholder="Ex : Achat fournitures"></div></div>
+    <div class="frow c2"><div><label>${type==='entree'?'Déposant':'Bénéficiaire'}</label><input id="cb-beneficiaire" placeholder="Nom"></div>
+    <div><label>Pièce / reçu n°</label><input id="cb-piece"></div></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="caisseSaveBon('${caisseId}','${type}')">Enregistrer</button></div>`,true);
+}
+async function caisseSaveBon(caisseId,type){
+  const montant=+document.getElementById('cb-montant').value||0;
+  const motif=document.getElementById('cb-motif').value.trim();
+  const beneficiaire=document.getElementById('cb-beneficiaire').value.trim();
+  const piece=document.getElementById('cb-piece').value.trim();
+  const date=document.getElementById('cb-date').value||today();
+  if(montant<=0){toast('Montant requis.');return;}
+  if(!motif){toast('Motif obligatoire.');return;}
+  if(!beneficiaire){toast((type==='entree'?'Déposant':'Bénéficiaire')+' obligatoire.');return;}
+  const s=caisseGetSessionOuverte(caisseId);if(!s){toast('Caisse fermée entre-temps.');closeModal();return;}
+  if(type==='sortie'){const solde=caisseSoldeSession(s);if(montant>solde&&!confirm('Solde insuffisant ('+F0(solde)+' FCFA). Confirmer ?'))return;}
+  const numero=await caisseProchainNumero(caisseId,type);
+  const m={id:uid('csm'),sessionId:s.id,caisseId,date:date+'T'+new Date().toISOString().slice(11,19),numero,type,montant,motif,beneficiaire,pieceRef:piece,statut:'a_ventiler',compteVentile:null,ecritureId:null,createdBy:ST.user.login,createdAt:Date.now()};
+  await put('caisse_mouvements',m);await loadAll();closeModal();RENDER.caisse();toast((type==='entree'?'Bon d\'entrée ':'Bon de sortie ')+numero+' enregistré.');
+}
+function caisseAfficherBrouillard(caisseId){
+  const c=ST.caisses.find(x=>x.id===caisseId);const s=caisseGetSessionOuverte(caisseId)||caisseDerniereSessionCloturee(caisseId);
+  if(!s){document.getElementById('caisse-brouillard-box').innerHTML='';return;}
+  const mv=ST.caisse_mouvements.filter(m=>m.sessionId===s.id).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  let solde=+s.fondOuverture||0;
+  const rows=mv.map(m=>{solde+=m.type==='entree'?(+m.montant||0):-(+m.montant||0);
+    return`<tr><td class="mono">${m.numero}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.motif}</td><td>${m.beneficiaire||''}</td>
+    <td class="ta-r mono">${m.type==='entree'?F0(m.montant):''}</td><td class="ta-r mono">${m.type==='sortie'?F0(m.montant):''}</td><td class="ta-r mono">${F0(solde)}</td>
+    <td class="ta-c">${m.statut==='ventile'?'<span class="badge b-green">ventilé</span>':'<span class="badge b-cuivre">à ventiler</span>'}</td></tr>`;}).join('');
+  document.getElementById('caisse-brouillard-box').innerHTML=`
+  <div class="card" style="margin-top:14px"><h3 style="margin-top:0">📋 Brouillard — ${c.nom} · session du ${s.date}</h3>
+  <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Tiers</th><th class="ta-r">Entrée</th><th class="ta-r">Sortie</th><th class="ta-r">Solde</th><th class="ta-c">Statut</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty">Aucun mouvement</td></tr>'}</tbody></table></div></div>`;
+}
+function caisseClôturerModal(caisseId){
+  const s=caisseGetSessionOuverte(caisseId);if(!s){toast('Caisse fermée.');return;}
+  const c=ST.caisses.find(x=>x.id===caisseId);const solde=caisseSoldeSession(s);
+  openModal(`<div class="mh"><h3>🔒 Clôturer — ${c.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div style="font-size:13px;margin-bottom:10px">Fond d'ouverture : <b>${F0(s.fondOuverture)}</b><br>Solde théorique (fond + entrées − sorties) : <b>${F0(solde)} FCFA</b></div>
+    <div class="frow"><div><label>Comptage réel (FCFA)</label><input type="number" id="ccl-reel" value="${solde}" data-theo="${solde}" oninput="caisseEcartPreview()"></div></div>
+    <div id="ccl-ecart" style="font-size:13px;font-weight:700;margin-top:6px"></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" style="background:var(--red)" onclick="caisseCloturer('${caisseId}')">Clôturer</button></div>`,true);
+}
+function caisseEcartPreview(){const inp=document.getElementById('ccl-reel');const theo=+inp.dataset.theo||0;const reel=+inp.value||0;const ecart=reel-theo;
+  document.getElementById('ccl-ecart').innerHTML=ecart===0?'<span style="color:var(--green)">Aucun écart.</span>':`<span style="color:var(--red)">Écart : ${ecart>0?'+':''}${F0(ecart)} FCFA</span>`;}
+async function caisseCloturer(caisseId){
+  const s=caisseGetSessionOuverte(caisseId);if(!s){closeModal();return;}
+  const theo=caisseSoldeSession(s);const reel=+document.getElementById('ccl-reel').value||0;const ecart=reel-theo;
+  if(reel<0){toast('Comptage physique ne peut être négatif.');return;}
+  if(ecart!==0&&!confirm('Écart de '+F0(ecart)+' FCFA. Confirmer la clôture ?'))return;
+  s.statut='cloturee';s.fondClotureTheorique=theo;s.fondClotureReel=reel;s.ecart=ecart;s.clotureePar=ST.user.login;s.clotureeLe=new Date().toISOString();
+  await put('caisse_sessions',s);await loadAll();closeModal();RENDER.caisse();toast('Caisse clôturée. Solde réel '+F0(reel)+' FCFA.');
+}
+async function caisseRegulariserEcart(sessionId){
+  const s=ST.caisse_sessions.find(x=>x.id===sessionId);if(!s||s.ecartRegularise)return;
+  const p=await paramCpt();const ecart=+s.ecart||0;const c=ST.caisses.find(x=>x.id===s.caisseId);const cptCaisse=(c&&c.compte)||'571';
+  const lignes=ecart>0
+    ?[{compte:cptCaisse,libelle:'Excédent de caisse',debit:Math.round(ecart),credit:0},{compte:p.cptEcartPlus,libelle:'Excédent de caisse',debit:0,credit:Math.round(ecart)}]
+    :[{compte:p.cptEcartMoins,libelle:'Manquant de caisse',debit:Math.round(-ecart),credit:0},{compte:cptCaisse,libelle:'Manquant de caisse',debit:0,credit:Math.round(-ecart)}];
+  await put('ecritures',{id:'e_ecart_'+s.id,exId:ST.exId,journal:'CA',date:s.date,piece:'ECART-'+s.id.slice(-6),libelle:'Régularisation écart caisse',lignes,created:Date.now()});
+  s.ecartRegularise=true;await put('caisse_sessions',s);await loadAll();RENDER.caisse();toast('Écart régularisé — écriture générée.');
+}
+/* ============ FIN CAISSE ============ */
 
 /* ---- Consolidation multi-sociétés ---- */
 async function getFiliales(){const m=await getOne('meta','filiales');return m?m.value:[];}
