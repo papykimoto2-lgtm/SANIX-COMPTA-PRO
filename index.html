@@ -2834,8 +2834,8 @@ async function stgRejeterSelection(){
 }
 
 /* ============ CAISSE — style ImmoSuite (sessions, PIN, bons E/S, écart, ventilation) ============ */
-function caisseGetSessionOuverte(caisseId){return ST.caisse_sessions.find(s=>s.caisse_id===caisseId&&s.statut==='ouverte')||null;}
-function caisseDerniereSessionCloturee(caisseId){const l=ST.caisse_sessions.filter(s=>s.caisse_id===caisseId&&s.statut==='cloturee');l.sort((a,b)=>(b.clotureeLe||'').localeCompare(a.clotureeLe||''));return l[0]||null;}
+function caisseGetSessionOuverte(caisseId){return ST.caisse_sessions.find(s=>s.caisseId===caisseId&&s.statut==='ouverte')||null;}
+function caisseDerniereSessionCloturee(caisseId){const l=ST.caisse_sessions.filter(s=>s.caisseId===caisseId&&s.statut==='cloturee');l.sort((a,b)=>(b.clotureeLe||'').localeCompare(a.clotureeLe||''));return l[0]||null;}
 function caisseSoldeSession(session){if(!session)return 0;
   const mv=ST.caisse_mouvements.filter(m=>m.sessionId===session.id);
   const e=mv.filter(m=>m.type==='entree').reduce((s,m)=>s+(+m.montant||0),0);
