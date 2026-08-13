@@ -3902,7 +3902,7 @@ async function bulkCreateFournisseursFromStaging(){
 async function bulkImportTiersFile(type,file){
   if(!file)return;const rd=new FileReader();
   rd.onload=async()=>{
-    let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    let arr;try{arr=JSON.parse(rd.result);}catch(e){alert('⚠ JSON invalide ou fichier corrompu.\n\nErreur : '+e.message+'\n\nRe-téléchargez le fichier et réessayez.');return;}
     if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
     const prog=progressStart('Import '+(type==='client'?'clients':'fournisseurs')+'…');
     let created=0,existants=0,erreurs=0;
@@ -3932,14 +3932,14 @@ async function bulkImportTiersFile(type,file){
 function importStagingFile(kind,file){
   if(!file)return;const rd=new FileReader();
   rd.onload=async()=>{
-    let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    let arr;try{arr=JSON.parse(rd.result);}catch(e){alert('⚠ JSON invalide ou fichier corrompu.\n\nErreur : '+e.message+'\n\nRe-téléchargez le fichier et réessayez.');return;}
     if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
     const sample=arr[0];
     const shapeOk=kind==='achat_chantier'
       ?('chantier'in sample&&'fournisseur'in sample&&'lignes'in sample)
       :('mois_feuille'in sample&&('entree'in sample||'sortie'in sample));
     if(!shapeOk){
-      toast('⚠ Fichier incompatible avec "'+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'" — vérifiez que vous n\'avez pas inversé les deux fichiers.');
+      alert('⚠ Fichier incompatible avec "'+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'"\n\nColonnes attendues :\n'+(kind==='achat_chantier'?'chantier, fournisseur, lignes':'mois_feuille, entree/sortie')+'\n\nColonnes trouvées dans votre fichier :\n'+Object.keys(sample).join(', ')+'\n\nVérifiez que vous n\'avez pas inversé les deux fichiers, ou que le fichier n\'est pas corrompu/tronqué.');
       return;
     }
     const prog=progressStart('Import '+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'…');
