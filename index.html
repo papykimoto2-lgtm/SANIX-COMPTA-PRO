@@ -255,6 +255,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp" onclick="toggleGrp(this)"><span>3 · Contrôle</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="lettrage"><span class="ic">⇄</span>Lettrage</a>
+      <a data-p="balageee"><span class="ic">⏳</span>Balance âgée</a>
       <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
       <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
       <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
@@ -331,6 +332,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-lettrage"></div>
+      <div class="page" id="p-balageee"></div>
       <div class="page" id="p-rappro"></div>
       <div class="page" id="p-grandlivre"></div>
       <div class="page" id="p-periodique"></div>
@@ -787,6 +789,7 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  balageee:"Créances clients et dettes fournisseurs ventilées par ancienneté (0-30 / 31-60 / 61-90 / +90 jours) — outil standard de révision des comptes, base pour décider des provisions pour créances douteuses.",
   cockpit:"Écran d'accueil : liste ce qu'il y a à traiter aujourd'hui (brouillard, staging, caisse, échéances), pas des chiffres à contempler. Se re-scanne à chaque ouverture.",
   dash:"Vue d'ensemble chiffrée de l'exercice actif : CA, charges, trésorerie, résultat. Pour l'action au quotidien, préférez le Cockpit.",
   analyse360:"Pilotage stratégique croisant tendances mensuelles, ratios clés et alertes — vision consolidée au-delà des états réglementaires.",
@@ -1829,6 +1832,54 @@ async function clearLettrage(){
 }
 function numToAlpha(n){let s='';while(n>0){n--;s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26);}return s;}
 
+/* ---- Balance âgée créances/dettes (outil de révision expert-comptable) ---- */
+function balageeeTranches(t,solde,mvts){
+  const dernierNonNul=mvts.filter(r=>r.debit||r.credit).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  const ref=dernierNonNul?dernierNonNul.date:today();
+  const jours=Math.floor((new Date(today())-new Date(ref))/86400000);
+  return{jours,tr0_30:jours<=30?solde:0,tr31_60:jours>30&&jours<=60?solde:0,tr61_90:jours>60&&jours<=90?solde:0,trPlus90:jours>90?solde:0};
+}
+RENDER.balageee=()=>{
+  const type=window._balageeeType||'client';
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm ${type==='client'?'':'gh'}" onclick="window._balageeeType='client';RENDER.balageee()">Clients</button>
+  <button class="btn sm ${type==='fournisseur'?'':'gh'}" onclick="window._balageeeType='fournisseur';RENDER.balageee()">Fournisseurs</button>
+  <button class="btn sm gh" onclick="printReport('p-balageee','Balance âgée')">⎙ Imprimer</button>`;
+  const m=soldesParCompte();
+  const lignes=ST.tiers.filter(t=>t.type===type).map(t=>{
+    const s=m[t.compte];if(!s)return null;
+    const solde=type==='client'?(s.debit-s.credit):(s.credit-s.debit);
+    if(Math.abs(solde)<1)return null;
+    const mvts=mouvements(l=>l.compte===t.compte);
+    const tr=balageeeTranches(t,solde,mvts);
+    return{nom:t.nom,compte:t.compte,solde,...tr};
+  }).filter(Boolean).sort((a,b)=>b.trPlus90-a.trPlus90||b.solde-a.solde);
+  const tot={solde:0,tr0_30:0,tr31_60:0,tr61_90:0,trPlus90:0};
+  lignes.forEach(l=>{tot.solde+=l.solde;tot.tr0_30+=l.tr0_30;tot.tr31_60+=l.tr31_60;tot.tr61_90+=l.tr61_90;tot.trPlus90+=l.trPlus90;});
+  const rows=lignes.map(l=>`<tr><td class="mono">${esc(l.compte)}</td><td>${esc(l.nom)}</td>
+    <td class="ta-r mono">${F0(l.tr0_30)||'—'}</td><td class="ta-r mono">${F0(l.tr31_60)||'—'}</td><td class="ta-r mono">${F0(l.tr61_90)||'—'}</td>
+    <td class="ta-r mono" style="color:${l.trPlus90?'var(--red)':'inherit'};font-weight:${l.trPlus90?'700':'400'}">${l.trPlus90?F0(l.trPlus90):'—'}</td>
+    <td class="ta-r mono" style="font-weight:700">${F0(l.solde)}</td>
+    <td class="ta-c">${l.trPlus90>0.5?`<button class="btn sm gh" onclick="balageeeProvision('${l.compte}','${esc(l.nom).replace(/'/g,"\\'")}',${l.trPlus90})">+ Provision</button>`:''}</td></tr>`).join('');
+  document.getElementById('p-balageee').innerHTML=`
+  <div class="grid kpis" style="margin-bottom:14px">
+    <div class="card kpi b"><div class="lb">Total ${type==='client'?'créances':'dettes'}</div><div class="v mono">${F0(tot.solde)}</div></div>
+    <div class="card kpi g"><div class="lb">0-30 jours</div><div class="v mono">${F0(tot.tr0_30)}</div></div>
+    <div class="card kpi o"><div class="lb">31-90 jours</div><div class="v mono">${F0(tot.tr31_60+tot.tr61_90)}</div></div>
+    <div class="card kpi ${tot.trPlus90?'r':'g'}"><div class="lb">+90 jours (à risque)</div><div class="v mono">${F0(tot.trPlus90)}</div></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>${type==='client'?'Client':'Fournisseur'}</th><th class="ta-r">0-30j</th><th class="ta-r">31-60j</th><th class="ta-r">61-90j</th><th class="ta-r">+90j</th><th class="ta-r">Total</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty">Aucun solde ouvert.</td></tr>'}</tbody>
+  <tfoot><tr class="foot-tr"><td colspan=2>TOTAUX</td><td class="ta-r mono">${F0(tot.tr0_30)}</td><td class="ta-r mono">${F0(tot.tr31_60)}</td><td class="ta-r mono">${F0(tot.tr61_90)}</td><td class="ta-r mono">${F0(tot.trPlus90)}</td><td class="ta-r mono">${F0(tot.solde)}</td><td></td></tr></tfoot></table></div>`;
+};
+async function balageeeProvision(compteClient,nom,montant){
+  if(!confirm('Passer une provision pour dépréciation sur '+nom+' ('+F0(montant)+' FCFA, ancienneté +90j) ?\nÉcriture : débit 6594 (dotation) / crédit 491 (dépréciation créances).'))return;
+  if(!ST.comptes.some(c=>c.numero==='491'))await put('comptes',{id:'c_491',numero:'491',libelle:'Dépréciation des comptes clients',type:'A',classe:'4'});
+  if(!ST.comptes.some(c=>c.numero==='6594'))await put('comptes',{id:'c_6594',numero:'6594',libelle:'Dotations dépréciations créances clients',type:'C',classe:'6'});
+  await put('ecritures',{id:uid('e_prov'),exId:ST.exId,journal:'OD',date:today(),piece:'PROV-'+today().slice(0,4),libelle:'Provision créance douteuse — '+nom,
+    lignes:[{compte:'6594',libelle:'Dotation provision — '+nom,debit:Math.round(montant),credit:0},{compte:'491',libelle:'Dépréciation — '+nom,debit:0,credit:Math.round(montant)}],created:Date.now()});
+  await loadAll();RENDER.balageee();toast('Provision passée pour '+nom+'.');
+}
+
 /* ---- Rapprochement bancaire ---- */
 /* ---- Rapprochement bancaire (style ImmoSuite) : relevé importé/manuel + matching + écarts + historique ---- */
 window._rapTab='releve';window._rapCompte='';window._rapPeriode=new Date().toISOString().slice(0,7);
@@ -2299,6 +2350,14 @@ async function delExercice(id){
   if(!confirm('Supprimer cet exercice ?'))return;await del('exercices',id);await loadAll();RENDER.exercices();toast('Exercice supprimé.');}
 async function switchEx(id){await put('meta',{id:'exCourant',value:id});await loadAll();populateExSelect();RENDER.exercices();RENDER[window._curPage]&&RENDER[window._curPage]();toast('Exercice activé.');}
 async function cloturer(id){
+  const A=scanAnomalies();
+  const critiques=A.filter(a=>a[0]==='bad');
+  if(critiques.length){
+    alert('⛔ Clôture bloquée — '+critiques.length+' anomalie(s) critique(s) détectée(s) :\n\n'+critiques.map(a=>'• '+a[1]+' : '+a[2]).join('\n')+'\n\nCorrigez-les (module IA — Anomalies) avant de clôturer.');
+    return;
+  }
+  const avertissements=A.filter(a=>a[0]==='warn');
+  if(avertissements.length&&!confirm(avertissements.length+' avertissement(s) non bloquant(s) détecté(s) (trous de numérotation, comptes suspects…). Voir le module Anomalies pour le détail.\n\nClôturer quand même ?'))return;
   if(!confirm('Clôturer définitivement cet exercice ? Génère les à-nouveaux.'))return;
   const e=ST.exercices.find(x=>x.id===id);
   // exercice suivant (par date de début)
@@ -4544,6 +4603,30 @@ function scanAnomalies(){
   const ex=curEx();ST.ecritures.filter(e=>e.exId===ST.exId).forEach(e=>{if(e.date<ex.debut||e.date>ex.fin)A.push(['warn','Date hors exercice',`${e.piece||e.libelle} — ${dfr(e.date)}`]);});
   // 9. tiers sans NCC (client facturé FNE)
   ST.factures.filter(f=>f.type==='fne'&&!f.clientNcc).forEach(f=>A.push(['warn','Facture FNE sans NCC',f.numero||'']));
+  // 10. Trous dans la numérotation des pièces (obligation de continuité — AUDCIF art. 19)
+  const groupes={};
+  ST.ecritures.forEach(e=>{
+    const p=e.piece||'';const mt=p.match(/^([A-Z]+-\d{4})-(\d+)$/);if(!mt)return;
+    const prefix=mt[1],num=+mt[2];(groupes[prefix]=groupes[prefix]||[]).push(num);
+  });
+  for(const prefix in groupes){
+    const nums=[...new Set(groupes[prefix])].sort((a,b)=>a-b);
+    if(nums.length<2)continue;
+    const trous=[];for(let i=nums[0];i<nums[nums.length-1];i++)if(!nums.includes(i))trous.push(i);
+    if(trous.length)A.push(['warn','Trou dans la numérotation',prefix+' — '+trous.length+' pièce(s) manquante(s) (ex : '+prefix+'-'+String(trous[0]).padStart(4,'0')+')']);
+  }
+  // 11. Triangulation Bilan = Balance = Grand livre (contrôle d'intégrité globale)
+  let tdG=0,tcG=0;for(const n in m){tdG+=m[n].debit;tcG+=m[n].credit;}
+  if(Math.abs(tdG-tcG)>=1)A.push(['bad','Balance générale non équilibrée','Total débit '+F(tdG)+' ≠ total crédit '+F(tcG)+' — écart '+F(tdG-tcG)]);
+  // 12. Compte de liaison 890 (bilan d'ouverture) non soldé — à ventiler par l'expert-comptable
+  const c890=m['890'];if(c890&&Math.abs(c890.debit-c890.credit)>=1)A.push(['warn','Compte de liaison 890 non soldé','Écart bilan d\'ouverture '+F(c890.debit-c890.credit)+' à ventiler sur les bons comptes.']);
+  // 13. Créances clients anciennes (>90j) sans provision pour dépréciation
+  const seuil90=new Date();seuil90.setDate(seuil90.getDate()-90);const seuil90str=seuil90.toISOString().slice(0,10);
+  ST.tiers.filter(t=>t.type==='client').forEach(t=>{
+    const s=m[t.compte];if(!s)return;const solde=s.debit-s.credit;if(solde<=0.5)return;
+    const dernierMvt=mouvements(l=>l.compte===t.compte).sort((a,b)=>b.date.localeCompare(a.date))[0];
+    if(dernierMvt&&dernierMvt.date<seuil90str)A.push(['info','Créance ancienne sans provision',t.nom+' — '+F0(solde)+' FCFA, dernier mouvement '+dfr(dernierMvt.date)]);
+  });
   return A;
 }
 RENDER.anomalies=()=>{
