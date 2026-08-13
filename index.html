@@ -701,7 +701,7 @@ async function doLogin(){
   const usr=(await all('users')).find(x=>x.login.toUpperCase()===u);
   if(usr&&await verifyPwd(p,usr.hash)){
     if(!usr.hash.startsWith('s2$')){usr.hash=await hashPwd(p);await put('users',usr);} // migration silencieuse vers SHA-256 salé
-    ST.user={login:usr.login,role:usr.role};await afterLogin();
+    ST.user={id:usr.id,login:usr.login,role:usr.role};await afterLogin();
   }
   else document.getElementById('lerr').textContent='Identifiants incorrects.';
 }
@@ -2340,10 +2340,11 @@ async function saveSociete(){const s=await societe();
 }
 /* -- Utilisateurs & rôles -- */
 function usersHTML(){
-  const rows=ST.users.map(u=>`<tr><td><b>${u.login}</b></td><td><span class="badge b-cuivre">${u.role}</span><div style="font-size:11px;color:var(--mut)">${ROLES[u.role]?ROLES[u.role].lb:''}</div></td>
+  const rows=ST.users.map(u=>`<tr><td><b>${u.login}</b>${u.nom?`<div style="font-size:11px;color:var(--mut)">${u.nom}</div>`:''}</td><td><span class="badge b-cuivre">${u.role}</span><div style="font-size:11px;color:var(--mut)">${ROLES[u.role]?ROLES[u.role].lb:''}</div></td>
+    <td class="ta-c">${u.caissePinHash?'<span class="badge b-green">PIN caisse ✓</span>':'<span class="badge b-gray">Sans PIN</span>'}</td>
     <td class="ta-c"><button class="linkbtn" onclick="editUser('${u.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delUser('${u.id}')">✕</button></td></tr>`).join('');
   return `<div class="sect-h" style="margin-top:0"><h3>Comptes utilisateurs</h3><button class="btn sm" onclick="editUser(null)">+ Utilisateur</button></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Identifiant</th><th>Rôle</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Identifiant</th><th>Rôle</th><th class="ta-c">Caisse</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
   <div class="card" style="margin-top:12px"><h3>Matrice des rôles</h3><table style="border:none"><tbody>${Object.entries(ROLES).map(([k,v])=>`<tr><td><b>${k}</b></td><td>${v.lb}</td></tr>`).join('')}</tbody></table></div>`;
 }
 function editUser(id){
@@ -2351,16 +2352,20 @@ function editUser(id){
   openModal(`<div class="mh"><h3>${u?'Modifier':'Nouvel'} utilisateur</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb"><div class="frow c2"><div><label>Identifiant</label><input id="uLogin" value="${u?u.login:''}" ${u?'disabled':''}></div>
   <div><label>Rôle</label><select id="uRole">${Object.keys(ROLES).map(r=>`<option ${u&&u.role===r?'selected':''}>${r}</option>`).join('')}</select></div></div>
-  <div class="frow"><div><label>Mot de passe ${u?'(laisser vide = inchangé)':''}</label><input id="uPwd" type="password" placeholder="••••"></div></div></div>
+  <div class="frow"><div><label>Nom complet</label><input id="uNom" value="${u?(u.nom||''):''}" placeholder="Ex : Béda Kouassi"></div></div>
+  <div class="frow"><div><label>Mot de passe ${u?'(laisser vide = inchangé)':''}</label><input id="uPwd" type="password" placeholder="••••"></div></div>
+  <div class="frow"><div><label>Code PIN caisse (4 chiffres, optionnel — requis pour ouvrir une session de caisse) ${u&&u.caissePinHash?'(laisser vide = inchangé)':''}</label><input id="uPin" maxlength="4" placeholder="Laisser vide = pas de PIN"></div></div></div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveUser('${id||''}')">${u?'Enregistrer':'Créer'}</button></div>`);
 }
 async function saveUser(id){
-  const login=document.getElementById('uLogin').value.trim(),role=document.getElementById('uRole').value,pwd=document.getElementById('uPwd').value;
+  const login=document.getElementById('uLogin').value.trim(),role=document.getElementById('uRole').value,pwd=document.getElementById('uPwd').value,nom=document.getElementById('uNom').value.trim(),pin=document.getElementById('uPin').value.trim();
   if(!login){toast('Identifiant requis.');return;}
-  if(id){const u=ST.users.find(x=>x.id===id);u.role=role;if(pwd)u.hash=await hashPwd(pwd);await put('users',u);}
+  if(pin&&!/^\d{4}$/.test(pin)){toast('PIN : 4 chiffres.');return;}
+  if(id){const u=ST.users.find(x=>x.id===id);u.role=role;u.nom=nom;if(pwd)u.hash=await hashPwd(pwd);if(pin)u.caissePinHash=await hashPwd(pin);await put('users',u);}
   else{if(ST.users.some(x=>x.login.toUpperCase()===login.toUpperCase())){toast('Identifiant déjà pris.');return;}
     if(!pwd){toast('Mot de passe requis.');return;}
-    await put('users',{id:uid('u'),login,role,hash:await hashPwd(pwd)});}
+    const nu={id:uid('u'),login,role,nom,hash:await hashPwd(pwd)};if(pin)nu.caissePinHash=await hashPwd(pin);
+    await put('users',nu);}
   await loadAll();closeModal();RENDER.parametrage();toast('Utilisateur enregistré.');
 }
 async function delUser(id){const u=ST.users.find(x=>x.id===id);
@@ -2731,6 +2736,15 @@ function importStagingFile(kind,file){
   if(!file)return;const rd=new FileReader();
   rd.onload=async()=>{
     let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
+    const sample=arr[0];
+    const shapeOk=kind==='achat_chantier'
+      ?('chantier'in sample&&'fournisseur'in sample&&'lignes'in sample)
+      :('mois_feuille'in sample&&('entree'in sample||'sortie'in sample));
+    if(!shapeOk){
+      toast('⚠ Fichier incompatible avec "'+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'" — vérifiez que vous n\'avez pas inversé les deux fichiers.');
+      return;
+    }
     let n=0;
     for(const r of arr){
       const st=kind==='achat_chantier'?'en_attente':(r.type==='ouverture'?'ignore':'en_attente');
@@ -2738,6 +2752,12 @@ function importStagingFile(kind,file){
     }
     await loadAll();RENDER.staging();toast(n+' ligne(s) chargée(s) en staging.');
   };rd.readAsText(file);
+}
+async function stgViderTout(){
+  if(!can('admin')){toast('Droit refusé.');return;}
+  if(!confirm('Supprimer TOUTES les lignes de staging ('+ST.staging.length+') ? Aucune écriture déjà validée ne sera touchée.'))return;
+  for(const s of ST.staging)await del('staging',s.id);
+  window._stgSel.clear();await loadAll();RENDER.staging();toast('Staging vidé.');
 }
 function stgFiltered(){
   const f=window._stgFiltre;
@@ -2753,7 +2773,8 @@ RENDER.staging=()=>{
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Chantiers<input type="file" accept=".json" style="display:none" onchange="importStagingFile('achat_chantier',this.files[0])"></label>
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Caisse<input type="file" accept=".json" style="display:none" onchange="importStagingFile('caisse',this.files[0])"></label>
     <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
-    <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>`;
+    <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>
+    ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}`;
   const list=stgFiltered();
   const nEnAttente=ST.staging.filter(s=>s.status==='en_attente').length;
   const nValide=ST.staging.filter(s=>s.status==='valide').length;
@@ -2775,7 +2796,7 @@ RENDER.staging=()=>{
     <div class="card kpi o"><div class="lb">En attente</div><div class="v mono">${nEnAttente}</div></div>
     <div class="card kpi g"><div class="lb">Validées</div><div class="v mono">${nValide}</div></div>
     <div class="card kpi b"><div class="lb">Rejetées</div><div class="v mono">${nRejete}</div></div>
-    <div class="card kpi o"><div class="lb">Total staging</div><div class="v mono">${ST.staging.length}</div></div>
+    <div class="card kpi o"><div class="lb">Total staging</div><div class="v mono">${ST.staging.length}</div><div class="f">${ST.staging.filter(s=>s.kind==='achat_chantier').length} chantiers · ${ST.staging.filter(s=>s.kind==='caisse').length} caisse</div></div>
   </div>
   <div class="frow c3" style="margin-bottom:10px">
     <div><label>Type</label><select onchange="window._stgFiltre.kind=this.value;window._stgPage=1;RENDER.staging()">
@@ -2834,6 +2855,12 @@ async function stgRejeterSelection(){
 }
 
 /* ============ CAISSE — style ImmoSuite (sessions, PIN, bons E/S, écart, ventilation) ============ */
+function curUserFull(){return ST.users.find(u=>u.id===ST.user.id)||ST.users.find(u=>u.login===ST.user.login);}
+function caisseNomUser(login){const u=ST.users.find(x=>x.login===login);return u?(u.nom||u.login):(login||'—');}
+function caisseUserPeut(caisseId){if(can('admin'))return true;const c=ST.caisses.find(x=>x.id===caisseId);if(!c)return false;
+  if(!c.caissiereIds||!c.caissiereIds.length)return true; // non restreinte = accessible à tous
+  const cu=curUserFull();return!!(cu&&c.caissiereIds.includes(cu.id));}
+function caissesVisibles(){return ST.caisses.filter(c=>caisseUserPeut(c.id));}
 function caisseGetSessionOuverte(caisseId){return ST.caisse_sessions.find(s=>s.caisseId===caisseId&&s.statut==='ouverte')||null;}
 function caisseDerniereSessionCloturee(caisseId){const l=ST.caisse_sessions.filter(s=>s.caisseId===caisseId&&s.statut==='cloturee');l.sort((a,b)=>(b.clotureeLe||'').localeCompare(a.clotureeLe||''));return l[0]||null;}
 function caisseSoldeSession(session){if(!session)return 0;
@@ -2849,7 +2876,8 @@ async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisse
 RENDER.caisse=()=>{
   document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}`;
   const solde=caisseSoldeGlobalTempsReel(),vent=caisseAVentilerStats(),ecartNR=caisseEcartNonRegularise();
-  const cards=ST.caisses.map(c=>{
+  const liste=caissesVisibles();
+  const cards=liste.map(c=>{
     const se=caisseGetSessionOuverte(c.id);const ouverte=!!se;
     const badge=ouverte?'<span class="badge b-green">OUVERTE</span>':'<span class="badge b-gray">FERMÉE</span>';
     const actions=ouverte?`
@@ -2859,10 +2887,11 @@ RENDER.caisse=()=>{
       <button class="btn sm" style="background:var(--red)" onclick="caisseClôturerModal('${c.id}')">🔒 Clôturer</button>`
       :`<button class="btn sm" onclick="caisseOuvrirModal('${c.id}')">🔓 Ouvrir</button>`;
     const cfg=can('admin')?`<button class="btn sm gh" onclick="caisseConfigModal('${c.id}')">⚙</button>`:'';
+    const caissiers=(c.caissiereIds&&c.caissiereIds.length)?c.caissiereIds.map(id=>{const u=ST.users.find(x=>x.id===id);return u?(u.nom||u.login):'';}).filter(Boolean).join(', '):'Tous';
     return`<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">
-      <div><div style="font-weight:800">${c.nom}</div><div style="font-size:11px;color:var(--mut)">Compte ${c.compte||'571'}</div></div>${badge}</div>
+      <div><div style="font-weight:800">${c.nom}</div><div style="font-size:11px;color:var(--mut)">Compte ${c.compte||'571'} · Caissier(s) : ${caissiers}</div></div>${badge}</div>
       ${ouverte?`<div style="font-size:22px;font-weight:800;color:var(--cuivre-d);margin:8px 0">${F0(caisseSoldeSession(se))} FCFA</div>
-      <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Ouverte le ${se.date} par ${se.ouvertePar||'—'} · fond ${F0(se.fondOuverture)}</div>`
+      <div style="font-size:11px;color:var(--mut);margin-bottom:8px">Ouverte le ${se.date} par ${caisseNomUser(se.ouvertePar)} · fond ${F0(se.fondOuverture)}</div>`
       :`<div style="font-size:12px;color:var(--mut);margin:10px 0">Caisse fermée</div>`}
       <div style="display:flex;gap:6px;flex-wrap:wrap">${actions}${cfg}</div></div>`;
   }).join('');
@@ -2871,9 +2900,9 @@ RENDER.caisse=()=>{
     <div class="card kpi g"><div class="lb">Solde global temps réel</div><div class="v mono">${F(solde)}</div></div>
     <div class="card kpi ${vent.nb?'r':'g'}"><div class="lb">À ventiler</div><div class="v mono">${vent.nb} mvt</div><div class="f">${F0(vent.montant)} FCFA</div></div>
     <div class="card kpi ${ecartNR?'r':'g'}"><div class="lb">Écarts non régularisés</div><div class="v mono">${F0(ecartNR)}</div></div>
-    <div class="card kpi o"><div class="lb">Caisses actives</div><div class="v mono">${ST.caisses.length}</div></div>
+    <div class="card kpi o"><div class="lb">Caisses actives</div><div class="v mono">${liste.length}</div></div>
   </div>
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px">${cards||'<div class="empty">Aucune caisse. Créez-en une.</div>'}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px">${cards||'<div class="empty">Aucune caisse qui vous soit assignée.</div>'}</div>
   ${caisseEcartsHTML()}
   <div class="card"><h3 style="margin-top:0">🧾 Mouvements clôturés à ventiler</h3>${caisseRenderVentilationHTML()}</div>
   <div id="caisse-brouillard-box"></div>`;
@@ -2915,21 +2944,23 @@ async function caisseVentilerLigne(mvtId){
 }
 function caisseConfigModal(caisseId){
   const c=caisseId?ST.caisses.find(x=>x.id===caisseId):null;
+  const opts=ST.users.map(u=>`<option value="${u.id}" ${c&&c.caissiereIds&&c.caissiereIds.includes(u.id)?'selected':''}>${u.nom||u.login} (${u.role})${u.caissePinHash?' · PIN configuré':' · sans PIN'}</option>`).join('');
   openModal(`<div class="mh"><h3>${c?'Configurer':'Nouvelle'} caisse</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
     <div class="frow c2"><div><label>Nom</label><input id="cc-nom" value="${c?c.nom:''}" placeholder="Ex : Caisse principale"></div>
     <div><label>Compte trésorerie</label><input id="cc-compte" value="${c?(c.compte||'571'):'571'}"></div></div>
-    <div class="frow"><div><label>Code PIN (4 chiffres, optionnel — protège l'ouverture)</label><input id="cc-pin" maxlength="4" placeholder="Laisser vide = pas de PIN"></div></div>
+    <div class="frow"><div><label>Caissier(s) autorisé(s) — laisser vide = accessible à tous les utilisateurs</label>
+    <select id="cc-caissiers" multiple size="5">${opts}</select></div></div>
+    <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:8px">Le code PIN est personnel — configurez-le sur la fiche de chaque utilisateur (Utilisateurs &amp; rôles), pas ici.</div>
   </div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button>${c&&can('admin')?`<button class="btn sm gh" style="color:var(--red)" onclick="caisseSupprimerCaisse('${c.id}')">Supprimer</button>`:''}<button class="btn sm" onclick="caisseSaveConfig('${caisseId||''}')">Enregistrer</button></div>`,true);
 }
 async function caisseSaveConfig(id){
   const nom=document.getElementById('cc-nom').value.trim();if(!nom){toast('Nom obligatoire.');return;}
   const compte=document.getElementById('cc-compte').value.trim()||'571';
-  const pin=document.getElementById('cc-pin').value.trim();
+  const caissiereIds=Array.from(document.getElementById('cc-caissiers').selectedOptions).map(o=>o.value);
   const c=id?ST.caisses.find(x=>x.id===id):{id:uid('cse'),createdAt:Date.now()};
-  c.nom=nom;c.compte=compte;
-  if(pin){if(!/^\d{4}$/.test(pin)){toast('PIN : 4 chiffres.');return;}c.pinHash=await hashPwd(pin);}
+  c.nom=nom;c.compte=compte;c.caissiereIds=caissiereIds;
   await put('caisses',c);await loadAll();closeModal();RENDER.caisse();toast('Caisse enregistrée.');
 }
 async function caisseSupprimerCaisse(id){
@@ -2942,24 +2973,28 @@ async function caisseSupprimerCaisse(id){
 }
 function caisseOuvrirModal(caisseId){
   const c=ST.caisses.find(x=>x.id===caisseId);if(!c)return;
+  if(!caisseUserPeut(caisseId)){toast('Cette caisse ne vous est pas assignée.');return;}
   if(caisseGetSessionOuverte(caisseId)){toast('Déjà ouverte.');return;}
   const der=caisseDerniereSessionCloturee(caisseId);const fond=der?(+der.fondClotureReel||0):0;
+  const cu=curUserFull();
   openModal(`<div class="mh"><h3>🔓 Ouvrir — ${c.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
+    <div style="font-size:12px;color:var(--mut);margin-bottom:8px">Caissier : <b>${cu?(cu.nom||cu.login):ST.user.login}</b></div>
     <div class="frow"><div><label>Fond d'ouverture (FCFA)</label><input type="number" id="co-fond" value="${fond}"></div></div>
     <div style="font-size:11px;color:var(--mut);margin-bottom:8px">${der?`Repris du solde de clôture du ${der.date} (${F0(fond)} FCFA).`:'Première ouverture — aucun solde antérieur.'}</div>
-    ${c.pinHash?'<div class="frow"><div><label>Code PIN</label><input type="password" id="co-pin" maxlength="4"></div></div>':''}
+    ${cu&&cu.caissePinHash?'<div class="frow"><div><label>Votre code PIN</label><input type="password" id="co-pin" maxlength="4"></div></div>':''}
   </div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="caisseOuvrir('${caisseId}')">Ouvrir</button></div>`,true);
 }
 async function caisseOuvrir(caisseId){
-  const c=ST.caisses.find(x=>x.id===caisseId);
-  if(c.pinHash){const pin=document.getElementById('co-pin').value.trim();if(!pin){toast('Saisissez le PIN.');return;}if(!(await verifyPwd(pin,c.pinHash))){toast('PIN incorrect.');return;}}
+  const cu=curUserFull();
+  if(cu&&cu.caissePinHash){const pin=document.getElementById('co-pin').value.trim();if(!pin){toast('Saisissez votre PIN.');return;}if(!(await verifyPwd(pin,cu.caissePinHash))){toast('PIN incorrect.');return;}}
   const fond=+document.getElementById('co-fond').value||0;
   const s={id:uid('css'),caisseId,date:today(),fondOuverture:fond,fondClotureTheorique:null,fondClotureReel:null,ecart:null,statut:'ouverte',ouvertePar:ST.user.login,ouverteLe:new Date().toISOString()};
   await put('caisse_sessions',s);await loadAll();closeModal();RENDER.caisse();toast('Caisse ouverte — fond '+F0(fond)+' FCFA.');
 }
 function caisseOuvrirBonModal(caisseId,type){
+  if(!caisseUserPeut(caisseId)){toast('Cette caisse ne vous est pas assignée.');return;}
   const s=caisseGetSessionOuverte(caisseId);if(!s){toast('Caisse fermée.');return;}
   const c=ST.caisses.find(x=>x.id===caisseId);
   openModal(`<div class="mh"><h3>${type==='entree'?'📥 Bon d\'entrée':'📤 Bon de sortie'} — ${c.nom}</h3><button class="x" onclick="closeModal()">×</button></div>
@@ -2997,7 +3032,7 @@ function caisseAfficherBrouillard(caisseId){
     <td class="ta-r mono">${m.type==='entree'?F0(m.montant):''}</td><td class="ta-r mono">${m.type==='sortie'?F0(m.montant):''}</td><td class="ta-r mono">${F0(solde)}</td>
     <td class="ta-c">${m.statut==='ventile'?'<span class="badge b-green">ventilé</span>':'<span class="badge b-cuivre">à ventiler</span>'}</td></tr>`;}).join('');
   document.getElementById('caisse-brouillard-box').innerHTML=`
-  <div class="card" style="margin-top:14px"><h3 style="margin-top:0">📋 Brouillard — ${c.nom} · session du ${s.date}</h3>
+  <div class="card" style="margin-top:14px"><h3 style="margin-top:0">📋 Brouillard — ${c.nom} · session du ${s.date} · caissier ${caisseNomUser(s.ouvertePar)}</h3>
   <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Tiers</th><th class="ta-r">Entrée</th><th class="ta-r">Sortie</th><th class="ta-r">Solde</th><th class="ta-c">Statut</th></tr></thead>
   <tbody>${rows||'<tr><td colspan=8 class="empty">Aucun mouvement</td></tr>'}</tbody></table></div></div>`;
 }
