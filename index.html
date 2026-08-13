@@ -3299,22 +3299,76 @@ async function caisseAjouterRegle(motCle,compte){
   const map=await caisseVentilationMap();map[motCle.trim().toLowerCase()]=compte;
   await caisseSaveVentilationMap(map);return true;
 }
-function caisseRenderVentilationHTML(){
-  const l=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';})
+window._cvFiltre={caisse:'',q:''};window._cvPage=1;window._cvSel=new Set();
+function caisseListeAVentiler(){
+  return ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';})
+    .filter(m=>{
+      if(window._cvFiltre.caisse&&m.caisseId!==window._cvFiltre.caisse)return false;
+      if(window._cvFiltre.q){const q=window._cvFiltre.q.toLowerCase();if(!((m.motif||'')+(m.beneficiaire||'')+(m.numero||'')).toLowerCase().includes(q))return false;}
+      return true;
+    })
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  if(!l.length)return'<div class="empty">Rien à ventiler.</div>';
+}
+function caisseRenderVentilationHTML(){
+  const full=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';});
+  if(!full.length)return'<div class="empty">Rien à ventiler.</div>';
+  const list=caisseListeAVentiler();
   const map=window._caisseVentMap||{};
   const opts=ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('');
-  return`<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th><th></th></tr></thead><tbody>
-  ${l.map(m=>{
+  const pageSize=50,pages=Math.max(1,Math.ceil(list.length/pageSize));
+  if(window._cvPage>pages)window._cvPage=pages;
+  const slice=list.slice((window._cvPage-1)*pageSize,window._cvPage*pageSize);
+  const rows=slice.map(m=>{
     const suggestion=caisseRuleMatch(m.motif,map);
-    return`<tr><td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
+    const c=ST.caisses.find(x=>x.id===m.caisseId);
+    return`<tr><td class="ta-c"><input type="checkbox" data-cv="${m.id}" ${window._cvSel.has(m.id)?'checked':''} onchange="cvToggle('${m.id}',this.checked)"></td>
+    <td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td style="font-size:11px">${esc(c?c.nom:'')}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
   <td>${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
   <select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
   <td class="ta-c">${piecesBadgeBtn(m.numero,'Bon '+m.numero)}</td>
   <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`;
-  }).join('')}
-  </tbody></table></div>`;
+  }).join('');
+  return`
+  <div class="frow c3" style="margin-bottom:10px">
+    <div><label>Caisse</label><select onchange="window._cvFiltre.caisse=this.value;window._cvPage=1;RENDER.caisse()">
+      <option value="">Toutes</option>${ST.caisses.map(c=>`<option value="${c.id}" ${window._cvFiltre.caisse===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>
+    <div><label>Recherche</label><input value="${esc(window._cvFiltre.q)}" oninput="window._cvFiltre.q=this.value;window._cvPage=1;RENDER.caisse()" placeholder="Motif, bénéficiaire, n°…"></div>
+    <div style="align-self:flex-end;display:flex;gap:8px;align-items:center">
+      <label style="font-size:12px"><input type="checkbox" onchange="cvToggleAllVisible(this.checked)"> Sélectionner la page</label>
+      <span style="font-size:12px;color:var(--mut)">${window._cvSel.size} sélectionné(s)</span>
+    </div>
+  </div>
+  ${window._cvSel.size?`<div class="frow c3" style="margin-bottom:10px;align-items:flex-end">
+    <div><label>Ventiler la sélection sur</label><select id="cv-bulk-compte"><option value="">—</option>${opts}</select></div>
+    <div><button class="btn sm" onclick="cvVentilerSelection()">✓ Ventiler ${window._cvSel.size} mouvement(s)</button></div>
+    <div><button class="btn sm gh" onclick="cvVentilerSelectionAuto()">⚡ Ventiler la sélection (règles)</button></div>
+  </div>`:''}
+  <div class="tbl-wrap"><table><thead><tr><th></th><th>N°</th><th>Date</th><th>Caisse</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th><th></th></tr></thead><tbody>
+  ${rows||'<tr><td colspan=11 class="empty">Aucun résultat pour ce filtre.</td></tr>'}
+  </tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._cvPage=Math.max(1,window._cvPage-1);RENDER.caisse()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._cvPage}/${pages} — ${list.length} mouvement(s)</span>
+    <button class="btn sm gh" onclick="window._cvPage=Math.min(${pages},window._cvPage+1);RENDER.caisse()">Suiv. ›</button>
+  </div>`;
+}
+function cvToggle(id,checked){if(checked)window._cvSel.add(id);else window._cvSel.delete(id);RENDER.caisse();}
+function cvToggleAllVisible(checked){document.querySelectorAll('[data-cv]').forEach(cb=>{cb.checked=checked;if(checked)window._cvSel.add(cb.dataset.cv);else window._cvSel.delete(cb.dataset.cv);});RENDER.caisse();}
+async function cvVentilerSelection(){
+  const compte=document.getElementById('cv-bulk-compte').value;
+  if(!compte){toast('Sélectionnez un compte de contrepartie.');return;}
+  if(!confirm(window._cvSel.size+' mouvement(s) vers le compte '+compte+'. Confirmer ?'))return;
+  let n=0;for(const id of Array.from(window._cvSel)){await caisseVentilerLigne(id,compte);n++;}
+  window._cvSel.clear();toast(n+' mouvement(s) ventilé(s).');RENDER.caisse();
+}
+async function cvVentilerSelectionAuto(){
+  const map=await caisseVentilationMap();let n=0,skip=0;
+  for(const id of Array.from(window._cvSel)){
+    const m=ST.caisse_mouvements.find(x=>x.id===id);if(!m)continue;
+    const compte=caisseRuleMatch(m.motif,map);
+    if(compte){await caisseVentilerLigne(id,compte);n++;}else skip++;
+  }
+  window._cvSel.clear();toast(n+' ventilé(s) automatiquement'+(skip?', '+skip+' sans règle correspondante':'')+'.');RENDER.caisse();
 }
 async function caisseVentilerLigne(mvtId,viaAuto){
   const sel=document.getElementById('cv-compte-'+mvtId);
