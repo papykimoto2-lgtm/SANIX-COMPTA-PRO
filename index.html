@@ -1438,13 +1438,72 @@ async function togglePointe(eid,li){
 }
 
 /* ---- Plan comptable ---- */
+/* ---- Plan comptable — arborescence pliable/dépliable (style ImmoSuite) ---- */
+window._pcExpanded={};
+function planBuildTree(liste){
+  const stack=[];
+  liste.forEach(c=>{
+    while(stack.length&&c.numero.indexOf(stack[stack.length-1].numero)!==0)stack.pop();
+    c._depth=stack.length;c._parentNum=stack.length?stack[stack.length-1].numero:null;
+    stack.push(c);
+  });
+  const nbEnf={};liste.forEach(c=>{if(c._parentNum)nbEnf[c._parentNum]=(nbEnf[c._parentNum]||0)+1;});
+  liste.forEach(c=>c._nbEnfants=nbEnf[c.numero]||0);
+  planMarquerDernier(liste);
+  return liste;
+}
+function planMarquerDernier(liste){
+  for(let i=0;i<liste.length;i++){
+    const d=liste[i]._depth;let estDernier=true;
+    for(let j=i+1;j<liste.length;j++){const d2=liste[j]._depth;if(d2>d)continue;estDernier=(d2!==d);break;}
+    liste[i]._isLast=estDernier;
+  }
+}
+function planRailHtml(c,index){
+  const chain=[];let p=c._parentNum;
+  while(p&&index[p]){chain.unshift(index[p]);p=index[p]._parentNum;}
+  const segs=chain.map(a=>a._isLast?'\u00A0\u00A0\u00A0':'│\u00A0\u00A0').join('');
+  const connecteur=c._depth>0?(c._isLast?'└─\u00A0':'├─\u00A0'):'';
+  return segs+connecteur;
+}
+function togglePlanNode(numero){window._pcExpanded[numero]=!window._pcExpanded[numero];RENDER.plan();}
+function planToutDeplier(ouvrir){
+  if(!ouvrir){window._pcExpanded={};RENDER.plan();return;}
+  ST.comptes.forEach(c=>window._pcExpanded[c.numero]=true);RENDER.plan();
+}
 RENDER.plan=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newCompte()">+ Compte</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newCompte()">+ Compte</button>
+  <label class="btn sm gh" style="cursor:pointer">⭱ Importer (CSV/JSON)<input type="file" accept=".csv,.json,.txt" style="display:none" onchange="importPlanFile(this.files[0])"></label>
+  <button class="btn sm gh" onclick="telechargerModelePlan()">📥 Modèle CSV</button>
+  <button class="btn sm gh" onclick="planToutDeplier(true)">⊞ Tout déplier</button>
+  <button class="btn sm gh" onclick="planToutDeplier(false)">⊟ Tout replier</button>`;
   const q=(window._planq||'').toLowerCase();
+  const complet=ST.comptes.slice().sort((a,b)=>a.numero<b.numero?-1:a.numero>b.numero?1:0);
+  planBuildTree(complet);
+  const index={};complet.forEach(c=>index[c.numero]=c);
+  const enRecherche=!!q;
+  let afficher;
+  if(enRecherche){
+    const matches=complet.filter(c=>c.numero.toLowerCase().includes(q)||c.libelle.toLowerCase().includes(q));
+    const codes={};matches.forEach(c=>{let cur=c;while(cur){codes[cur.numero]=true;cur=cur._parentNum?index[cur._parentNum]:null;}});
+    afficher=complet.filter(c=>codes[c.numero]);
+  }else{
+    afficher=complet.filter(c=>{let p=c._parentNum;while(p){if(!window._pcExpanded[p])return false;p=index[p]?index[p]._parentNum:null;}return true;});
+  }
   document.getElementById('p-plan').innerHTML=`<div class="toolbar"><input class="search" placeholder="Rechercher n° ou intitulé…" value="${window._planq||''}" oninput="window._planq=this.value;RENDER.plan()"></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th></tr></thead><tbody>
-  ${ST.comptes.filter(c=>!q||c.numero.includes(q)||c.libelle.toLowerCase().includes(q)).map(c=>`<tr><td class="mono"><b>${c.numero}</b></td><td>${c.libelle}</td><td><span class="badge b-gray">${c.classe} · ${CLASS_LABEL[c.classe]||''}</span></td><td>${natLabel(c.type)}</td>
-  <td class="ta-c">${c.aux?'<span class="badge b-gray">auxiliaire</span>':`<button class="linkbtn" onclick="editCompte('${c.numero}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delCompte('${c.numero}')">✕</button>`}</td></tr>`).join('')}
+  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Intitulé</th><th>Classe</th><th>Nature</th><th></th></tr></thead><tbody>
+  ${afficher.map(c=>{
+    const estGroupe=c._nbEnfants>0;
+    const ouvert=enRecherche?true:!!window._pcExpanded[c.numero];
+    const rail=planRailHtml(c,index);
+    const icone=estGroupe?`<span onclick="togglePlanNode('${c.numero}');event.stopPropagation()" style="cursor:pointer" title="${ouvert?'Replier':'Déplier'}">${ouvert?'📂':'📁'}</span>`:'<span title="Compte de détail" style="opacity:.5">▪</span>';
+    const badgeEnf=estGroupe?` <span style="font-size:10px;background:#fbf3ea;color:var(--cuivre-d);font-weight:700;padding:1px 6px;border-radius:8px">${c._nbEnfants} sous-compte(s)</span>`:'';
+    const indentPx=6+c._depth*20;
+    const rowClick=estGroupe?` onclick="togglePlanNode('${c.numero}')" style="cursor:pointer"`:'';
+    return`<tr${rowClick}><td class="mono" style="white-space:nowrap;padding-left:${indentPx}px"><span style="font-family:monospace">${rail}</span>${icone} <b>${c.numero}</b></td>
+    <td>${c.libelle}${badgeEnf}</td><td><span class="badge b-gray">${c.classe} · ${CLASS_LABEL[c.classe]||''}</span></td><td>${natLabel(c.type)}</td>
+    <td class="ta-c" onclick="event.stopPropagation()">${c.aux?'<span class="badge b-gray">auxiliaire</span>':`<button class="linkbtn" onclick="editCompte('${c.numero}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delCompte('${c.numero}')">✕</button>`}</td></tr>`;
+  }).join('')}
   </tbody></table></div>`;
 };
 const natLabel=t=>({A:'Actif',P:'Passif',C:'Charge',R:'Produit'}[t]||'—');
@@ -1468,6 +1527,60 @@ async function saveCompte(num){
 async function delCompte(num){
   if(mouvements((e,l)=>l.compte===num).length){toast('Impossible : compte mouvementé.');return;}
   if(!confirm('Supprimer le compte '+num+' ?'))return;await del('comptes','c_'+num);await loadAll();RENDER.plan();toast('Compte supprimé.');}
+function telechargerModelePlan(){
+  const csv='numero;libelle;type\n601;Achats de matières premières;C\n701;Ventes de produits finis;R\n411001;Client — Exemple;A\n401001;Fournisseur — Exemple;P\n';
+  const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='modele_plan_comptable.csv';a.click();
+}
+function parsePlanCSV(text){
+  const lines=text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  if(!lines.length)return[];
+  const delim=lines[0].includes(';')?';':',';
+  const header=lines[0].split(delim).map(h=>h.trim().toLowerCase());
+  const iNum=header.findIndex(h=>['numero','num','compte','n°'].includes(h));
+  const iLib=header.findIndex(h=>['libelle','libellé','intitule','intitulé','nom'].includes(h));
+  const iType=header.findIndex(h=>['type','nature'].includes(h));
+  if(iNum<0||iLib<0)return null;
+  const out=[];
+  for(let k=1;k<lines.length;k++){
+    const c=lines[k].split(delim);
+    out.push({numero:(c[iNum]||'').trim(),libelle:(c[iLib]||'').trim(),type:iType>=0?(c[iType]||'').trim():''});
+  }
+  return out;
+}
+function normPlanType(v,numero){
+  const m={'A':'A','ACTIF':'A','P':'P','PASSIF':'P','C':'C','CHARGE':'C','CHARGES':'C','R':'R','PRODUIT':'R','PRODUITS':'R'};
+  const t=m[(v||'').toUpperCase()];
+  if(t)return t;
+  const cl=numero[0];
+  if(cl==='6')return'C';if(cl==='7')return'R';if(cl==='2'||cl==='3'||cl==='5')return'A';if(cl==='1'||cl==='4')return'P';
+  return'A';
+}
+function importPlanFile(file){
+  if(!file)return;const rd=new FileReader();
+  rd.onload=async()=>{
+    let rows;
+    try{
+      if(file.name.toLowerCase().endsWith('.json')){
+        const arr=JSON.parse(rd.result);
+        rows=arr.map(r=>({numero:String(r.numero||r.compte||'').trim(),libelle:(r.libelle||r.intitule||'').trim(),type:r.type||r.nature||''}));
+      }else{
+        rows=parsePlanCSV(rd.result);
+        if(rows===null){toast('CSV : colonnes attendues "numero;libelle;type" (type optionnel).');return;}
+      }
+    }catch(e){toast('Fichier invalide : '+e.message);return;}
+    if(!rows||!rows.length){toast('Aucune ligne exploitable.');return;}
+    let created=0,updated=0,invalides=0;
+    for(const r of rows){
+      if(!/^\d{2,}$/.test(r.numero)||!r.libelle){invalides++;continue;}
+      const type=normPlanType(r.type,r.numero);
+      const existant=ST.comptes.find(c=>c.numero===r.numero);
+      if(existant){existant.libelle=r.libelle;if(r.type)existant.type=type;await put('comptes',existant);updated++;}
+      else{await put('comptes',{id:'c_'+r.numero,numero:r.numero,libelle:r.libelle,type,classe:r.numero[0]});created++;}
+    }
+    await loadAll();RENDER.plan();
+    toast(created+' compte(s) créé(s), '+updated+' mis à jour'+(invalides?', '+invalides+' ligne(s) ignorée(s)':'')+'.');
+  };rd.readAsText(file);
+}
 
 /* ---- Exercices ---- */
 RENDER.exercices=()=>{
@@ -2732,6 +2845,39 @@ async function stgEnsureFournisseur(nom){
   ST.tiers.push(t);ST.comptes.push({numero:compte});
   return t;
 }
+async function bulkCreateFournisseursFromStaging(){
+  const noms=[...new Set(ST.staging.filter(s=>s.kind==='achat_chantier').map(s=>(s.payload.fournisseur||'').trim()).filter(Boolean))];
+  if(!noms.length){toast('Aucun fournisseur détecté dans le staging. Importez d\'abord le JSON Chantiers.');return;}
+  let created=0,existants=0;
+  for(const nom of noms){
+    const before=ST.tiers.length;
+    await stgEnsureFournisseur(nom);
+    if(ST.tiers.length>before)created++;else existants++;
+  }
+  await loadAll();RENDER.staging();
+  toast(created+' fournisseur(s) créé(s), '+existants+' déjà existant(s) sur '+noms.length+'.');
+}
+async function bulkImportTiersFile(type,file){
+  if(!file)return;const rd=new FileReader();
+  rd.onload=async()=>{
+    let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
+    let created=0,existants=0;
+    for(const item of arr){
+      const nom=(typeof item==='string'?item:item.nom||'').trim();
+      if(!nom)continue;
+      const exist=ST.tiers.find(x=>x.type===type&&x.nom.trim().toUpperCase()===nom.toUpperCase());
+      if(exist){existants++;continue;}
+      const base=type==='client'?'4111':'4011';
+      const n=ST.tiers.filter(x=>x.type===type).length+1;const compte=base+String(n).padStart(3,'0');
+      const t={id:uid('t'),type,compte,nom,ncc:(typeof item==='object'&&item.ncc)||'',tel:(typeof item==='object'&&item.tel)||'',email:(typeof item==='object'&&item.email)||'',adresse:(typeof item==='object'&&item.adresse)||'',delai:0,plafond:0};
+      await put('tiers',t);
+      await put('comptes',{id:'c_'+compte,numero:compte,libelle:(type==='client'?'Client — ':'Fournisseur — ')+nom,type:type==='client'?'A':'P',classe:'4',aux:t.id});
+      ST.tiers.push(t);created++;
+    }
+    await loadAll();RENDER.staging();toast(created+' '+(type==='client'?'client(s)':'fournisseur(s)')+' créé(s), '+existants+' déjà existant(s).');
+  };rd.readAsText(file);
+}
 function importStagingFile(kind,file){
   if(!file)return;const rd=new FileReader();
   rd.onload=async()=>{
@@ -2772,6 +2918,8 @@ RENDER.staging=()=>{
   document.getElementById('pgActions').innerHTML=`
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Chantiers<input type="file" accept=".json" style="display:none" onchange="importStagingFile('achat_chantier',this.files[0])"></label>
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Caisse<input type="file" accept=".json" style="display:none" onchange="importStagingFile('caisse',this.files[0])"></label>
+    <button class="btn sm gh" onclick="bulkCreateFournisseursFromStaging()">👥 Créer fournisseurs (chantiers)</button>
+    <label class="btn sm gh" style="cursor:pointer">⭱ JSON Clients<input type="file" accept=".json" style="display:none" onchange="bulkImportTiersFile('client',this.files[0])"></label>
     <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
     <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>
     ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}`;
