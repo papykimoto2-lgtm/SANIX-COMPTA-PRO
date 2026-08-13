@@ -3234,8 +3234,11 @@ function caisseAVentilerStats(){const l=ST.caisse_mouvements.filter(m=>{if(m.sta
 function caisseEcartNonRegularise(){return ST.caisse_sessions.filter(s=>s.statut==='cloturee'&&(+s.ecart||0)!==0&&!s.ecartRegularise).reduce((a,s)=>a+Math.abs(+s.ecart||0),0);}
 async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisseId+'_'+type;const m=await getOne('meta',key);let seq=m?m.value:0;seq++;await put('meta',{id:key,value:seq});return(type==='entree'?'CE-':'CS-')+today().replace(/-/g,'')+'-'+String(seq).padStart(3,'0');}
 
-RENDER.caisse=()=>{
-  document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}`;
+RENDER.caisse=async()=>{
+  window._caisseVentMap=await caisseVentilationMap();
+  document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}
+  <button class="btn sm gh" onclick="caisseOpenVentilationConfig()">⚙ Configurer les règles</button>
+  <button class="btn sm gh" onclick="caisseVentilationAuto()">⚡ Ventilation automatique</button>`;
   const solde=caisseSoldeGlobalTempsReel(),vent=caisseAVentilerStats(),ecartNR=caisseEcartNonRegularise();
   const liste=caissesVisibles();
   const cards=liste.map(c=>{
@@ -3278,30 +3281,155 @@ function caisseEcartsHTML(){
   <td><button class="btn sm" onclick="caisseRegulariserEcart('${s.id}')">Régulariser</button></td></tr>`).join('')}
   </tbody></table></div></div>`;
 }
+/* ---- Ventilation comptable — règles mot-clé → compte, auto, apprentissage (style ImmoSuite) ---- */
+async function caisseVentilationMap(){const m=await getOne('meta','caisse_ventilation_map');return m?m.value:{};}
+async function caisseSaveVentilationMap(map){await put('meta',{id:'caisse_ventilation_map',value:map});}
+function caisseRuleMatch(motif,map){
+  const motifLc=(motif||'').toLowerCase();
+  for(const k of Object.keys(map))if(motifLc.includes(k.toLowerCase()))return map[k];
+  return null;
+}
+function caisseSuggestKeyword(motif){
+  const m=String(motif||'');
+  const apres=m.includes(':')?m.split(':').slice(1).join(':'):m;
+  return apres.trim().toLowerCase().replace(/[.,;].*$/,'').split(/\s+/).slice(0,3).join(' ').trim();
+}
+async function caisseAjouterRegle(motCle,compte){
+  if(!motCle||!compte)return false;
+  const map=await caisseVentilationMap();map[motCle.trim().toLowerCase()]=compte;
+  await caisseSaveVentilationMap(map);return true;
+}
 function caisseRenderVentilationHTML(){
   const l=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';})
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   if(!l.length)return'<div class="empty">Rien à ventiler.</div>';
+  const map=window._caisseVentMap||{};
   const opts=ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('');
   return`<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th></tr></thead><tbody>
-  ${l.map(m=>`<tr><td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
-  <td><select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
-  <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`).join('')}
+  ${l.map(m=>{
+    const suggestion=caisseRuleMatch(m.motif,map);
+    return`<tr><td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
+  <td>${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
+  <select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
+  <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`;
+  }).join('')}
   </tbody></table></div>`;
 }
-async function caisseVentilerLigne(mvtId){
-  const sel=document.getElementById('cv-compte-'+mvtId);const compte=sel?sel.value:'';
-  if(!compte){toast('Sélectionnez un compte de contrepartie.');return;}
+async function caisseVentilerLigne(mvtId,viaAuto){
+  const sel=document.getElementById('cv-compte-'+mvtId);
   const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
+  let compte=viaAuto||(sel?sel.value:'');
+  if(!compte&&sel){const map=await caisseVentilationMap();compte=caisseRuleMatch(m.motif,map);}
+  if(!compte){toast('Sélectionnez un compte de contrepartie.');return;}
+  const map=await caisseVentilationMap();
+  const couvertParRegle=!!caisseRuleMatch(m.motif,map);
   const c=ST.caisses.find(x=>x.id===m.caisseId);const cptCaisse=(c&&c.compte)||'571';
   const lib=(m.type==='entree'?'Entrée caisse — ':'Sortie caisse — ')+(m.motif||'')+(m.beneficiaire?' — '+m.beneficiaire:'');
   const lignes=m.type==='entree'
     ?[{compte:cptCaisse,libelle:lib,debit:Math.round(m.montant),credit:0},{compte,libelle:lib,debit:0,credit:Math.round(m.montant)}]
     :[{compte,libelle:lib,debit:Math.round(m.montant),credit:0},{compte:cptCaisse,libelle:lib,debit:0,credit:Math.round(m.montant)}];
   const eid='e_cse_'+m.id;
-  await put('ecritures',{id:eid,exId:ST.exId,journal:'CA',date:(m.date||'').slice(0,10)||today(),piece:m.numero,libelle:lib,lignes,created:Date.now()});
-  m.statut='ventile';m.compteVentile=compte;m.ecritureId=eid;m.ventilePar=ST.user.login;m.ventileLe=today();
-  await put('caisse_mouvements',m);await loadAll();RENDER.caisse();toast('Écriture générée et mouvement ventilé.');
+  await put('ecritures',{id:eid,exId:ST.exId,journal:'CA',date:(m.date||'').slice(0,10)||today(),piece:m.numero,libelle:lib,lignes,created:Date.now(),ventileAuto:!!viaAuto});
+  m.statut='ventile';m.compteVentile=compte;m.ecritureId=eid;m.ventilePar=ST.user.login;m.ventileLe=today();m.ventileAuto=!!viaAuto;
+  await put('caisse_mouvements',m);await loadAll();RENDER.caisse();
+  if(!viaAuto)toast('Écriture générée et mouvement ventilé.');
+  if(!viaAuto&&!couvertParRegle){
+    setTimeout(()=>{
+      const suggestion=caisseSuggestKeyword(m.motif);
+      const kw=prompt('Créer une règle de ventilation automatique pour les prochains mouvements similaires ?\nMot-clé (laisser vide pour ignorer) :',suggestion);
+      if(kw&&kw.trim())caisseAjouterRegle(kw.trim(),compte).then(()=>toast('⚡ Règle ajoutée : « '+kw.trim()+' » → '+compte));
+    },250);
+  }
+}
+async function caisseVentilationAuto(){
+  const map=await caisseVentilationMap();
+  if(!Object.keys(map).length){toast('Aucune règle configurée (bouton ⚙ Configurer les règles).');return;}
+  const enAttente=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';});
+  if(!enAttente.length){toast('Aucun mouvement à ventiler.');return;}
+  let appliques=0;
+  for(const m of enAttente){const compte=caisseRuleMatch(m.motif,map);if(compte){await caisseVentilerLigne(m.id,compte);appliques++;}}
+  toast(appliques?('⚡ '+appliques+' mouvement(s) ventilé(s) automatiquement. '+(enAttente.length-appliques)+' restent manuels.'):'Aucune correspondance trouvée.');
+  RENDER.caisse();
+}
+async function caisseOpenVentilationConfig(){
+  window._caisseVentMap=await caisseVentilationMap();
+  openModal(`<div class="mh"><h3>⚙ Règles de ventilation automatique</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Un mot-clé trouvé dans le motif du mouvement déclenche l'imputation automatique sur le compte associé.</div>
+    <div class="frow c3"><div><label>Mot-clé (dans le motif)</label><input id="cvc-motcle" placeholder="Ex : carburant"></div>
+    <div><label>Compte de contrepartie</label><select id="cvc-compte"><option value="">—</option>${ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('')}</select></div>
+    <div style="align-self:flex-end"><button class="btn sm" onclick="caisseAddVentilationRule()">+ Ajouter</button></div></div>
+    <div id="cvc-liste" style="margin-top:12px"></div>
+    <div style="margin-top:12px"><button class="btn sm gh" onclick="caisseGenererReglesHistorique()">🧠 Générer règles depuis l'historique</button></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button></div>`,true);
+  caisseRenderVentilationConfigList();
+}
+function caisseRenderVentilationConfigList(){
+  const box=document.getElementById('cvc-liste');if(!box)return;
+  const map=window._caisseVentMap||{};
+  const cles=Object.keys(map).sort();
+  if(!cles.length){box.innerHTML='<div style="padding:10px;text-align:center;color:var(--mut);font-size:12px">Aucune règle définie.</div>';return;}
+  box.innerHTML=`<table><thead><tr><th>Mot-clé</th><th>Compte</th><th class="ta-r">Écritures auto</th><th></th></tr></thead><tbody>
+  ${cles.map(k=>{
+    const cpt=ST.comptes.find(c=>c.numero===map[k]);
+    const nAuto=ST.caisse_mouvements.filter(m=>m.ventileAuto&&m.statut==='ventile'&&caisseSuggestKeyword(m.motif)===k).length;
+    return`<tr><td>${esc(k)}</td><td>${esc(map[k])}${cpt?' — '+esc(cpt.libelle):''}</td><td class="ta-r">${nAuto||'—'}</td>
+    <td class="ta-c">${nAuto?`<button class="linkbtn" title="Annuler ces ventilations auto" onclick="caisseAnnulerVentilationsAutoParRegle('${k.replace(/'/g,"\\'")}')">↩</button> `:''}<button class="linkbtn" style="color:var(--red)" onclick="caisseDeleteVentilationRule('${k.replace(/'/g,"\\'")}')">✕</button></td></tr>`;
+  }).join('')}
+  </tbody></table>`;
+}
+async function caisseAddVentilationRule(){
+  const mot=(document.getElementById('cvc-motcle').value||'').trim().toLowerCase();
+  const cpt=document.getElementById('cvc-compte').value;
+  if(!mot){toast('Saisissez un mot-clé.');return;}
+  if(!cpt){toast('Sélectionnez un compte.');return;}
+  window._caisseVentMap=window._caisseVentMap||{};window._caisseVentMap[mot]=cpt;
+  await caisseSaveVentilationMap(window._caisseVentMap);
+  document.getElementById('cvc-motcle').value='';document.getElementById('cvc-compte').value='';
+  caisseRenderVentilationConfigList();toast('Règle ajoutée.');
+}
+async function caisseDeleteVentilationRule(mot){
+  if(!window._caisseVentMap)return;delete window._caisseVentMap[mot];
+  await caisseSaveVentilationMap(window._caisseVentMap);
+  caisseRenderVentilationConfigList();toast('Règle supprimée.');
+}
+async function caisseAnnulerVentilationsAutoParRegle(motCle){
+  if(!confirm('Annuler toutes les ventilations automatiques posées par la règle « '+motCle+' » ? Les écritures liées seront supprimées et les mouvements repasseront en attente.'))return;
+  const cibles=ST.caisse_mouvements.filter(m=>m.ventileAuto&&m.statut==='ventile'&&caisseSuggestKeyword(m.motif)===motCle);
+  for(const m of cibles){if(m.ecritureId)await del('ecritures',m.ecritureId);m.statut='a_ventiler';m.compteVentile=null;m.ecritureId=null;m.ventileAuto=false;await put('caisse_mouvements',m);}
+  await loadAll();caisseRenderVentilationConfigList();RENDER.caisse();toast(cibles.length+' ventilation(s) annulée(s).');
+}
+window._crhSuggestions=[];
+function caisseGenererReglesHistorique(){
+  const map=window._caisseVentMap||{};
+  const stats={};
+  ST.caisse_mouvements.forEach(m=>{
+    if(m.statut!=='ventile'||!m.compteVentile)return;
+    const kw=caisseSuggestKeyword(m.motif);if(!kw||map[kw])return;
+    stats[kw]=stats[kw]||{};stats[kw][m.compteVentile]=(stats[kw][m.compteVentile]||0)+1;
+  });
+  window._crhSuggestions=Object.keys(stats).map(kw=>{
+    const comptes=stats[kw];const best=Object.keys(comptes).sort((a,b)=>comptes[b]-comptes[a])[0];
+    const total=Object.values(comptes).reduce((s,n)=>s+n,0);
+    return{motCle:kw,compte:best,occurrences:comptes[best],total,confiance:comptes[best]/total};
+  }).filter(s=>s.occurrences>=2).sort((a,b)=>b.occurrences-a.occurrences).slice(0,80);
+  openModal(`<div class="mh"><h3>🧠 Règles suggérées depuis l'historique</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div id="crh-stats" style="font-size:12px;color:var(--mut);margin-bottom:10px">${window._crhSuggestions.length?window._crhSuggestions.length+' règle(s) suggérée(s) — décochez celles à écarter.':'Aucune règle exploitable trouvée (historique insuffisant ou déjà couvert).'}</div>
+    <div class="tbl-wrap"><table id="crh-table"><thead><tr><th></th><th>Mot-clé</th><th>Compte proposé</th><th class="ta-r">Occurrences</th><th class="ta-r">Confiance</th></tr></thead><tbody>
+    ${window._crhSuggestions.map((s,i)=>{const cpt=ST.comptes.find(c=>c.numero===s.compte);const conf=Math.round(s.confiance*100);
+      return`<tr><td class="ta-c"><input type="checkbox" data-idx="${i}" ${conf>=70?'checked':''}></td><td>${esc(s.motCle)}</td><td>${esc(s.compte)}${cpt?' — '+esc(cpt.libelle):''}</td><td class="ta-r">${s.occurrences}/${s.total}</td><td class="ta-r" style="color:${conf>=70?'var(--green)':'var(--cuivre-d)'}">${conf}%</td></tr>`;
+    }).join('')}
+    </tbody></table></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" ${!window._crhSuggestions.length?'disabled':''} onclick="caisseGenererReglesHistoriqueAppliquer()">Ajouter les règles cochées</button></div>`,true);
+}
+async function caisseGenererReglesHistoriqueAppliquer(){
+  const cases=document.querySelectorAll('#crh-table input[type="checkbox"]:checked');
+  let n=0;
+  for(const cb of cases){const idx=+cb.dataset.idx;const s=window._crhSuggestions[idx];if(!s)continue;if(await caisseAjouterRegle(s.motCle,s.compte))n++;}
+  toast('✅ '+n+' règle(s) ajoutée(s).');closeModal();RENDER.caisse();
 }
 function caisseConfigModal(caisseId){
   const c=caisseId?ST.caisses.find(x=>x.id===caisseId):null;
