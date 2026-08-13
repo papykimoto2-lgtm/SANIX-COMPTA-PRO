@@ -229,7 +229,7 @@ tbody tr:hover{background:#fbfcfe}
   <aside class="side">
     <div class="top"><div class="brand"><div class="logo">SX</div><div><h1>ComptaPro</h1><div class="tag">SYSCOHADA · FCFA</div></div></div></div>
     <div class="exbar"><span>Entreprise</span><b id="entLabel" style="flex:1">—</b><button class="linkbtn" title="Changer d'entreprise" onclick="openEntSwitch()">⇄</button></div>
-    <div class="exbar"><span>Exercice</span><b id="exLabel">—</b></div>
+    <div class="exbar"><span>Exercice</span><select id="exSelect" onchange="switchEx(this.value)" style="flex:1;background:transparent;border:none;color:inherit;font-weight:700;font-size:inherit;cursor:pointer"></select></div>
     <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span> <span id="pendingBadge" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span></div>
     <nav class="nav" id="nav">
       <div class="grp-section" data-grp="saisie">
@@ -643,6 +643,11 @@ async function loadAll(){
   ST.factures=(await all('factures')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
   ST.achats=(await all('achats')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
 }
+function populateExSelect(){
+  const sel=document.getElementById('exSelect');if(!sel)return;
+  const tri=ST.exercices.slice().sort((a,b)=>(b.debut||'').localeCompare(a.debut||''));
+  sel.innerHTML=tri.map(e=>`<option value="${e.id}" ${e.id===ST.exId?'selected':''}>${e.libelle}${e.statut==='clôturé'?' 🔒':''}</option>`).join('');
+}
 const curEx=()=>ST.exercices.find(e=>e.id===ST.exId)||{};
 const cptLib=num=>{const c=ST.comptes.find(x=>x.numero===num);return c?c.libelle:'';};
 const jLib=id=>{const j=ST.journaux.find(x=>x.id===id||x.code===id);return j?j.code:id;};
@@ -711,7 +716,7 @@ async function ensurePlan(){for(const[num,lib,t]of PLAN){if(!ST.comptes.some(c=>
 async function boot(){
   await idb();await seed();await seedUsers();await loadAll();await ensurePlan();await loadAll();
   document.getElementById('who').textContent=ST.user.login+' · '+ST.user.role+(can('write')?'':' 🔒');
-  document.getElementById('exLabel').textContent=curEx().libelle||'—';
+  populateExSelect();
   // masquer Paramétrage hors admin
   const pa=document.querySelector('#nav a[data-p="parametrage"]');if(pa)pa.style.display=can('admin')?'':'none';
   window._autosync=(await getOne('meta','autosync'))?.value||false;
@@ -768,6 +773,7 @@ function expandGrpFor(p){
   }
 }
 function go(p){
+  window._curPage=p;
   expandGrpFor(p);
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
@@ -1602,7 +1608,7 @@ function editExercice(id){
 async function saveExercice(id){
   const lib=document.getElementById('xL').value||'Exercice',d=document.getElementById('xD').value,f=document.getElementById('xF').value;
   if(id){const e=ST.exercices.find(x=>x.id===id);e.libelle=lib;e.debut=d;e.fin=f;await put('exercices',e);await loadAll();
-    if(id===ST.exId)document.getElementById('exLabel').textContent=lib;closeModal();RENDER.exercices();toast('Exercice modifié.');return;}
+    if(id===ST.exId)populateExSelect();closeModal();RENDER.exercices();toast('Exercice modifié.');return;}
   const e={id:uid('ex'),libelle:lib,debut:d,fin:f,statut:'ouvert'};
   await put('exercices',e);await loadAll();closeModal();RENDER.exercices();toast('Exercice créé.');
 }
@@ -1611,7 +1617,7 @@ async function delExercice(id){
   const nb=(await all('ecritures')).filter(x=>x.exId===id).length;
   if(nb){toast('Impossible : '+nb+' écriture(s) liée(s).');return;}
   if(!confirm('Supprimer cet exercice ?'))return;await del('exercices',id);await loadAll();RENDER.exercices();toast('Exercice supprimé.');}
-async function switchEx(id){await put('meta',{id:'exCourant',value:id});await loadAll();document.getElementById('exLabel').textContent=curEx().libelle;RENDER.exercices();toast('Exercice activé.');}
+async function switchEx(id){await put('meta',{id:'exCourant',value:id});await loadAll();populateExSelect();RENDER.exercices();RENDER[window._curPage]&&RENDER[window._curPage]();toast('Exercice activé.');}
 async function cloturer(id){
   if(!confirm('Clôturer définitivement cet exercice ? Génère les à-nouveaux.'))return;
   const e=ST.exercices.find(x=>x.id===id);
