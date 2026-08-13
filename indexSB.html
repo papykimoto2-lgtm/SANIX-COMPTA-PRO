@@ -368,7 +368,7 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=10;
+const DB_BASE='sanix_comptapro', DB_VER=11;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
@@ -378,10 +378,22 @@ const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
 function idb(){return new Promise((res,rej)=>{
   const r=indexedDB.open(DB_NAME,DB_VER);
-  r.onupgradeneeded=e=>{const d=e.target.result;
-    STORES.forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});});};
+  r.onupgradeneeded=e=>{const d=e.target.result;const tr=e.target.transaction;
+    STORES.forEach(s=>{if(!d.objectStoreNames.contains(s))d.createObjectStore(s,{keyPath:'id'});});
+    // index exId pour éviter un balayage complet des tables volumineuses (perf sur gros historique)
+    ['ecritures','achats','factures'].forEach(s=>{
+      const os=tr.objectStore(s);
+      if(!os.indexNames.contains('exId'))os.createIndex('exId','exId',{unique:false});
+    });};
   r.onsuccess=e=>{DB=e.target.result;res(DB);};
   r.onerror=e=>rej(e);
+});}
+function allByIndex(store,indexName,value){return new Promise((res,rej)=>{
+  try{
+    const idx=tx(store).index(indexName);
+    const r=idx.getAll(value);
+    r.onsuccess=()=>res(r.result||[]);r.onerror=()=>{all(store).then(arr=>res(arr.filter(x=>x[indexName]===value))).catch(rej);};
+  }catch(e){all(store).then(arr=>res(arr.filter(x=>x[indexName]===value))).catch(rej);}
 });}
 function tx(store,mode='readonly'){return DB.transaction(store,mode).objectStore(store);}
 /* Garde-fou de rôle : un utilisateur "Lecture seule" ne peut écrire/supprimer aucune donnée, même via la console ou un bouton mal protégé. */
@@ -655,9 +667,10 @@ async function loadAll(){
   ST.releve_bancaire=await all('releve_bancaire');
   const cur=await getOne('meta','exCourant');
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
-  ST.ecritures=(await all('ecritures')).filter(e=>e.exId===ST.exId).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
-  ST.factures=(await all('factures')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
-  ST.achats=(await all('achats')).filter(f=>f.exId===ST.exId).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
+  ST.ecritures=(await allByIndex('ecritures','exId',ST.exId)).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
+  ST.factures=(await allByIndex('factures','exId',ST.exId)).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
+  ST.achats=(await allByIndex('achats','exId',ST.exId)).sort((a,b)=>(b.numero||'').localeCompare(a.numero||''));
+  ST._mvtIdx=null; // invalide le cache de mouvements par compte (reconstruit à la demande)
 }
 function populateExSelect(){
   const sel=document.getElementById('exSelect');if(!sel)return;
@@ -678,6 +691,18 @@ function mouvements(filterFn){
   }));
   return rows;
 }
+/* Index mouvements groupés par compte — calculé une seule fois par exercice chargé, évite les boucles O(comptes × écritures) */
+function mouvementsIndex(){
+  if(ST._mvtIdx)return ST._mvtIdx;
+  const idx={};
+  ST.ecritures.forEach(e=>e.lignes.forEach((l,i)=>{
+    const c=l.compte;if(!c)return;
+    (idx[c]=idx[c]||[]).push({eid:e.id,li:i,date:e.date,journal:jLib(e.journal),piece:e.piece||'',libelle:l.libelle||e.libelle,
+      compte:c,tiers:l.tiers,debit:+l.debit||0,credit:+l.credit||0,lettre:l.lettre||'',centre:l.centre||'',pointe:!!l.pointe});
+  }));
+  ST._mvtIdx=idx;return idx;
+}
+function mouvementsDuCompte(compte){return (mouvementsIndex()[compte])||[];}
 function soldesParCompte(){
   const m={};
   mouvements().forEach(r=>{if(!m[r.compte])m[r.compte]={debit:0,credit:0};m[r.compte].debit+=r.debit;m[r.compte].credit+=r.credit;});
@@ -874,6 +899,9 @@ function progressStart(titre){
   };
 }
 function progressYield(){return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));}
+/* Anti-rebond générique : évite de relancer un rendu coûteux à chaque frappe sur de gros volumes */
+window._debounceTimers={};
+function debounce(key,fn,delay){delay=delay||300;clearTimeout(window._debounceTimers[key]);window._debounceTimers[key]=setTimeout(fn,delay);}
 document.getElementById('ov').onclick=e=>{if(e.target.id==='ov')closeModal();};
 
 /* ============ RENDER ============ */
@@ -1877,7 +1905,7 @@ RENDER.balageee=()=>{
     const s=m[t.compte];if(!s)return null;
     const solde=type==='client'?(s.debit-s.credit):(s.credit-s.debit);
     if(Math.abs(solde)<1)return null;
-    const mvts=mouvements(l=>l.compte===t.compte);
+    const mvts=mouvementsDuCompte(t.compte);
     const tr=balageeeTranches(t,solde,mvts);
     return{nom:t.nom,compte:t.compte,solde,...tr};
   }).filter(Boolean).sort((a,b)=>b.trPlus90-a.trPlus90||b.solde-a.solde);
@@ -2987,39 +3015,56 @@ async function findOrCreateExercicePourDate(dateStr){
   await put('exercices',e);ST.exercices.push(e);
   return e.id;
 }
-function exportAchatsParClientCSV(){
-  let c='Client;N° facture;Date;Fournisseur;Chantier;HT;TVA;TTC;Statut\n';
-  ST.achats.slice().sort((a,b)=>(a.clientNom||'zzz').localeCompare(b.clientNom||'zzz')||(b.date||'').localeCompare(a.date||'')).forEach(a=>{
+async function exportAchatsParClientCSV(){
+  let source;
+  if(!window._achFiltreEx||window._achFiltreEx===ST.exId)source=ST.achats;
+  else if(window._achFiltreEx==='tous')source=await all('achats');
+  else source=(await all('achats')).filter(a=>a.exId===window._achFiltreEx);
+  let c='Client;N° facture;Date;Exercice;Fournisseur;Chantier;HT;TVA;TTC;Statut\n';
+  source.slice().sort((a,b)=>(a.clientNom||'zzz').localeCompare(b.clientNom||'zzz')||(b.date||'').localeCompare(a.date||'')).forEach(a=>{
     const solde=achatSolde(a),regle=achatMontantRegle(a);
     const statut=solde<=0.5?'Réglé':regle>0?'Partiel':'À payer';
-    c+=`"${(a.clientNom||'(sans client)').replace(/"/g,"'")}";${a.numero};${a.date};"${(a.fournNom||'').replace(/"/g,"'")}";"${(a.chantier||'').replace(/"/g,"'")}";${a.ht};${a.tva};${a.ttc};${statut}\n`;
+    const exLib=(ST.exercices.find(e=>e.id===a.exId)||{}).libelle||'';
+    c+=`"${(a.clientNom||'(sans client)').replace(/"/g,"'")}";${a.numero};${a.date};"${exLib}";"${(a.fournNom||'').replace(/"/g,"'")}";"${(a.chantier||'').replace(/"/g,"'")}";${a.ht};${a.tva};${a.ttc};${statut}\n`;
   });
   dl('etat_achats_par_client.csv',c);
 }
-RENDER.achats=()=>{
+RENDER.achats=async()=>{
   document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="editAchat(null)">+ Facture d'achat</button> <button class="btn sm gh" onclick="window._achVueClient=!window._achVueClient;RENDER.achats()">${window._achVueClient?'📋 Vue factures':'👤 État par client'}</button>${window._achVueClient?' <button class="btn sm gh" onclick="printReport(\'p-achats\',\'État des achats par client\')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportAchatsParClientCSV()">⭳ CSV</button>':''}`;
   const q=(window._achq||'').toLowerCase();
   window._achClientExpanded=window._achClientExpanded||{};
   if(window._achVueClient){
+    window._achFiltreEx=window._achFiltreEx||ST.exId;
+    const selecteurEx=`<div style="margin-bottom:12px"><label style="font-size:12px;margin-right:8px">Exercice</label><select onchange="window._achFiltreEx=this.value;RENDER.achats()" style="max-width:260px">
+      <option value="${ST.exId}" ${window._achFiltreEx===ST.exId?'selected':''}>Exercice courant (${curEx().libelle||''})</option>
+      <option value="tous" ${window._achFiltreEx==='tous'?'selected':''}>Tous les exercices (cumulé)</option>
+      ${ST.exercices.filter(e=>e.id!==ST.exId).sort((a,b)=>b.debut.localeCompare(a.debut)).map(e=>`<option value="${e.id}" ${window._achFiltreEx===e.id?'selected':''}>${e.libelle}</option>`).join('')}
+    </select></div>`;
+    let achatsSource;
+    if(window._achFiltreEx===ST.exId)achatsSource=ST.achats;
+    else if(window._achFiltreEx==='tous')achatsSource=await all('achats');
+    else achatsSource=(await all('achats')).filter(a=>a.exId===window._achFiltreEx);
     const parClient={};
-    ST.achats.forEach(a=>{const c=a.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[]}).achats.push(a);});
+    achatsSource.forEach(a=>{const c=a.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[]}).achats.push(a);});
     Object.values(parClient).forEach(v=>{v.nb=v.achats.length;v.ht=v.achats.reduce((s,a)=>s+a.ht,0);v.tva=v.achats.reduce((s,a)=>s+a.tva,0);v.ttc=v.achats.reduce((s,a)=>s+a.ttc,0);v.solde=v.achats.reduce((s,a)=>s+achatSolde(a),0);});
     const clientsFiltres=Object.entries(parClient).filter(([c])=>!q||c.toLowerCase().includes(q)).sort((a,b)=>b[1].ttc-a[1].ttc);
     const totTTC=clientsFiltres.reduce((s,[,v])=>s+v.ttc,0);
     const totHT=clientsFiltres.reduce((s,[,v])=>s+v.ht,0);
     const totSolde=clientsFiltres.reduce((s,[,v])=>s+v.solde,0);
     document.getElementById('p-achats').innerHTML=`
+    ${selecteurEx}
     <div class="grid kpis"><div class="card kpi o"><div class="lb">Clients avec achats liés</div><div class="v mono">${clientsFiltres.filter(([c])=>c!=='(sans client)').length}</div></div>
     <div class="card kpi b"><div class="lb">Total HT</div><div class="v mono">${F0(totHT)}</div></div>
     <div class="card kpi g"><div class="lb">Total TTC</div><div class="v mono">${F0(totTTC)}</div></div>
     <div class="card kpi ${totSolde>0.5?'r':'g'}"><div class="lb">Reste à payer (fournisseurs)</div><div class="v mono">${F0(totSolde)}</div></div></div>
-    <div class="toolbar"><input class="search" placeholder="Rechercher un client…" value="${window._achq||''}" oninput="window._achq=this.value;RENDER.achats()"></div>
+    <div class="toolbar"><input class="search" placeholder="Rechercher un client…" value="${window._achq||''}" oninput="window._achq=this.value;debounce('achSearch',()=>RENDER.achats())"></div>
     ${clientsFiltres.map(([c,v])=>{
       const ouvert=!!window._achClientExpanded[c];
       const detailRows=v.achats.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(a=>{
         const solde=achatSolde(a),regle=achatMontantRegle(a);
         const statut=reglementBadge(solde,regle,['Réglé','Partiel','À payer']);
-        return`<tr><td class="mono">${esc(a.numero)}</td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}</td><td style="font-size:11px;color:var(--mut)">${esc(a.chantier||'—')}</td>
+        const exLib=window._achFiltreEx==='tous'?((ST.exercices.find(e=>e.id===a.exId)||{}).libelle||''):'';
+        return`<tr><td class="mono">${esc(a.numero)}</td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}</td><td style="font-size:11px;color:var(--mut)">${esc(a.chantier||'—')}${exLib?' · '+esc(exLib):''}</td>
         <td class="ta-r mono">${F0(a.ht)}</td><td class="ta-r mono">${F0(a.tva)}</td><td class="ta-r mono">${F0(a.ttc)}</td><td class="ta-c">${statut}</td></tr>`;
       }).join('');
       return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
@@ -3027,7 +3072,7 @@ RENDER.achats=()=>{
           <div><b>${ouvert?'▾':'▸'} ${esc(c)}</b> <span style="font-size:11px;opacity:.8">— ${v.nb} facture(s)</span></div>
           <div style="text-align:right"><b>${F0(v.ttc)} FCFA</b>${v.solde>0.5?`<div style="font-size:10.5px;color:#ffb4a8">reste ${F0(v.solde)}</div>`:''}</div>
         </div>
-        ${ouvert?`<table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Chantier</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th></tr></thead>
+        ${ouvert?`<table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Chantier${window._achFiltreEx==='tous'?' / Exercice':''}</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th></tr></thead>
         <tbody>${detailRows}</tbody>
         <tfoot><tr class="foot-tr"><td colspan=4>Total ${esc(c)}</td><td class="ta-r mono">${F0(v.ht)}</td><td class="ta-r mono">${F0(v.tva)}</td><td class="ta-r mono">${F0(v.ttc)}</td><td></td></tr></tfoot></table>`:''}
       </div>`;
@@ -3035,7 +3080,11 @@ RENDER.achats=()=>{
     <p style="margin-top:10px;color:var(--mut);font-size:12px">"(sans client)" = achats non liés (saisie manuelle ou mapping absent à l'import). Cliquez un client pour déplier le détail des factures.</p>`;
     return;
   }
-  const rows=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')+(a.clientNom||'')).toLowerCase().includes(q)).map(a=>{
+  const filtres=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')+(a.clientNom||'')).toLowerCase().includes(q));
+  const pageSize=100,pages=Math.max(1,Math.ceil(filtres.length/pageSize));
+  if(!window._achPage||window._achPage>pages)window._achPage=1;
+  const slice=filtres.slice((window._achPage-1)*pageSize,window._achPage*pageSize);
+  const rows=slice.map(a=>{
     const solde=achatSolde(a),regle=achatMontantRegle(a);
     const statut=reglementBadge(solde,regle,['Réglé','Partiel','À payer']);
     const reste=solde>0.5&&regle>0?`<div style="font-size:10.5px;color:var(--mut);margin-top:2px">reste ${F0(solde)}</div>`:'';
@@ -3053,9 +3102,14 @@ RENDER.achats=()=>{
     <div class="card kpi g"><div class="lb">Total TTC achats</div><div class="v mono">${F(tTTC)}</div><div class="f">HT ${F0(tHT)}</div></div>
     <div class="card kpi ${tSolde>0.5?'r':'g'}"><div class="lb">Reste à payer</div><div class="v mono">${F(tSolde)}</div></div>
   </div>
-  <div class="toolbar"><input class="search" placeholder="Rechercher n°, fournisseur, pièce…" value="${window._achq||''}" oninput="window._achq=this.value;RENDER.achats()"></div>
+  <div class="toolbar"><input class="search" placeholder="Rechercher n°, fournisseur, pièce…" value="${window._achq||''}" oninput="window._achq=this.value;debounce('achSearch',()=>{window._achPage=1;RENDER.achats()})"></div>
   <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th><th class="ta-c">Actions</th></tr></thead>
-  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🛒</div>Aucune facture d\'achat.</td></tr>'}</tbody></table></div>`;
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🛒</div>Aucune facture d\'achat.</td></tr>'}</tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._achPage=Math.max(1,window._achPage-1);RENDER.achats()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._achPage}/${pages} — ${filtres.length} facture(s)</span>
+    <button class="btn sm gh" onclick="window._achPage=Math.min(${pages},window._achPage+1);RENDER.achats()">Suiv. ›</button>
+  </div>`;
 };
 async function editAchat(id){
   const a=id?ST.achats.find(x=>x.id===id):null;
@@ -4060,7 +4114,11 @@ function stgFiltered(){
   return ST.staging.filter(s=>{
     if(f.kind&&s.kind!==f.kind)return false;
     if(f.statut&&s.status!==f.statut)return false;
-    if(f.q){const q=f.q.toLowerCase();const hay=JSON.stringify(s.payload).toLowerCase();if(!hay.includes(q))return false;}
+    if(f.q){
+      const q=f.q.toLowerCase();const p=s.payload;
+      const hay=(s.kind==='achat_chantier'?(p.chantier+' '+p.fournisseur):(p.mois_feuille+' '+p.libelle)).toLowerCase();
+      if(!hay.includes(q))return false;
+    }
     return true;
   });
 }
@@ -4132,7 +4190,7 @@ RENDER.staging=()=>{
       <option value="">Tous</option><option value="achat_chantier" ${window._stgFiltre.kind==='achat_chantier'?'selected':''}>Chantiers</option><option value="caisse" ${window._stgFiltre.kind==='caisse'?'selected':''}>Caisse</option></select></div>
     <div><label>Statut</label><select onchange="window._stgFiltre.statut=this.value;window._stgPage=1;RENDER.staging()">
       <option value="en_attente" ${window._stgFiltre.statut==='en_attente'?'selected':''}>En attente</option><option value="valide" ${window._stgFiltre.statut==='valide'?'selected':''}>Validées</option><option value="rejete" ${window._stgFiltre.statut==='rejete'?'selected':''}>Rejetées</option><option value="">Toutes</option></select></div>
-    <div><label>Recherche</label><input value="${window._stgFiltre.q}" oninput="window._stgFiltre.q=this.value;window._stgPage=1;RENDER.staging()" placeholder="Fournisseur, chantier, libellé…"></div>
+    <div><label>Recherche</label><input value="${window._stgFiltre.q}" oninput="window._stgFiltre.q=this.value;debounce('stgSearch',()=>{window._stgPage=1;RENDER.staging()})" placeholder="Fournisseur, chantier, libellé…"></div>
   </div>
   <div style="margin-bottom:8px"><label><input type="checkbox" onchange="stgToggleAllVisible(this.checked)"> Sélectionner la page (${slice.length})</label> — ${window._stgSel.size} sélectionné(s) au total</div>
   <div class="tbl-wrap"><table><thead><tr><th></th><th>Type</th><th>Date</th><th>Détail</th><th class="ta-c">Statut</th></tr></thead>
@@ -4262,7 +4320,7 @@ async function ckActions(){
     if(!hasOuv)actions.push({icone:'⇱',urgent:false,titre:'Bilan d\'ouverture non saisi',detail:'Exercice '+premier.libelle+' — aucun solde initial enregistré.',boutons:[{lib:'Saisir',fn:"go('ouverture')"}]});
   }
   // 9. Comptes non lettrés (informatif, léger — seulement clients/fournisseurs)
-  const nonLettres=mouvements(l=>(l.compte||'').startsWith('4')&&!l.lettre).length;
+  const nonLettres=mouvements((e,l)=>(l.compte||'').startsWith('4')&&!l.lettre).length;
   if(nonLettres>20)actions.push({icone:'⇄',urgent:false,titre:nonLettres+' mouvement(s) tiers non lettré(s)',detail:'Comptes 4xx — lettrage à jour recommandé avant clôture.',boutons:[{lib:'Lettrer',fn:"go('lettrage')"}]});
   // 10. Exercice clôturable (fin de période dépassée, encore ouvert)
   const exp=ST.exercices.filter(e=>e.statut==='ouvert'&&e.fin&&e.fin<today());
@@ -4942,7 +5000,7 @@ function scanAnomalies(){
   const seuil90=new Date();seuil90.setDate(seuil90.getDate()-90);const seuil90str=seuil90.toISOString().slice(0,10);
   ST.tiers.filter(t=>t.type==='client').forEach(t=>{
     const s=m[t.compte];if(!s)return;const solde=s.debit-s.credit;if(solde<=0.5)return;
-    const dernierMvt=mouvements(l=>l.compte===t.compte).sort((a,b)=>b.date.localeCompare(a.date))[0];
+    const dernierMvt=mouvementsDuCompte(t.compte).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
     if(dernierMvt&&dernierMvt.date<seuil90str)A.push(['info','Créance ancienne sans provision',t.nom+' — '+F0(solde)+' FCFA, dernier mouvement '+dfr(dernierMvt.date)]);
   });
   return A;
