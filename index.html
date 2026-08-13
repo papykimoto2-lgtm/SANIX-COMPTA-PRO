@@ -2135,7 +2135,7 @@ RENDER.facturation=async()=>{
     <td><span class="badge ${f.type==='simple'?'b-gray':f.type==='avoir'?'':f.fneCertified?'b-green':''}" ${f.type==='avoir'?'style="background:#8a63d2;color:#fff"':f.type==='fne'&&!f.fneCertified?'style="background:#e0913a;color:#fff"':''}>${f.type==='simple'?'Simple':f.type==='avoir'?'Avoir '+(f.fneCertified?'✓':''):f.fneCertified?'FNE ✓ DGI':'FNE ⏳ provisoire'}</span></td>
     <td class="ta-r mono">${F0(f.ht)}</td><td class="ta-r mono">${F0(f.tva)}</td><td class="ta-r mono"><b>${F0(f.ttc)}</b></td>
     <td class="ta-c">${statut}${reste}</td>
-    <td class="ta-c">${f.type!=='avoir'?`<button class="linkbtn" title="Règlements" onclick="reglerFacture('${f.id}')">💵</button> `:''}${f.type==='fne'&&!f.fneCertified?`<button class="linkbtn" title="Retenter la certification DGI" style="color:var(--cuivre-d)" onclick="retryFNE('${f.id}')">🔁</button> `:''}${f.type==='fne'?`<button class="linkbtn" title="Avoir" onclick="avoirFacture('${f.id}')">↩</button> `:''}<button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`;}).join('');
+    <td class="ta-c">${f.type!=='avoir'?`<button class="linkbtn" title="Règlements" onclick="reglerFacture('${f.id}')">💵</button> `:''}${piecesBadgeBtn(f.numero,'Facture '+f.numero)} ${f.type==='fne'&&!f.fneCertified?`<button class="linkbtn" title="Retenter la certification DGI" style="color:var(--cuivre-d)" onclick="retryFNE('${f.id}')">🔁</button> `:''}${f.type==='fne'?`<button class="linkbtn" title="Avoir" onclick="avoirFacture('${f.id}')">↩</button> `:''}<button class="linkbtn" onclick="printFacture('${f.id}')">⎙</button> <button class="linkbtn" onclick="viewFacture('${f.id}')">👁</button> <button class="linkbtn" onclick="editFacture('${f.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delFacture('${f.id}')">✕</button></td></tr>`;}).join('');
   const tHT=ST.factures.reduce((s,f)=>s+f.ht,0),tTVA=ST.factures.reduce((s,f)=>s+f.tva,0),tTTC=ST.factures.reduce((s,f)=>s+f.ttc,0);
   const tRegle=ST.factures.filter(f=>f.type!=='avoir').reduce((s,f)=>s+sommeReglements(f),0);
   const tSolde=ST.factures.filter(f=>f.type!=='avoir').reduce((s,f)=>s+soldeTTC(f),0);
@@ -3305,12 +3305,13 @@ function caisseRenderVentilationHTML(){
   if(!l.length)return'<div class="empty">Rien à ventiler.</div>';
   const map=window._caisseVentMap||{};
   const opts=ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('');
-  return`<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th></tr></thead><tbody>
+  return`<div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th><th></th></tr></thead><tbody>
   ${l.map(m=>{
     const suggestion=caisseRuleMatch(m.motif,map);
     return`<tr><td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
   <td>${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
   <select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
+  <td class="ta-c">${piecesBadgeBtn(m.numero,'Bon '+m.numero)}</td>
   <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`;
   }).join('')}
   </tbody></table></div>`;
@@ -3519,11 +3520,12 @@ function caisseAfficherBrouillard(caisseId){
   const rows=mv.map(m=>{solde+=m.type==='entree'?(+m.montant||0):-(+m.montant||0);
     return`<tr><td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td>
     <td class="ta-r mono">${m.type==='entree'?F0(m.montant):''}</td><td class="ta-r mono">${m.type==='sortie'?F0(m.montant):''}</td><td class="ta-r mono">${F0(solde)}</td>
-    <td class="ta-c">${m.statut==='ventile'?'<span class="badge b-green">ventilé</span>':'<span class="badge b-cuivre">à ventiler</span>'}</td></tr>`;}).join('');
+    <td class="ta-c">${m.statut==='ventile'?'<span class="badge b-green">ventilé</span>':'<span class="badge b-cuivre">à ventiler</span>'}</td>
+    <td class="ta-c">${piecesBadgeBtn(m.numero,'Bon '+m.numero)}</td></tr>`;}).join('');
   document.getElementById('caisse-brouillard-box').innerHTML=`
   <div class="card" style="margin-top:14px"><h3 style="margin-top:0">📋 Brouillard — ${c.nom} · session du ${s.date} · caissier ${caisseNomUser(s.ouvertePar)}</h3>
-  <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Tiers</th><th class="ta-r">Entrée</th><th class="ta-r">Sortie</th><th class="ta-r">Solde</th><th class="ta-c">Statut</th></tr></thead>
-  <tbody>${rows||'<tr><td colspan=8 class="empty">Aucun mouvement</td></tr>'}</tbody></table></div></div>`;
+  <div class="tbl-wrap"><table><thead><tr><th>N°</th><th>Date</th><th>Motif</th><th>Tiers</th><th class="ta-r">Entrée</th><th class="ta-r">Sortie</th><th class="ta-r">Solde</th><th class="ta-c">Statut</th><th class="ta-c">Pièce</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=9 class="empty">Aucun mouvement</td></tr>'}</tbody></table></div></div>`;
 }
 function caisseClôturerModal(caisseId){
   const s=caisseGetSessionOuverte(caisseId);if(!s){toast('Caisse fermée.');return;}
@@ -3791,6 +3793,37 @@ function addPiece(file){
     await put('pieces',{id:uid('pc'),nom:file.name,type:file.type,taille:file.size,date:today(),ref:'',data:rd.result});
     await loadAll();RENDER.ged();toast('Pièce archivée.');};
   rd.readAsDataURL(file);
+}
+/* ---- Pièces jointes réutilisables (compteur + widget attaché à une référence libre) ---- */
+function piecesCountFor(ref){return ST.pieces.filter(p=>p.ref===ref).length;}
+function pieceAjouterPourRef(file,ref,onDone){
+  if(!file)return;if(file.size>3*1024*1024){toast('Fichier trop lourd (max 3 Mo).');return;}
+  const rd=new FileReader();rd.onload=async()=>{
+    await put('pieces',{id:uid('pc'),nom:file.name,type:file.type,taille:file.size,date:today(),ref,data:rd.result});
+    await loadAll();toast('Pièce jointe ajoutée.');if(onDone)onDone();};
+  rd.readAsDataURL(file);
+}
+function piecesModal(ref,titre,onDone){
+  const list=ST.pieces.filter(p=>p.ref===ref);
+  openModal(`<div class="mh"><h3>📎 Pièces jointes — ${esc(titre)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <label class="btn sm gh" style="cursor:pointer">+ Ajouter un fichier<input type="file" accept="image/*,.pdf" style="display:none" onchange="pieceAjouterPourRef(this.files[0],'${ref.replace(/'/g,"\\'")}',()=>{piecesModal('${ref.replace(/'/g,"\\'")}','${titre.replace(/'/g,"\\'")}');})"></label>
+    <div style="margin-top:12px">${list.length?list.map(p=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)">
+        <span style="font-size:18px">${p.type&&p.type.includes('pdf')?'📄':'🖼'}</span>
+        <div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(p.nom)}</b><div style="font-size:10.5px;color:var(--mut)">${dfr(p.date)} · ${(p.taille/1024).toFixed(0)} Ko</div></div>
+        <button class="linkbtn" onclick="viewPiece('${p.id}')">👁</button>
+        <button class="linkbtn" onclick="dlPiece('${p.id}')">⭳</button>
+        <button class="linkbtn" style="color:var(--red)" onclick="delPieceRef('${p.id}','${ref.replace(/'/g,"\\'")}','${titre.replace(/'/g,"\\'")}')">✕</button>
+      </div>`).join(''):'<div class="empty" style="padding:16px 0">Aucune pièce jointe.</div>'}
+    </div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button></div>`,true);
+}
+async function delPieceRef(id,ref,titre){if(!confirm('Supprimer cette pièce ?'))return;await del('pieces',id);await loadAll();piecesModal(ref,titre);}
+function piecesBadgeBtn(ref,titre,onclickExtra){
+  const n=piecesCountFor(ref);
+  return `<button class="linkbtn" title="Pièces jointes" style="${n?'color:var(--cuivre-d);font-weight:700':''}" onclick="piecesModal('${ref.replace(/'/g,"\\'")}','${titre.replace(/'/g,"\\'")}')">📎${n?' '+n:''}</button>`;
 }
 function viewPiece(id){const p=ST.pieces.find(x=>x.id===id);
   const prev=p.type&&p.type.includes('pdf')?`<embed src="${p.data}" type="application/pdf" style="width:100%;height:60vh">`:`<img src="${p.data}" style="max-width:100%;border-radius:8px">`;
