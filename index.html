@@ -271,6 +271,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp" onclick="toggleGrp(this)"><span>5 · États</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="grandlivre"><span class="ic">≣</span>Grand livre</a>
+      <a data-p="periodique"><span class="ic">📅</span>État périodique</a>
       <a data-p="balance"><span class="ic">⚖</span>Balance générale</a>
       <a data-p="resultat"><span class="ic">∑</span>Compte de résultat</a>
       <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
@@ -331,6 +332,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-lettrage"></div>
       <div class="page" id="p-rappro"></div>
       <div class="page" id="p-grandlivre"></div>
+      <div class="page" id="p-periodique"></div>
       <div class="page" id="p-balance"></div>
       <div class="page" id="p-resultat"></div>
       <div class="page" id="p-bilan"></div>
@@ -363,11 +365,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=9;
+const DB_BASE='sanix_comptapro', DB_VER=10;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -747,7 +749,7 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -1496,6 +1498,100 @@ RENDER.resultat=()=>{
   </div>`;
 };
 
+/* ---- État périodique — Caisse & Comptabilité (période libre) ---- */
+window._perFiltre={dateDeb:'',dateFin:'',genere:false};
+function perSetPeriode(p){
+  const f=window._perFiltre;const d=new Date();const y=d.getFullYear(),m=d.getMonth();
+  if(p==='mois'){const mm=String(m+1).padStart(2,'0');const last=new Date(y,m+1,0).getDate();f.dateDeb=y+'-'+mm+'-01';f.dateFin=y+'-'+mm+'-'+String(last).padStart(2,'0');}
+  else if(p==='trimestre'){const q=Math.floor(m/3);const mDeb=q*3;const mFin=mDeb+2;const last=new Date(y,mFin+1,0).getDate();f.dateDeb=y+'-'+String(mDeb+1).padStart(2,'0')+'-01';f.dateFin=y+'-'+String(mFin+1).padStart(2,'0')+'-'+String(last).padStart(2,'0');}
+  else if(p==='exercice'){f.dateDeb=curEx().debut||'';f.dateFin=curEx().fin||'';}
+  RENDER.periodique();
+}
+function perSoldeAvant(compte,dateDeb){
+  if(!dateDeb)return 0;
+  return mouvements((e,l)=>l.compte===compte&&e.date<dateDeb).reduce((s,r)=>s+r.debit-r.credit,0);
+}
+function perGenerer(){window._perFiltre.genere=true;RENDER.periodique();}
+function perExportCSV(){
+  const f=window._perFiltre;
+  const rows=mouvements((e,l)=>(!f.dateDeb||e.date>=f.dateDeb)&&(!f.dateFin||e.date<=f.dateFin));
+  let c='Date;Journal;Piece;Compte;Libelle;Debit;Credit\n';
+  rows.forEach(r=>c+=`${r.date};${r.journal};${r.piece};${r.compte};"${(r.libelle||'').replace(/"/g,"'")}";${r.debit};${r.credit}\n`);
+  dl('etat_periodique_'+f.dateDeb+'_'+f.dateFin+'.csv',c);
+}
+RENDER.periodique=()=>{
+  const f=window._perFiltre;
+  document.getElementById('pgActions').innerHTML='';
+  const rows=f.genere?mouvements((e,l)=>(!f.dateDeb||e.date>=f.dateDeb)&&(!f.dateFin||e.date<=f.dateFin)):[];
+  const ecrituresIds=new Set(rows.map(r=>r.eid));
+  const comptesMouv=[...new Set(rows.map(r=>r.compte))];
+  document.getElementById('p-periodique').innerHTML=`
+  <div class="card" style="border-left:3px solid var(--cuivre);margin-bottom:16px">
+    <div style="font-weight:700;font-size:13px;margin-bottom:2px">📅 ÉTAT PÉRIODIQUE — CAISSE &amp; COMPTABILITÉ</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:12px">Période libre (date début → date fin). Génère : Caisse/Trésorerie, Balance de la période, et liens directs vers Grand livre / Compte de résultat / Bilan filtrés sur cette période.</div>
+    <div class="frow c3">
+      <div><label>Date début</label><input type="date" value="${f.dateDeb}" onchange="window._perFiltre.dateDeb=this.value;window._perFiltre.genere=false;RENDER.periodique()"></div>
+      <div><label>Date fin</label><input type="date" value="${f.dateFin}" onchange="window._perFiltre.dateFin=this.value;window._perFiltre.genere=false;RENDER.periodique()"></div>
+      <div style="align-self:flex-end;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn sm gh" onclick="perSetPeriode('mois')">Ce mois</button>
+        <button class="btn sm gh" onclick="perSetPeriode('trimestre')">Ce trimestre</button>
+        <button class="btn sm gh" onclick="perSetPeriode('exercice')">Cet exercice</button>
+        <button class="btn sm" onclick="perGenerer()">⚙ Générer</button>
+        ${f.genere?`<button class="btn sm gh" onclick="printReport('per-out','État périodique')">🖨 Imprimer / PDF</button><button class="btn sm gh" onclick="perExportCSV()">⭳ Export CSV</button>`:''}
+      </div>
+    </div>
+  </div>
+  <div id="per-out">${f.genere?perRenderContenu(rows,ecrituresIds,comptesMouv,f):'<div class="empty">Choisissez une période puis cliquez sur "Générer".</div>'}</div>`;
+};
+function perRenderContenu(rows,ecrituresIds,comptesMouv,f){
+  const compteCaisse=comptesMouv.filter(n=>n.startsWith('5')).sort();
+  let trTresorerie='',totSI=0,totE=0,totS=0,totSF=0;
+  compteCaisse.forEach(n=>{
+    const si=perSoldeAvant(n,f.dateDeb);
+    const rn=rows.filter(r=>r.compte===n);
+    const entrees=rn.reduce((s,r)=>s+r.debit,0),sorties=rn.reduce((s,r)=>s+r.credit,0);
+    const sf=si+entrees-sorties;
+    totSI+=si;totE+=entrees;totS+=sorties;totSF+=sf;
+    trTresorerie+=`<tr><td class="mono">${esc(n)}</td><td>${esc(cptLib(n))}</td><td class="ta-r mono">${F0(si)}</td><td class="ta-r mono" style="color:var(--green)">${entrees?F0(entrees):'—'}</td><td class="ta-r mono" style="color:var(--red)">${sorties?F0(sorties):'—'}</td><td class="ta-r mono" style="font-weight:700">${F0(sf)}</td></tr>`;
+  });
+  // Balance 8 colonnes
+  const comptesTous=[...new Set([...comptesMouv])].sort();
+  let bal8='',t={si_d:0,si_c:0,md:0,mc:0,sf_d:0,sf_c:0};
+  comptesTous.forEach(n=>{
+    const si=perSoldeAvant(n,f.dateDeb);
+    const rn=rows.filter(r=>r.compte===n);
+    const md=rn.reduce((s,r)=>s+r.debit,0),mc=rn.reduce((s,r)=>s+r.credit,0);
+    const sf=si+md-mc;
+    const si_d=si>0?si:0,si_c=si<0?-si:0,sf_d=sf>0?sf:0,sf_c=sf<0?-sf:0;
+    t.si_d+=si_d;t.si_c+=si_c;t.md+=md;t.mc+=mc;t.sf_d+=sf_d;t.sf_c+=sf_c;
+    bal8+=`<tr><td class="mono">${esc(n)}</td><td style="font-size:11.5px">${esc(cptLib(n))}</td>
+    <td class="ta-r mono">${si_d?F0(si_d):'—'}</td><td class="ta-r mono">${si_c?F0(si_c):'—'}</td>
+    <td class="ta-r mono">${md?F0(md):'—'}</td><td class="ta-r mono">${mc?F0(mc):'—'}</td>
+    <td class="ta-r mono">${sf_d?F0(sf_d):'—'}</td><td class="ta-r mono">${sf_c?F0(sf_c):'—'}</td></tr>`;
+  });
+  return `
+  <div style="font-size:12.5px;margin-bottom:14px">Période : <b>${dfr(f.dateDeb)} → ${dfr(f.dateFin)}</b> · ${ecrituresIds.size} écriture(s) · ${comptesMouv.length} compte(s) mouvementé(s)</div>
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">
+    <div style="padding:12px 16px;background:var(--noir);color:#fff;font-weight:700;font-size:12.5px">💵 CAISSE &amp; TRÉSORERIE (CLASSE 5)</div>
+    <table><thead><tr><th>Compte</th><th>Intitulé</th><th class="ta-r">Solde initial</th><th class="ta-r">Entrées</th><th class="ta-r">Sorties</th><th class="ta-r">Solde final</th></tr></thead>
+    <tbody>${trTresorerie||'<tr><td colspan=6 class="empty">Aucun mouvement de trésorerie sur la période.</td></tr>'}</tbody>
+    <tfoot><tr class="foot-tr"><td colspan=2>TOTAL TRÉSORERIE</td><td class="ta-r mono">${F0(totSI)}</td><td class="ta-r mono" style="color:var(--green)">${F0(totE)}</td><td class="ta-r mono" style="color:var(--red)">${F0(totS)}</td><td class="ta-r mono">${F0(totSF)}</td></tr></tfoot></table>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:18px">
+    <div style="padding:12px 16px;background:var(--cuivre);color:#fff;font-weight:700;font-size:12.5px">📊 BALANCE DE LA PÉRIODE (8 COLONNES)</div>
+    <table><thead><tr><th>Compte</th><th>Intitulé</th><th class="ta-r" colspan=2>Solde ouverture</th><th class="ta-r" colspan=2>Mouvements période</th><th class="ta-r" colspan=2>Solde clôture</th></tr>
+    <tr><th></th><th></th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th></tr></thead>
+    <tbody>${bal8||'<tr><td colspan=8 class="empty">Aucun compte mouvementé.</td></tr>'}</tbody>
+    <tfoot><tr class="foot-tr"><td colspan=2>TOTAUX</td><td class="ta-r mono">${F0(t.si_d)}</td><td class="ta-r mono">${F0(t.si_c)}</td><td class="ta-r mono">${F0(t.md)}</td><td class="ta-r mono">${F0(t.mc)}</td><td class="ta-r mono">${F0(t.sf_d)}</td><td class="ta-r mono">${F0(t.sf_c)}</td></tr></tfoot></table>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn sm gh" onclick="window._glFiltre={du:'',au:'',sousComptes:true,dateDeb:'${f.dateDeb}',dateFin:'${f.dateFin}'};go('grandlivre')">≣ Voir le Grand livre de la période</button>
+    <button class="btn sm gh" onclick="window._balFiltre={dateDeb:'${f.dateDeb}',dateFin:'${f.dateFin}',mouvementesUniquement:true,mode:'groupe'};go('balance')">⚖ Voir la Balance générale</button>
+    <button class="btn sm gh" onclick="go('resultat')">∑ Voir le Compte de résultat</button>
+    <button class="btn sm gh" onclick="go('bilan')">▤ Voir le Bilan</button>
+  </div>`;
+}
+
 /* ---- Bilan ---- */
 /* ---- Bilan (Actif/Passif) — rubriques SYSCOHADA avec arborescence comptes/sous-comptes dépliable ---- */
 const RUBRIQUES_BILAN={
@@ -1997,11 +2093,123 @@ function importPlanFile(file){
 }
 
 /* ---- Exercices ---- */
+/* ---- Régularisations de fin d'exercice (CCA/PCA/FNP/FAE) — style ImmoSuite ---- */
+const NATURES_CUTOFF={
+  cca:{label:'Charge constatée d\'avance',compteReg:'476',explain:'Charge payée sur l\'exercice mais concernant le suivant (loyer, assurance, abonnement).'},
+  pca:{label:'Produit constaté d\'avance',compteReg:'477',explain:'Produit encaissé sur l\'exercice mais concernant le suivant.'},
+  fnp:{label:'Facture non parvenue',compteReg:'408',explain:'Charge engagée sur l\'exercice mais facture non reçue à la clôture.'},
+  fae:{label:'Facture à établir',compteReg:'418',explain:'Produit acquis sur l\'exercice mais facture non émise à la clôture.'},
+  cap:{label:'Charge à payer',compteReg:'4686',explain:'Charge certaine, montant estimé, non facturée à la clôture.'},
+  par:{label:'Produit à recevoir',compteReg:'4487',explain:'Produit certain, montant estimé, non facturé à la clôture.'}
+};
+function cutoffGenererLignes(nature,compteReg,compteContrepartie,libelle,ht,tva){
+  const l=(compte,debit,credit)=>({compte,libelle,debit,credit});
+  let cur;
+  switch(nature){
+    case'cca':cur=[l(compteReg,ht,0),l(compteContrepartie,0,ht)];break;
+    case'pca':cur=[l(compteContrepartie,ht,0),l(compteReg,0,ht)];break;
+    case'fnp':cur=[l(compteContrepartie,ht,0)];if(tva)cur.push(l('4452',tva,0));cur.push(l(compteReg,0,ht+tva));break;
+    case'fae':cur=[l(compteReg,ht+tva,0),l(compteContrepartie,0,ht)];if(tva)cur.push(l('4432',0,tva));break;
+    case'cap':cur=[l(compteContrepartie,ht,0),l(compteReg,0,ht)];break;
+    case'par':cur=[l(compteReg,ht,0),l(compteContrepartie,0,ht)];break;
+    default:cur=[];
+  }
+  const extourne=cur.map(x=>({compte:x.compte,libelle:'Extourne — '+x.libelle,debit:x.credit,credit:x.debit}));
+  return{cur,extourne};
+}
+async function ouvrirCutoff(exId){
+  window._cutoffExId=exId;
+  const ex=ST.exercices.find(x=>x.id===exId);
+  openModal(`<div class="mh"><h3>📆 Régularisations de fin d'exercice ${ex?ex.libelle.replace(/[^0-9]/g,''):''}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow c2">
+      <div><label>Nature</label><select id="cf-nature" onchange="cutoffMajExplain()">${Object.entries(NATURES_CUTOFF).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></div>
+      <div><label>Compte de contrepartie</label><input id="cf-compte" placeholder="Ex : 6132"></div>
+    </div>
+    <div class="frow"><div><label>Libellé</label><input id="cf-libelle" placeholder="Ex : Loyer janvier N+1 payé d'avance"></div></div>
+    <div class="frow c2">
+      <div><label>Montant HT (FCFA)</label><input type="number" id="cf-ht" value="0"></div>
+      <div><label>TVA associée (FCFA)</label><input type="number" id="cf-tva" value="0"></div>
+    </div>
+    <div id="cf-explain" class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:8px 12px;border-radius:0 8px 8px 0;font-size:11.5px;margin-top:6px"></div>
+    <button class="btn sm" style="margin-top:10px" onclick="cutoffAjouter()">+ Ajouter la régularisation</button>
+    <div id="cf-liste" style="margin-top:16px"></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button>
+  <button class="btn sm gh" onclick="cutoffGenererExtourneN1('${exId}')">↩ Générer l'extourne N+1</button>
+  <button class="btn sm" onclick="cutoffPasserEcritures('${exId}')">🔒 Passer les écritures de régularisation</button></div>`,true);
+  cutoffMajExplain();
+  await cutoffRenderListe(exId);
+}
+function cutoffMajExplain(){
+  const nat=document.getElementById('cf-nature').value;
+  const n=NATURES_CUTOFF[nat];
+  document.getElementById('cf-explain').innerHTML=`ℹ ${esc(n.explain)} <b>Compte de régularisation : ${n.compteReg}</b>`;
+}
+async function cutoffAjouter(){
+  const nature=document.getElementById('cf-nature').value;
+  const compteContrepartie=document.getElementById('cf-compte').value.trim();
+  const libelle=document.getElementById('cf-libelle').value.trim();
+  const ht=+document.getElementById('cf-ht').value||0;
+  const tva=+document.getElementById('cf-tva').value||0;
+  if(!compteContrepartie){toast('Compte de contrepartie requis.');return;}
+  if(!libelle){toast('Libellé requis.');return;}
+  if(!ht){toast('Montant HT requis.');return;}
+  await put('cutoff',{id:uid('cf'),exId:window._cutoffExId,nature,compteReg:NATURES_CUTOFF[nature].compteReg,compteContrepartie,libelle,montantHT:ht,tva,ecritureId:null,extourneId:null,createdAt:Date.now()});
+  document.getElementById('cf-compte').value='';document.getElementById('cf-libelle').value='';document.getElementById('cf-ht').value=0;document.getElementById('cf-tva').value=0;
+  await cutoffRenderListe(window._cutoffExId);toast('Régularisation ajoutée.');
+}
+async function cutoffRenderListe(exId){
+  const liste=(await all('cutoff')).filter(c=>c.exId===exId).sort((a,b)=>a.createdAt-b.createdAt);
+  const box=document.getElementById('cf-liste');if(!box)return;
+  const ex=ST.exercices.find(x=>x.id===exId);
+  if(!liste.length){box.innerHTML=`<div style="font-size:12px;color:var(--mut)">Aucune régularisation enregistrée pour ${ex?ex.libelle.replace(/[^0-9]/g,''):''}.</div>`;return;}
+  box.innerHTML=`<table><thead><tr><th>Nature</th><th>Contrepartie</th><th>Libellé</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-c">Statut</th><th></th></tr></thead><tbody>
+  ${liste.map(c=>`<tr><td>${NATURES_CUTOFF[c.nature].label}</td><td class="mono">${esc(c.compteContrepartie)}</td><td>${esc(c.libelle)}</td><td class="ta-r mono">${F0(c.montantHT)}</td><td class="ta-r mono">${c.tva?F0(c.tva):'—'}</td>
+  <td class="ta-c">${c.extourneId?'<span class="badge b-green">extourné</span>':c.ecritureId?'<span class="badge b-cuivre">passée</span>':'<span class="badge b-gray">brouillon</span>'}</td>
+  <td>${!c.ecritureId?`<button class="linkbtn" style="color:var(--red)" onclick="cutoffSupprimer('${c.id}')">✕</button>`:''}</td></tr>`).join('')}
+  </tbody></table>`;
+}
+async function cutoffSupprimer(id){await del('cutoff',id);await cutoffRenderListe(window._cutoffExId);toast('Régularisation supprimée.');}
+async function cutoffPasserEcritures(exId){
+  const ex=ST.exercices.find(x=>x.id===exId);if(!ex)return;
+  const liste=(await all('cutoff')).filter(c=>c.exId===exId&&!c.ecritureId);
+  if(!liste.length){toast('Rien à passer — toutes les régularisations sont déjà comptabilisées.');return;}
+  if(!confirm(liste.length+' régularisation(s) à comptabiliser sur '+ex.libelle+' (date '+dfr(ex.fin)+'). Confirmer ?'))return;
+  for(const c of liste){
+    for(const compte of [c.compteReg,c.compteContrepartie,'4452','4432'].filter((v,i,a)=>v&&a.indexOf(v)===i)){
+      if(!ST.comptes.some(x=>x.numero===compte)&&(compte===c.compteReg))await put('comptes',{id:'c_'+compte,numero:compte,libelle:NATURES_CUTOFF[c.nature].label,type:compte[0]==='4'?(['476','408','4686'].includes(compte)?'A':'P'):'A',classe:compte[0]});
+    }
+    const{cur}=cutoffGenererLignes(c.nature,c.compteReg,c.compteContrepartie,c.libelle,c.montantHT,c.tva);
+    const eid='e_cutoff_'+c.id;
+    await put('ecritures',{id:eid,exId,journal:'OD',date:ex.fin,piece:'REG-'+c.id.slice(-6),libelle:'Régularisation — '+c.libelle,lignes:cur,created:Date.now(),source:'cutoff'});
+    c.ecritureId=eid;await put('cutoff',c);
+  }
+  await loadAll();await cutoffRenderListe(exId);toast(liste.length+' écriture(s) de régularisation passée(s).');
+}
+async function cutoffGenererExtourneN1(exId){
+  const ex=ST.exercices.find(x=>x.id===exId);if(!ex)return;
+  const liste=(await all('cutoff')).filter(c=>c.exId===exId&&c.ecritureId&&!c.extourneId);
+  if(!liste.length){toast('Rien à extourner — passez d\'abord les écritures, ou tout est déjà extourné.');return;}
+  const jourApres=new Date(ex.fin);jourApres.setDate(jourApres.getDate()+1);
+  const dateN1=jourApres.toISOString().slice(0,10);
+  const exN1=await findOrCreateExercicePourDate(dateN1);
+  const exN1Obj=ST.exercices.find(x=>x.id===exN1)||{fin:''};
+  if(!confirm(liste.length+' extourne(s) à générer sur l\'exercice suivant, date '+dfr(dateN1)+'. Confirmer ?'))return;
+  for(const c of liste){
+    const{extourne}=cutoffGenererLignes(c.nature,c.compteReg,c.compteContrepartie,c.libelle,c.montantHT,c.tva);
+    const eid='e_cutoffext_'+c.id;
+    await put('ecritures',{id:eid,exId:exN1,journal:'OD',date:dateN1,piece:'EXT-'+c.id.slice(-6),libelle:'Extourne N+1 — '+c.libelle,lignes:extourne,created:Date.now(),source:'cutoff_extourne'});
+    c.extourneId=eid;await put('cutoff',c);
+  }
+  await loadAll();await cutoffRenderListe(exId);toast(liste.length+' extourne(s) généré(s) sur l\'exercice suivant.');
+}
+
 RENDER.exercices=()=>{
   document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="newExercice()">+ Exercice</button>`;
   document.getElementById('p-exercices').innerHTML=`<div class="tbl-wrap"><table><thead><tr><th>Exercice</th><th>Début</th><th>Fin</th><th>Statut</th><th class="ta-c">Actions</th></tr></thead><tbody>
   ${ST.exercices.map(e=>`<tr><td><b>${e.libelle}</b></td><td class="mono">${dfr(e.debut)}</td><td class="mono">${dfr(e.fin)}</td><td><span class="badge ${e.statut==='ouvert'?'b-green':'b-gray'}">${e.statut}</span></td>
-  <td class="ta-c">${e.id===ST.exId?'<span class="badge b-cuivre">courant</span>':`<button class="linkbtn" onclick="switchEx('${e.id}')">Activer</button>`} <button class="linkbtn" onclick="ouvrirBilanOuverture('${e.id}');go('ouverture')">Bilan ouv.</button> <button class="linkbtn" onclick="exportFEC('${e.id}')">⭳ FEC</button> ${e.statut==='ouvert'?`<button class="linkbtn" onclick="editExercice('${e.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="cloturer('${e.id}')">Clôturer</button> <button class="linkbtn" style="color:var(--red)" onclick="delExercice('${e.id}')">✕</button>`:''}</td></tr>`).join('')}
+  <td class="ta-c">${e.id===ST.exId?'<span class="badge b-cuivre">courant</span>':`<button class="linkbtn" onclick="switchEx('${e.id}')">Activer</button>`} <button class="linkbtn" onclick="ouvrirBilanOuverture('${e.id}');go('ouverture')">Bilan ouv.</button> <button class="linkbtn" onclick="exportFEC('${e.id}')">⭳ FEC</button> <button class="linkbtn" onclick="ouvrirCutoff('${e.id}')">📆 Régularisations</button> ${e.statut==='ouvert'?`<button class="linkbtn" onclick="editExercice('${e.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="cloturer('${e.id}')">Clôturer</button> <button class="linkbtn" style="color:var(--red)" onclick="delExercice('${e.id}')">✕</button>`:''}</td></tr>`).join('')}
   </tbody></table></div>
   <div class="card" style="margin-top:14px"><b>Clôture d'exercice</b><p style="color:var(--mut);font-size:12.5px;margin-top:6px">La clôture verrouille l'exercice, calcule le résultat (compte 120) et prépare les à-nouveaux. Les écritures deviennent non modifiables.</p></div>`;
 };
