@@ -3914,6 +3914,26 @@ async function stgViderTout(){
   for(const s of ST.staging)await del('staging',s.id);
   window._stgSel.clear();await loadAll();RENDER.staging();toast('Staging vidé.');
 }
+async function stgReinitialisationComplete(){
+  if(!can('admin')){toast('Droit refusé.');return;}
+  const tousAchats=await all('achats');
+  const tousEc=await all('ecritures');
+  const achStaging=tousAchats.filter(a=>a.source==='staging_chantier');
+  const ecStaging=tousEc.filter(e=>e.source==='staging_caisse'||e.source==='staging_chantier'||(e.id&&e.id.startsWith('e_ach_')&&achStaging.some(a=>e.id==='e_ach_'+a.id)));
+  const nbStaging=ST.staging.length;
+  if(!confirm('⚠ REMISE À ZÉRO COMPLÈTE\n\n'
+    +'• '+nbStaging+' ligne(s) de staging\n'
+    +'• '+achStaging.length+' facture(s) d\'achat importée(s)\n'
+    +'• '+ecStaging.length+' écriture(s) comptable(s) liée(s)\n\n'
+    +'Ceci supprime DÉFINITIVEMENT toutes les données issues de l\'import Chantiers/Caisse (staging + achats + écritures générées). Les comptes, tiers et exercices déjà créés restent en place. Confirmer ?'))return;
+  if(!confirm('Dernière confirmation : cette action est IRRÉVERSIBLE. Continuer ?'))return;
+  toast('Suppression en cours…');
+  for(const e of ecStaging)await del('ecritures',e.id);
+  for(const a of achStaging)await del('achats',a.id);
+  for(const s of ST.staging)await del('staging',s.id);
+  window._stgSel.clear();await loadAll();RENDER.staging();
+  toast('Remise à zéro effectuée : '+nbStaging+' staging, '+achStaging.length+' achat(s), '+ecStaging.length+' écriture(s) supprimé(s).');
+}
 function stgFiltered(){
   const f=window._stgFiltre;
   return ST.staging.filter(s=>{
@@ -3933,7 +3953,8 @@ RENDER.staging=()=>{
     <button class="btn sm gh" onclick="relierAchatsAuxClients()">🔗 Relier achats aux clients</button>
     <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
     <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>
-    ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}`;
+    ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}
+    ${can('admin')?'<button class="btn sm" style="background:var(--red);color:#fff" onclick="stgReinitialisationComplete()">⚠ Remise à zéro complète (staging + achats + écritures)</button>':''}`;
   const list=stgFiltered();
   const nEnAttente=ST.staging.filter(s=>s.status==='en_attente').length;
   const nValide=ST.staging.filter(s=>s.status==='valide').length;
