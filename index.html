@@ -2326,8 +2326,34 @@ RENDER.exercices=()=>{
   ${ST.exercices.map(e=>`<tr><td><b>${e.libelle}</b></td><td class="mono">${dfr(e.debut)}</td><td class="mono">${dfr(e.fin)}</td><td><span class="badge ${e.statut==='ouvert'?'b-green':'b-gray'}">${e.statut}</span></td>
   <td class="ta-c">${e.id===ST.exId?'<span class="badge b-cuivre">courant</span>':`<button class="linkbtn" onclick="switchEx('${e.id}')">Activer</button>`} <button class="linkbtn" onclick="ouvrirBilanOuverture('${e.id}');go('ouverture')">Bilan ouv.</button> <button class="linkbtn" onclick="exportFEC('${e.id}')">⭳ FEC</button> <button class="linkbtn" onclick="ouvrirCutoff('${e.id}')">📆 Régularisations</button> ${e.statut==='ouvert'?`<button class="linkbtn" onclick="editExercice('${e.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="cloturer('${e.id}')">Clôturer</button> <button class="linkbtn" style="color:var(--red)" onclick="delExercice('${e.id}')">✕</button>`:''}</td></tr>`).join('')}
   </tbody></table></div>
-  <div class="card" style="margin-top:14px"><b>Clôture d'exercice</b><p style="color:var(--mut);font-size:12.5px;margin-top:6px">La clôture verrouille l'exercice, calcule le résultat (compte 120) et prépare les à-nouveaux. Les écritures deviennent non modifiables.</p></div>`;
+  <div class="card" style="margin-top:14px"><b>Clôture d'exercice</b><p style="color:var(--mut);font-size:12.5px;margin-top:6px">La clôture verrouille l'exercice, calcule le résultat (compte 120) et prépare les à-nouveaux. Les écritures deviennent non modifiables.</p></div>
+  <div class="card" style="margin-top:14px;border-left:3px solid var(--cuivre)">
+    <b>🔧 Maintenance — Réaffectation des écritures importées</b>
+    <p style="color:var(--mut);font-size:12.5px;margin-top:6px">Si des écritures issues du staging (chantiers/caisse) ont été validées avant la mise en place du routage automatique par exercice, elles sont toutes restées sur l'exercice actif au moment de la validation, au lieu d'être réparties selon leur date réelle. Cet outil les réaffecte à leur bon exercice (créé automatiquement si absent), sans repasser par le staging.</p>
+    <button class="btn sm" style="margin-top:8px" onclick="reaffecterEcrituresImportees()">Réaffecter maintenant</button>
+  </div>`;
 };
+async function reaffecterEcrituresImportees(){
+  if(!confirm('Analyser toutes les écritures et achats importés (staging) et les réaffecter à leur exercice réel selon leur date ? Cette opération est sûre et réversible (aucune suppression).'))return;
+  toast('Analyse en cours…');
+  const tousAchats=await all('achats');
+  const tousEc=await all('ecritures');
+  let n=0,exCrees=0;
+  const nbExAvant=ST.exercices.length;
+  for(const a of tousAchats.filter(x=>x.source==='staging_chantier')){
+    const bonExId=await findOrCreateExercicePourDate(a.date);
+    if(bonExId!==a.exId){a.exId=bonExId;await put('achats',a);
+      const ec=tousEc.find(e=>e.id==='e_ach_'+a.id);if(ec&&ec.exId!==bonExId){ec.exId=bonExId;await put('ecritures',ec);}
+      n++;}
+  }
+  for(const e of tousEc.filter(x=>x.source==='staging_caisse')){
+    const bonExId=await findOrCreateExercicePourDate(e.date);
+    if(bonExId!==e.exId){e.exId=bonExId;await put('ecritures',e);n++;}
+  }
+  exCrees=ST.exercices.length-nbExAvant;
+  await loadAll();populateExSelect();RENDER.exercices();
+  toast(n+' enregistrement(s) réaffecté(s)'+(exCrees?', '+exCrees+' exercice(s) créé(s)':'')+'.');
+}
 function newExercice(){editExercice(null);}
 function editExercice(id){
   const e=id?ST.exercices.find(x=>x.id===id):null;
@@ -3022,7 +3048,7 @@ async function genAchatEcriture(a){
     const lib=a.nature==='immo'?'TVA récup. immobilisations':a.nature==='service'?'TVA déductible en attente (service)':'TVA déductible';
     lignes.push({compte:cptTva,libelle:lib,debit:Math.round(a.tva),credit:0,lettre:''});}
   lignes.push({compte:cptFourn,tiers:a.fournId,libelle:'Fournisseur '+a.fournNom,debit:0,credit:Math.round(a.ttc),lettre:''});
-  const e={id:'e_ach_'+a.id,exId:ST.exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:a.date,piece:a.numero,libelle:'Achat '+a.numero+' — '+a.fournNom,lignes,created:Date.now()};
+  const e={id:'e_ach_'+a.id,exId:a.exId||ST.exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:a.date,piece:a.numero,libelle:'Achat '+a.numero+' — '+a.fournNom,lignes,created:Date.now()};
   await put('ecritures',e);
 }
 async function nextFacNum(type){
