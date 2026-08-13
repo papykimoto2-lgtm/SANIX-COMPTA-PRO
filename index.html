@@ -1664,65 +1664,78 @@ function populateDlComptes(){
 async function ouvrirBilanOuverture(exId){
   window._ouvExId=exId||ST.exId;
   const ec=(await all('ecritures')).find(e=>e.id==='e_ouv_'+window._ouvExId);
-  window._ouvLignes=ec?ec.lignes.map(l=>({compte:l.compte,libelle:l.libelle,debit:l.debit||0,credit:l.credit||0})):[];
-  if(!window._ouvLignes.length)window._ouvLignes.push({compte:'',libelle:'',debit:0,credit:0});
+  const ex=ST.exercices.find(x=>x.id===window._ouvExId);
+  window._ouvDate=ec?ec.date:(ex?ex.debut:today());
+  window._ouvNote=ec?(ec.note||''):'';
+  window._ouvLignes=ec?ec.lignes.filter(l=>l.compte!=='890').map(l=>({compte:l.compte,libelle:l.libelle,montant:l.debit||l.credit,sens:l.debit?'D':'C'})):[];
+  if(!window._ouvLignes.length)window._ouvLignes.push({compte:'',libelle:'',montant:0,sens:'D'});
   RENDER.ouverture();
+}
+async function ouvEnsureCompteLiaison(){
+  if(!ST.comptes.some(c=>c.numero==='890'))await put('comptes',{id:'c_890',numero:'890',libelle:'Bilan d\'ouverture — compte de liaison technique',type:'A',classe:'8'});
 }
 RENDER.ouverture=()=>{
   populateDlComptes();
   if(!window._ouvExId)window._ouvExId=ST.exId;
-  if(!window._ouvLignes||!window._ouvLignes.length)window._ouvLignes=[{compte:'',libelle:'',debit:0,credit:0}];
+  if(!window._ouvLignes||!window._ouvLignes.length)window._ouvLignes=[{compte:'',libelle:'',montant:0,sens:'D'}];
   const ex=ST.exercices.find(x=>x.id===window._ouvExId)||curEx();
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="ouvAjouterLigne()">+ Ligne</button>
-  <button class="btn sm" onclick="ouvSauver()">💾 Enregistrer</button>
+  if(!window._ouvDate)window._ouvDate=ex.debut||today();
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="ouvAjouterLigne()">+ Ajouter une ligne</button>
+  <button class="btn sm" onclick="ouvSauver()">💾 Enregistrer le bilan d'ouverture</button>
   <button class="btn sm gh" style="color:var(--red)" onclick="ouvSupprimer()">✕ Supprimer le bilan</button>`;
-  const sd=window._ouvLignes.reduce((s,l)=>s+(+l.debit||0),0);
-  const sc=window._ouvLignes.reduce((s,l)=>s+(+l.credit||0),0);
+  const sd=window._ouvLignes.reduce((s,l)=>s+(l.sens==='D'?(+l.montant||0):0),0);
+  const sc=window._ouvLignes.reduce((s,l)=>s+(l.sens==='C'?(+l.montant||0):0),0);
   const equilibre=Math.abs(sd-sc)<1;
-  const rows=window._ouvLignes.map((l,i)=>`<tr>
-    <td><input list="dl-comptes" value="${l.compte}" style="width:110px" oninput="ouvMaj(${i},'compte',this.value)"></td>
-    <td><input value="${l.libelle}" placeholder="${cptLib(l.compte)||'Libellé'}" oninput="ouvMaj(${i},'libelle',this.value)"></td>
-    <td><input type="number" value="${l.debit||0}" style="width:120px;text-align:right" oninput="ouvMaj(${i},'debit',this.value)"></td>
-    <td><input type="number" value="${l.credit||0}" style="width:120px;text-align:right" oninput="ouvMaj(${i},'credit',this.value)"></td>
-    <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="ouvSuppLigne(${i})">✕</button></td></tr>`).join('');
+  const rows=window._ouvLignes.map((l,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+    <input list="dl-comptes" value="${esc(l.compte)}" placeholder="Code ou libellé du compte (classes 1 à 5)…" style="flex:1" oninput="ouvMaj(${i},'compte',this.value)">
+    <select style="width:110px" onchange="ouvMaj(${i},'sens',this.value)">
+      <option value="D" ${l.sens==='D'?'selected':''}>Débiteur</option>
+      <option value="C" ${l.sens==='C'?'selected':''}>Créditeur</option>
+    </select>
+    <input type="number" value="${l.montant||0}" placeholder="Solde (FCFA)" style="width:150px;text-align:right" oninput="ouvMaj(${i},'montant',this.value)">
+    <button class="linkbtn" style="color:var(--red)" onclick="ouvSuppLigne(${i})">✕</button>
+  </div>`).join('');
   document.getElementById('p-ouverture').innerHTML=`
-  <div class="frow c2" style="margin-bottom:12px"><div><label>Exercice</label>
-  <select onchange="ouvrirBilanOuverture(this.value)">${ST.exercices.slice().sort((a,b)=>a.debut.localeCompare(b.debut)).map(e=>`<option value="${e.id}" ${e.id===window._ouvExId?'selected':''}>${e.libelle}</option>`).join('')}</select></div>
-  <div style="align-self:flex-end;font-size:12px;color:var(--mut)">Écriture générée au journal AN, pièce OUV-${ex.debut?ex.debut.slice(0,4):''}, date ${dfr(ex.debut)}.</div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th></th></tr></thead>
-  <tbody>${rows}</tbody>
-  <tfoot><tr style="font-weight:800"><td colspan="2" class="ta-r">Totaux</td><td class="ta-r mono">${F0(sd)}</td><td class="ta-r mono">${F0(sc)}</td><td></td></tr></tfoot></table></div>
-  <div style="margin-top:10px;font-weight:700;color:${equilibre?'var(--green)':'var(--red)'}">${equilibre?'✓ Équilibré':'⚠ Non équilibré — écart '+F0(Math.abs(sd-sc))}</div>`;
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">
+  📌 À utiliser <b>une seule fois</b>, lors du démarrage du logiciel avec une comptabilité déjà existante (reprise des soldes de l'exercice précédent, établie par ailleurs — expert-comptable, ancien logiciel…). Saisissez le solde <b>débiteur ou créditeur</b> de chaque compte de bilan (classes 1 à 5). Le système génère automatiquement l'écriture d'à-nouveaux correspondante, équilibrée via un compte de liaison technique (890), classée dans le journal des À-Nouveaux (AN).</div>
+  <div class="frow c3" style="margin-bottom:14px">
+    <div><label>Exercice concerné</label><select onchange="ouvrirBilanOuverture(this.value)">${ST.exercices.slice().sort((a,b)=>a.debut.localeCompare(b.debut)).map(e=>`<option value="${e.id}" ${e.id===window._ouvExId?'selected':''}>${e.libelle}</option>`).join('')}</select></div>
+    <div><label>Date du bilan d'ouverture</label><input type="date" value="${window._ouvDate}" onchange="window._ouvDate=this.value"></div>
+    <div><label>Référence / note (optionnel)</label><input value="${esc(window._ouvNote||'')}" placeholder="Ex : Reprise balance cabinet XYZ au 31/12/2025" oninput="window._ouvNote=this.value"></div>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Écriture générée au journal AN, pièce OUV-${ex.debut?ex.debut.slice(0,4):''}, date ${dfr(window._ouvDate)}.</div>
+  <div style="font-weight:700;font-size:12px;margin-bottom:8px">Soldes par compte *</div>
+  ${rows}
+  <div style="margin-top:6px;font-size:12px;color:var(--mut)">Débit ${F0(sd)} · Crédit ${F0(sc)}${equilibre?'':' · écart '+F0(Math.abs(sd-sc))+' (auto-équilibré sur 890 à l\'enregistrement)'}</div>`;
 };
-function ouvAjouterLigne(){window._ouvLignes.push({compte:'',libelle:'',debit:0,credit:0});RENDER.ouverture();}
-function ouvSuppLigne(i){window._ouvLignes.splice(i,1);if(!window._ouvLignes.length)window._ouvLignes.push({compte:'',libelle:'',debit:0,credit:0});RENDER.ouverture();}
+function ouvAjouterLigne(){window._ouvLignes.push({compte:'',libelle:'',montant:0,sens:'D'});RENDER.ouverture();}
+function ouvSuppLigne(i){window._ouvLignes.splice(i,1);if(!window._ouvLignes.length)window._ouvLignes.push({compte:'',libelle:'',montant:0,sens:'D'});RENDER.ouverture();}
 function ouvMaj(i,champ,val){
-  window._ouvLignes[i][champ]=(champ==='debit'||champ==='credit')?(+val||0):val;
-  if(champ==='debit'||champ==='credit')ouvUpdateTotals();
-}
-function ouvUpdateTotals(){
-  const sd=window._ouvLignes.reduce((s,l)=>s+(+l.debit||0),0);
-  const sc=window._ouvLignes.reduce((s,l)=>s+(+l.credit||0),0);
-  const equilibre=Math.abs(sd-sc)<1;
-  const tf=document.querySelector('#p-ouverture tfoot td:nth-child(3)');if(tf)tf.textContent=F0(sd);
-  const tf2=document.querySelector('#p-ouverture tfoot td:nth-child(4)');if(tf2)tf2.textContent=F0(sc);
-  const msg=document.querySelector('#p-ouverture > div:last-child');
-  if(msg){msg.style.color=equilibre?'var(--green)':'var(--red)';msg.textContent=equilibre?'✓ Équilibré':'⚠ Non équilibré — écart '+F0(Math.abs(sd-sc));}
+  window._ouvLignes[i][champ]=champ==='montant'?(+val||0):val;
+  if(champ==='montant'||champ==='sens')RENDER.ouverture();
 }
 async function ouvSauver(){
   const ex=ST.exercices.find(x=>x.id===window._ouvExId);if(!ex)return;
-  const lignes=window._ouvLignes.filter(l=>l.compte&&(l.debit||l.credit)).map(l=>({compte:l.compte,libelle:l.libelle||cptLib(l.compte)||'Solde d\'ouverture',debit:+l.debit||0,credit:+l.credit||0}));
+  const lignes=window._ouvLignes.filter(l=>l.compte&&l.montant).map(l=>({
+    compte:l.compte,libelle:cptLib(l.compte)||'Solde d\'ouverture',
+    debit:l.sens==='D'?(+l.montant||0):0,credit:l.sens==='C'?(+l.montant||0):0
+  }));
   if(!lignes.length){toast('Aucune ligne valide.');return;}
-  const sd=lignes.reduce((s,l)=>s+l.debit,0),sc=lignes.reduce((s,l)=>s+l.credit,0);
-  if(Math.abs(sd-sc)>=1){if(!confirm('Le bilan n\'est pas équilibré (écart '+F0(Math.abs(sd-sc))+'). Enregistrer quand même ?'))return;}
   for(const l of lignes){if(!ST.comptes.some(c=>c.numero===l.compte)){toast('Compte inconnu : '+l.compte+'. Créez-le d\'abord dans le Plan comptable.');return;}}
-  await put('ecritures',{id:'e_ouv_'+ex.id,exId:ex.id,journal:'AN',date:ex.debut,piece:'OUV-'+ex.debut.slice(0,4),libelle:'Bilan d\'ouverture '+ex.libelle,lignes,created:Date.now(),source:'bilan_ouverture'});
-  await loadAll();RENDER.ouverture();toast('Bilan d\'ouverture enregistré.');
+  const sd=lignes.reduce((s,l)=>s+l.debit,0),sc=lignes.reduce((s,l)=>s+l.credit,0);
+  const ecart=sd-sc;
+  if(Math.abs(ecart)>=1){
+    await ouvEnsureCompteLiaison();
+    lignes.push({compte:'890',libelle:'Bilan d\'ouverture — équilibrage technique',debit:ecart<0?-ecart:0,credit:ecart>0?ecart:0});
+  }
+  const date=window._ouvDate||ex.debut;
+  await put('ecritures',{id:'e_ouv_'+ex.id,exId:ex.id,journal:'AN',date,piece:'OUV-'+date.slice(0,4),libelle:'Bilan d\'ouverture '+ex.libelle,note:window._ouvNote||'',lignes,created:Date.now(),source:'bilan_ouverture'});
+  await loadAll();RENDER.ouverture();toast('Bilan d\'ouverture enregistré'+(Math.abs(ecart)>=1?' (écart équilibré sur compte 890).':'.'));
 }
 async function ouvSupprimer(){
   if(!confirm('Supprimer le bilan d\'ouverture de cet exercice ?'))return;
   await del('ecritures','e_ouv_'+window._ouvExId);
-  window._ouvLignes=[{compte:'',libelle:'',debit:0,credit:0}];
+  window._ouvLignes=[{compte:'',libelle:'',montant:0,sens:'D'}];window._ouvNote='';
   await loadAll();RENDER.ouverture();toast('Bilan d\'ouverture supprimé.');
 }
 
@@ -3190,20 +3203,18 @@ async function ckActions(){
 RENDER.cockpit=async()=>{
   document.getElementById('pgActions').innerHTML='';
   const actions=await ckActions();
-  const nEx=ST.exercices.length,nComptes=ST.comptes.length,nEc=ST.ecritures.length;
-  let html=`<div class="grid kpis" style="margin-bottom:16px">
-    <div class="card kpi o"><div class="lb">Exercice actif</div><div class="v" style="font-size:16px">${curEx().libelle||'—'}</div></div>
-    <div class="card kpi g"><div class="lb">Écritures (exercice)</div><div class="v mono">${nEc}</div></div>
-    <div class="card kpi b"><div class="lb">Comptes actifs</div><div class="v mono">${nComptes}</div></div>
-    <div class="card kpi ${actions.filter(a=>a.urgent).length?'r':'g'}"><div class="lb">Actions urgentes</div><div class="v mono">${actions.filter(a=>a.urgent).length}</div></div>
-  </div>`;
+  const briefing=await ckBriefing(actions);
+  const pouls=ckPouls();
+  const sante=await ckSante();
+  let colGauche=briefing+`<div style="margin-top:14px">
+    <div style="font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);margin-bottom:8px">⚡ File d'actions — ${actions.length} action(s)</div>`;
   if(!actions.length){
-    html+=`<div class="card" style="text-align:center;padding:32px">
+    colGauche+=`<div class="card" style="text-align:center;padding:32px">
       <div style="font-size:38px;margin-bottom:8px">🏁</div>
       <div style="font-weight:700;margin-bottom:4px">File vide — tout est traité.</div>
       <div style="font-size:12px;color:var(--mut)">Le cockpit re-scanne vos données à chaque ouverture.</div></div>`;
   }else{
-    html+=actions.map(a=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;border-left:4px solid ${a.urgent?'var(--red)':'var(--line)'}">
+    colGauche+=actions.map(a=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;border-left:4px solid ${a.urgent?'var(--red)':'var(--line)'}">
       <div style="display:flex;align-items:flex-start;gap:10px">
         <div style="font-size:20px;line-height:1">${a.icone}</div>
         <div style="flex:1;min-width:0">
@@ -3214,8 +3225,97 @@ RENDER.cockpit=async()=>{
           <div style="display:flex;gap:6px;margin-top:8px">${a.boutons.map(b=>`<button class="btn sm gh" onclick="${b.fn}">${b.lib}</button>`).join('')}</div>
         </div></div></div>`).join('');
   }
-  document.getElementById('p-cockpit').innerHTML=html;
+  colGauche+='</div>';
+  const colDroite=`<div style="font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);margin-bottom:8px">📈 Pouls de l'activité</div>${pouls}
+    <div style="font-size:12px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--mut);margin:16px 0 8px">🩺 Santé par domaine</div>${sante}`;
+  document.getElementById('p-cockpit').innerHTML=`<div style="display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px;align-items:start">
+    <div>${colGauche}</div><div>${colDroite}</div></div>
+    <style>@media(max-width:900px){#p-cockpit>div{display:block !important}}</style>`;
 };
+async function ckBriefing(actions){
+  const h=new Date().getHours();const salut=h<12?'Bonjour':(h<18?'Bon après-midi':'Bonsoir');
+  const nom=(curUserFull()&&(curUserFull().nom))||ST.user.login;
+  const retard=ST.achats.filter(a=>!a.regle&&a.echeance&&a.echeance<today());
+  const exigFourn=retard.reduce((s,a)=>s+achatSolde(a),0);
+  const impayees=ST.factures.filter(f=>f.type!=='avoir'&&soldeTTC(f)>0.5&&f.date<today());
+  const exigClient=impayees.reduce((s,f)=>s+soldeTTC(f),0);
+  const vent=caisseAVentilerStats();
+  const urgents=actions.filter(a=>a.urgent).length;
+  const phrases=[];
+  if(exigClient>0)phrases.push('<strong>'+F0(exigClient)+' F</strong> sont exigibles chez '+impayees.length+' client(s) — chaque jour d\'attente réduit la probabilité d\'encaisser');
+  else phrases.push('aucun montant client en souffrance — le recouvrement est à jour');
+  if(exigFourn>0)phrases.push('<strong>'+F0(exigFourn)+' F</strong> dus à '+retard.length+' fournisseur(s) en retard d\'échéance');
+  if(vent.nb)phrases.push(vent.nb+' mouvement(s) de caisse attendent leur ventilation comptable');
+  if(urgents)phrases.push(urgents+' action(s) marquée(s) urgentes dans la file');
+  const trois=phrases.slice(0,3).join(' · ');
+  const reco=actions.length?'Première action recommandée : <strong>'+esc(actions[0].titre)+'</strong>.':'File vide — rien d\'urgent ne requiert votre attention.';
+  return `<div class="card" style="border-left:4px solid var(--cuivre);padding:14px 18px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px">${salut} ${esc(nom)} 👋</div>
+    <div style="font-size:12px;color:var(--mut);line-height:1.8">${trois}.</div>
+    <div style="font-size:12px;margin-top:6px">${reco}</div></div>`;
+}
+function ckPouls(){
+  const vals=[];let max=0;
+  for(let i=29;i>=0;i--){
+    const d=new Date();d.setDate(d.getDate()-i);const k=d.toISOString().slice(0,10);
+    const v=ST.caisse_mouvements.filter(m=>m.type==='entree'&&(m.date||'').slice(0,10)===k).reduce((s,m)=>s+(+m.montant||0),0);
+    vals.push(v);if(v>max)max=v;
+  }
+  const W=260,H=50;let pts='';
+  vals.forEach((v,j)=>{const x=Math.round(j*(W-8)/(vals.length-1))+4;const y=H-6-(max>0?Math.round((v/max)*(H-16)):0);pts+=(j?' L':'M')+x+' '+y;});
+  const tot30=vals.reduce((s,v)=>s+v,0);
+  const t7=vals.slice(-7).reduce((s,v)=>s+v,0);
+  const t7prec=vals.slice(-14,-7).reduce((s,v)=>s+v,0);
+  const tendance=t7prec>0?Math.round((t7-t7prec)/t7prec*100):(t7>0?100:0);
+  const solde=caisseSoldeGlobalTempsReel();
+  return `<div class="card" style="padding:12px 14px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div style="font-size:11px;color:var(--mut)">Entrées caisse — 30 jours</div>
+      <div style="font-size:13px;font-weight:700;color:var(--cuivre-d)">${F0(tot30)} F</div></div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;margin-top:4px">
+      <path d="${pts}" fill="none" stroke="#B87333" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--mut)">7 derniers jours</div><div style="font-weight:700">${F0(t7)} F</div></div>
+      <div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--mut)">Tendance vs 7 j préc.</div><div style="font-weight:700;color:${tendance>=0?'var(--green)':'var(--red)'}">${tendance>=0?'▲ +':'▼ '}${Math.abs(tendance)} %</div></div>
+      <div style="flex:1;min-width:80px"><div style="font-size:10px;color:var(--mut)">Espèces en caisse</div><div style="font-weight:700">${F0(solde)} F</div></div>
+    </div></div>`;
+}
+async function ckSante(){
+  const doms=[];
+  const dom=(nom,icone,score,cause,page)=>doms.push({nom,icone,score:Math.max(0,Math.min(100,Math.round(score))),cause,page});
+  // Recouvrement clients
+  const factNonAvoir=ST.factures.filter(f=>f.type!=='avoir');
+  const encoursTotal=factNonAvoir.reduce((s,f)=>s+soldeTTC(f),0);
+  const impayees=factNonAvoir.filter(f=>soldeTTC(f)>0.5&&f.date<today());
+  const exig=impayees.reduce((s,f)=>s+soldeTTC(f),0);
+  dom('Recouvrement','💰',encoursTotal>0?100-Math.round(exig/encoursTotal*100):100,exig>0?F0(exig)+' F exigibles sur '+F0(encoursTotal)+' F d\'encours':'Aucun exigible en souffrance','facturation');
+  // Caisse
+  const vent=caisseAVentilerStats();const mvts=ST.caisse_mouvements.length||1;
+  const sessTard=ST.caisse_sessions.filter(s=>s.statut==='ouverte'&&s.date<today()).length;
+  dom('Caisse','💵',100-Math.min(70,Math.round(vent.nb/mvts*100))-sessTard*15,vent.nb?vent.nb+' mvt à ventiler'+(sessTard?' · '+sessTard+' session(s) non clôturée(s)':''):(sessTard?sessTard+' session(s) non clôturée(s)':'Ventilation à jour'),'caisse');
+  // Fournisseurs
+  const achatsTotal=ST.achats.reduce((s,a)=>s+achatSolde(a),0);
+  const achRetard=ST.achats.filter(a=>!a.regle&&a.echeance&&a.echeance<today());
+  const achExig=achRetard.reduce((s,a)=>s+achatSolde(a),0);
+  dom('Fournisseurs','🛒',achatsTotal>0?100-Math.round(achExig/achatsTotal*100):100,achRetard.length?achRetard.length+' facture(s) en retard — '+F0(achExig)+' F':'Aucune échéance en retard','achats');
+  // Fiscalité (échéances à venir — plus l'échéance est proche/dépassée, plus le score baisse)
+  try{
+    const f=await fisc();const ech=fiscEcheances(f);
+    const proches=ech.filter(e=>e.jours<=7);
+    const scoreF=proches.length?Math.max(20,100-proches.length*25-proches.filter(e=>e.jours<0).length*30):100;
+    dom('Fiscalité','⏰',scoreF,proches.length?proches.length+' échéance(s) sous 7 jours ('+proches.map(e=>e.type).join(', ')+')':'Aucune échéance imminente','echeancier');
+  }catch(e){dom('Fiscalité','⏰',100,'—','echeancier');}
+  return `<div id="ck-sante-async">${doms.map(d=>{
+    const col=d.score>=75?'var(--green)':(d.score>=45?'#EF9F27':'var(--red)');
+    return `<div class="card" style="padding:10px 12px;margin-bottom:8px;cursor:pointer" onclick="go('${d.page}')" title="Ouvrir le module">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:12px;font-weight:700">${d.icone} ${d.nom}</span>
+        <span style="font-size:13px;font-weight:800;color:${col}">${d.score}</span></div>
+      <div style="height:6px;background:var(--line);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${d.score}%;background:${col};border-radius:4px"></div></div>
+      <div style="font-size:10px;color:var(--mut);margin-top:5px">${esc(d.cause)}</div></div>`;
+  }).join('')}</div>`;
+}
 function curUserFull(){return ST.users.find(u=>u.id===ST.user.id)||ST.users.find(u=>u.login===ST.user.login);}
 function caisseNomUser(login){const u=ST.users.find(x=>x.login===login);return u?(u.nom||u.login):(login||'—');}
 function caisseUserPeut(caisseId){if(can('admin'))return true;const c=ST.caisses.find(x=>x.id===caisseId);if(!c)return false;
