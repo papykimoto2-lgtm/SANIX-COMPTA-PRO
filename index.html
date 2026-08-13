@@ -316,6 +316,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="r" id="pgActions"></div>
     </div>
     <div class="content">
+      <div id="pgNote"></div>
       <div class="page on" id="p-cockpit"></div>
       <div class="page" id="p-dash"></div>
       <div class="page" id="p-analyse360"></div>
@@ -785,6 +786,45 @@ function expandGrpFor(p){
     try{localStorage.setItem(grpKey(sec),'0');}catch(e){}
   }
 }
+const MODULE_NOTES={
+  cockpit:"Écran d'accueil : liste ce qu'il y a à traiter aujourd'hui (brouillard, staging, caisse, échéances), pas des chiffres à contempler. Se re-scanne à chaque ouverture.",
+  dash:"Vue d'ensemble chiffrée de l'exercice actif : CA, charges, trésorerie, résultat. Pour l'action au quotidien, préférez le Cockpit.",
+  analyse360:"Pilotage stratégique croisant tendances mensuelles, ratios clés et alertes — vision consolidée au-delà des états réglementaires.",
+  consolidation:"Agrège plusieurs entités SANIX (si multi-sociétés) avec éliminations inter-compagnies. Sans filiale déclarée, reflète l'entité seule.",
+  ouverture:"Saisie unique des soldes initiaux à la mise en route du logiciel (reprise d'une comptabilité existante). Génère l'écriture d'à-nouveaux, équilibrée au besoin sur le compte de liaison 890.",
+  tiers:"Fiche client/fournisseur : coordonnées, régime fiscal, conditions de règlement. Chaque tiers crée automatiquement son compte auxiliaire (411xxx / 401xxx).",
+  plan:"Plan comptable SYSCOHADA en arborescence — comptes de regroupement dépliables, comptes de détail imputables directement sur les écritures.",
+  facturation:"Facturation client — factures simples ou normalisées FNE (transmises en temps réel à la DGI). Une facture simple peut être déclarée au FNE a posteriori.",
+  achats:"Factures fournisseurs : saisie, échéance, règlements. Génère automatiquement l'écriture d'achat (journal AC) à l'enregistrement.",
+  caisse:"Caisse physique : sessions ouverture/clôture avec PIN, bons d'entrée/sortie, écart de comptage, ventilation comptable des mouvements vers les comptes de charges/produits.",
+  ecritures:"Saisie manuelle d'écritures en partie double, par journal. Toute écriture doit être équilibrée (total débit = total crédit) avant enregistrement.",
+  staging:"Import en masse de données externes (Excel chantiers, brouillard de caisse) en zone tampon — à valider ou rejeter avant toute comptabilisation définitive.",
+  ged:"Archivage numérique des pièces justificatives (factures scannées, reçus). Peut être rattaché à une référence précise (n° facture, n° bon de caisse) depuis leurs modules respectifs.",
+  lettrage:"Rapproche les factures et leurs règlements sur un même compte tiers (411/401) pour suivre les soldes réellement dus.",
+  rappro:"Compare le relevé bancaire réel (importé ou saisi) aux écritures comptables des comptes 512/521/531 pour justifier tout écart de trésorerie.",
+  anomalies:"Contrôles automatiques : écritures déséquilibrées, doublons, comptes suspects. Signale sans corriger — la décision reste manuelle.",
+  tierscompta:"Vue comptable consolidée par tiers : solde, historique des mouvements, échéances — complète la fiche administrative du module Tiers.",
+  analytique:"Ventilation des charges/produits par centre de coûts ou projet, en parallèle de la comptabilité générale SYSCOHADA.",
+  immo:"Registre des immobilisations : plan d'amortissement, dotations annuelles, cessions. Génère les écritures de dotation aux amortissements.",
+  devises:"Gestion des taux de change pour les opérations en devises étrangères, converties en FCFA pour la comptabilité.",
+  workflow:"Circuit de validation des écritures : brouillard → validé (intangible) → éventuellement rejeté. Une écriture validée ne peut plus être modifiée.",
+  grandlivre:"Détail chronologique de tous les mouvements, compte par compte, avec solde cumulé — le document de référence pour justifier un solde de balance.",
+  periodique:"Compile en un seul document, sur une période libre : trésorerie, balance 8 colonnes, et liens directs vers Grand livre / Résultat / Bilan filtrés.",
+  balance:"Contrôle d'équilibre général : total débit = total crédit sur tous les comptes. Mode 'regroupement' montre les totaux par famille de comptes.",
+  resultat:"Charges (classe 6) et produits (classe 7) de l'exercice, avec cascade des Soldes Intermédiaires de Gestion (VA, EBE, résultat d'exploitation…).",
+  bilan:"Photographie du patrimoine à la date de clôture : ce que l'entreprise possède (Actif) et ce qu'elle doit (Passif), par rubrique SYSCOHADA.",
+  flux:"Variation de trésorerie sur l'exercice, décomposée par nature de flux (exploitation, investissement, financement).",
+  annexes:"Notes complémentaires exigées par la liasse fiscale SYSCOHADA — détails non visibles directement dans le Bilan ou le Résultat.",
+  tva:"Déclaration mensuelle de TVA : collectée sur ventes, déductible sur achats (avec prorata si activité mixte), TVA nette à payer ou crédit à reporter.",
+  echeancier:"Calendrier des échéances fiscales et sociales (TVA, patente, CNPS, ITS) avec alerte sur les délais courts.",
+  teledec:"Prépare les données pour les télédéclarations DGI (e-impôts) et CNPS — export au format attendu par chaque plateforme.",
+  liasse:"Génère la liasse fiscale normalisée complète (bilan, résultat, annexes) au format attendu par la DGI, exportable en Excel ou PDF.",
+  exercices:"Gestion des périodes comptables : ouverture, activation, clôture (verrouille les écritures et calcule le résultat), export FEC, régularisations de fin d'exercice.",
+  budget:"Comparaison budget prévisionnel / réalisé par compte ou rubrique, pour mesurer les écarts en cours d'exercice.",
+  parametrage:"Réglages de l'entreprise (identité, régime fiscal), comptes utilisateurs et rôles, import CSV, stockage & synchronisation.",
+  passerelle:"Point d'entrée pour importer des écritures comptables générées par les autres logiciels SANIX (AviCoSuite, ImmoSuite…).",
+  audit:"Journal immuable de toutes les actions sensibles (connexions, créations, suppressions) — traçabilité pour le contrôle interne."
+};
 function go(p){
   window._curPage=p;
   expandGrpFor(p);
@@ -794,6 +834,8 @@ function go(p){
   const t=TITLES[p];document.getElementById('pgTitle').textContent=t[0];
   document.getElementById('pgSub').textContent=t[1]+(p==='bilan'?dfr(curEx().fin):'');
   document.getElementById('pgActions').innerHTML='';
+  const note=MODULE_NOTES[p];
+  document.getElementById('pgNote').innerHTML=note?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">ℹ ${note}</div>`:'';
   if(p==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);return;}
   RENDER[p]&&RENDER[p]();
 }
