@@ -3236,6 +3236,7 @@ async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisse
 
 RENDER.caisse=async()=>{
   window._caisseVentMap=await caisseVentilationMap();
+  populateDlComptes();
   document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}
   <button class="btn sm gh" onclick="caisseOpenVentilationConfig()">⚙ Configurer les règles</button>
   <button class="btn sm gh" onclick="caisseVentilationAuto()">⚡ Ventilation automatique</button>`;
@@ -3268,8 +3269,13 @@ RENDER.caisse=async()=>{
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:16px">${cards||'<div class="empty">Aucune caisse qui vous soit assignée.</div>'}</div>
   ${caisseEcartsHTML()}
-  <div class="card"><h3 style="margin-top:0">🧾 Mouvements clôturés à ventiler</h3>${caisseRenderVentilationHTML()}</div>
+  <div class="card"><h3 style="margin-top:0">🧾 Ventilation comptable des mouvements de caisse</h3>${caisseRenderVentilationHTML()}</div>
   <div id="caisse-brouillard-box"></div>`;
+  caisseListeAVentiler().forEach(m=>{
+    const s=caisseRuleMatch(m.motif,window._caisseVentMap||{});if(!s)return;
+    const inp=document.getElementById('cv-principal-'+m.id);
+    if(inp){inp.value=s;caisseAppliquerPrincipal('cv-principal-'+m.id,'cv-compte-'+m.id,'cv-info-'+m.id);}
+  });
 };
 function caisseEcartsHTML(){
   const l=ST.caisse_sessions.filter(s=>s.statut==='cloturee'&&(+s.ecart||0)!==0&&!s.ecartRegularise);
@@ -3299,6 +3305,62 @@ async function caisseAjouterRegle(motCle,compte){
   const map=await caisseVentilationMap();map[motCle.trim().toLowerCase()]=compte;
   await caisseSaveVentilationMap(map);return true;
 }
+function caisseSousComptesDe(numero){
+  return ST.comptes.filter(c=>c.numero!==numero&&c.numero.startsWith(numero)&&['6','7'].includes(c.numero[0])).sort((a,b)=>a.numero.localeCompare(b.numero));
+}
+function caisseAppliquerPrincipal(inputId,selectId,infoId){
+  const inp=document.getElementById(inputId),sel=document.getElementById(selectId),info=document.getElementById(infoId);
+  if(!inp||!sel)return;
+  const raw=inp.value.trim();const code=(raw.match(/^(\S+)/)||[null,''])[1];
+  const cpt=code?ST.comptes.find(c=>c.numero===code):null;
+  if(!cpt){sel.innerHTML='';sel.style.display='none';sel.value='';if(info)info.textContent=raw?'⚠ Compte inconnu.':'';return;}
+  const subs=caisseSousComptesDe(cpt.numero);
+  if(subs.length){
+    sel.innerHTML='<option value="">— choisir le sous-compte —</option>'+subs.map(s=>`<option value="${s.numero}">${s.numero} — ${esc(s.libelle)}</option>`).join('');
+    sel.value='';sel.style.display='';if(info)info.textContent=subs.length+' sous-compte(s) rattaché(s) à '+cpt.numero+' — choisissez celui concerné.';
+  }else{
+    sel.innerHTML=`<option value="${cpt.numero}" selected>${cpt.numero} — ${esc(cpt.libelle)}</option>`;
+    sel.value=cpt.numero;sel.style.display='none';if(info)info.textContent='✔ Imputation directe sur '+cpt.numero+' — '+esc(cpt.libelle)+'.';
+  }
+}
+function caisseImprimerBon(mvtId){
+  const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
+  const c=ST.caisses.find(x=>x.id===m.caisseId);
+  const html=`<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:24px;font-size:13px">
+    <div style="text-align:center;font-weight:800;font-size:16px;margin-bottom:4px">${m.type==='entree'?'BON D\'ENTRÉE':'BON DE SORTIE'}</div>
+    <div style="text-align:center;color:#666;margin-bottom:16px">${esc(c?c.nom:'')}</div>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:4px 0;color:#666">N°</td><td style="text-align:right;font-weight:700">${esc(m.numero)}</td></tr>
+      <tr><td style="padding:4px 0;color:#666">Date</td><td style="text-align:right">${dfr((m.date||'').slice(0,10))}</td></tr>
+      <tr><td style="padding:4px 0;color:#666">Motif</td><td style="text-align:right">${esc(m.motif)}</td></tr>
+      <tr><td style="padding:4px 0;color:#666">${m.type==='entree'?'Déposant':'Bénéficiaire'}</td><td style="text-align:right">${esc(m.beneficiaire)}</td></tr>
+      <tr><td style="padding:10px 0;font-weight:800;border-top:1px solid #ccc">Montant</td><td style="text-align:right;font-weight:800;font-size:16px;border-top:1px solid #ccc">${F0(m.montant)} FCFA</td></tr>
+    </table>
+    <div style="margin-top:40px;display:flex;justify-content:space-between;font-size:11px;color:#666">
+      <div>Caissier<br><br>_______________</div><div>Bénéficiaire<br><br>_______________</div>
+    </div></div>`;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>${esc(m.numero)}</title><style>@media print{body{margin:0}}</style></head><body onload="window.print()">${html}</body></html>`);
+  w.document.close();
+}
+function caisseEditBonModal(mvtId){
+  const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
+  openModal(`<div class="mh"><h3>✏ Modifier le bon ${esc(m.numero)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow c2"><div><label>Date</label><input type="date" id="eb-date" value="${(m.date||'').slice(0,10)}"></div><div><label>Montant (FCFA)</label><input type="number" id="eb-montant" value="${m.montant}"></div></div>
+    <div class="frow"><div><label>Motif</label><input id="eb-motif" value="${esc(m.motif)}"></div></div>
+    <div class="frow"><div><label>${m.type==='entree'?'Déposant':'Bénéficiaire'}</label><input id="eb-beneficiaire" value="${esc(m.beneficiaire)}"></div></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="caisseSaveEditBon('${mvtId}')">Enregistrer</button></div>`,true);
+}
+async function caisseSaveEditBon(mvtId){
+  const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
+  m.date=document.getElementById('eb-date').value+((m.date||'').includes('T')?'T'+m.date.split('T')[1]:'');
+  m.montant=+document.getElementById('eb-montant').value||0;
+  m.motif=document.getElementById('eb-motif').value.trim();
+  m.beneficiaire=document.getElementById('eb-beneficiaire').value.trim();
+  await put('caisse_mouvements',m);await loadAll();closeModal();RENDER.caisse();toast('Bon modifié.');
+}
 window._cvFiltre={caisse:'',q:''};window._cvPage=1;window._cvSel=new Set();
 function caisseListeAVentiler(){
   return ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';})
@@ -3311,10 +3373,11 @@ function caisseListeAVentiler(){
 }
 function caisseRenderVentilationHTML(){
   const full=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';});
-  if(!full.length)return'<div class="empty">Rien à ventiler.</div>';
+  const enCours=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='ouverte';}).length;
+  const infoLine=`<div style="font-size:11px;color:var(--mut);margin-bottom:10px">Seuls les mouvements des caisses <b>clôturées</b> apparaissent ici, après vérification.${enCours?' ('+enCours+' mouvement(s) en attente dans une caisse encore ouverte.)':''}</div>`;
+  if(!full.length)return infoLine+'<div class="empty">Rien à ventiler.</div>';
   const list=caisseListeAVentiler();
   const map=window._caisseVentMap||{};
-  const opts=ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('');
   const pageSize=50,pages=Math.max(1,Math.ceil(list.length/pageSize));
   if(window._cvPage>pages)window._cvPage=pages;
   const slice=list.slice((window._cvPage-1)*pageSize,window._cvPage*pageSize);
@@ -3322,13 +3385,19 @@ function caisseRenderVentilationHTML(){
     const suggestion=caisseRuleMatch(m.motif,map);
     const c=ST.caisses.find(x=>x.id===m.caisseId);
     return`<tr><td class="ta-c"><input type="checkbox" data-cv="${m.id}" ${window._cvSel.has(m.id)?'checked':''} onchange="cvToggle('${m.id}',this.checked)"></td>
-    <td class="mono">${esc(m.numero)}</td><td class="mono">${dfr((m.date||'').slice(0,10))}</td><td style="font-size:11px">${esc(c?c.nom:'')}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}</td><td>${esc(m.beneficiaire)}</td><td class="ta-r mono">${F0(m.montant)}</td>
-  <td>${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
-  <select id="cv-compte-${m.id}"><option value="">—</option>${opts}</select></td>
-  <td class="ta-c">${piecesBadgeBtn(m.numero,'Bon '+m.numero)}</td>
-  <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">Ventiler</button></td></tr>`;
+    <td class="mono">${dfr((m.date||'').slice(0,10))}</td><td style="font-size:11px">${esc(c?c.nom:'')}</td><td class="mono">${esc(m.numero)}</td><td>${m.type==='entree'?'Entrée':'Sortie'}</td><td>${esc(m.motif)}${m.beneficiaire?' — '+esc(m.beneficiaire):''}</td><td class="ta-r mono">${F0(m.montant)}</td>
+  <td style="min-width:230px">${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
+  <input list="dl-comptes" id="cv-principal-${m.id}" placeholder="Compte principal (n°)" autocomplete="off" style="margin-bottom:4px" oninput="caisseAppliquerPrincipal('cv-principal-${m.id}','cv-compte-${m.id}','cv-info-${m.id}')">
+  <select id="cv-compte-${m.id}" style="display:none;margin-bottom:2px"></select>
+  <div id="cv-info-${m.id}" style="font-size:10px;color:var(--mut)"></div></td>
+  <td class="ta-c" style="white-space:nowrap">
+    <button class="linkbtn" title="Imprimer le bon" onclick="caisseImprimerBon('${m.id}')">🖨</button>
+    ${piecesBadgeBtn(m.numero,'Bon '+m.numero)}
+    <button class="linkbtn" title="Modifier avant ventilation" onclick="caisseEditBonModal('${m.id}')">✎</button>
+  </td>
+  <td><button class="btn sm" onclick="caisseVentilerLigne('${m.id}')">✓ Ventiler</button></td></tr>`;
   }).join('');
-  return`
+  return infoLine+`
   <div class="frow c3" style="margin-bottom:10px">
     <div><label>Caisse</label><select onchange="window._cvFiltre.caisse=this.value;window._cvPage=1;RENDER.caisse()">
       <option value="">Toutes</option>${ST.caisses.map(c=>`<option value="${c.id}" ${window._cvFiltre.caisse===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>
@@ -3339,12 +3408,12 @@ function caisseRenderVentilationHTML(){
     </div>
   </div>
   ${window._cvSel.size?`<div class="frow c3" style="margin-bottom:10px;align-items:flex-end">
-    <div><label>Ventiler la sélection sur</label><select id="cv-bulk-compte"><option value="">—</option>${opts}</select></div>
+    <div><label>Ventiler la sélection sur</label><select id="cv-bulk-compte"><option value="">—</option>${ST.comptes.filter(c=>['6','7'].includes(c.numero[0])).map(c=>`<option value="${c.numero}">${c.numero} ${c.libelle}</option>`).join('')}</select></div>
     <div><button class="btn sm" onclick="cvVentilerSelection()">✓ Ventiler ${window._cvSel.size} mouvement(s)</button></div>
     <div><button class="btn sm gh" onclick="cvVentilerSelectionAuto()">⚡ Ventiler la sélection (règles)</button></div>
   </div>`:''}
-  <div class="tbl-wrap"><table><thead><tr><th></th><th>N°</th><th>Date</th><th>Caisse</th><th>Type</th><th>Motif</th><th>Tiers</th><th class="ta-r">Montant</th><th>Contrepartie</th><th></th><th></th></tr></thead><tbody>
-  ${rows||'<tr><td colspan=11 class="empty">Aucun résultat pour ce filtre.</td></tr>'}
+  <div class="tbl-wrap"><table><thead><tr><th></th><th>Date</th><th>Caisse</th><th>N°</th><th>Type</th><th>Motif</th><th class="ta-r">Montant</th><th>Compte de contrepartie</th><th></th><th></th></tr></thead><tbody>
+  ${rows||'<tr><td colspan=10 class="empty">Aucun résultat pour ce filtre.</td></tr>'}
   </tbody></table></div>
   <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
     <button class="btn sm gh" onclick="window._cvPage=Math.max(1,window._cvPage-1);RENDER.caisse()">‹ Préc.</button>
