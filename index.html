@@ -2959,15 +2959,60 @@ async function findOrCreateExercicePourDate(dateStr){
   await put('exercices',e);ST.exercices.push(e);
   return e.id;
 }
+function exportAchatsParClientCSV(){
+  let c='Client;N° facture;Date;Fournisseur;Chantier;HT;TVA;TTC;Statut\n';
+  ST.achats.slice().sort((a,b)=>(a.clientNom||'zzz').localeCompare(b.clientNom||'zzz')||(b.date||'').localeCompare(a.date||'')).forEach(a=>{
+    const solde=achatSolde(a),regle=achatMontantRegle(a);
+    const statut=solde<=0.5?'Réglé':regle>0?'Partiel':'À payer';
+    c+=`"${(a.clientNom||'(sans client)').replace(/"/g,"'")}";${a.numero};${a.date};"${(a.fournNom||'').replace(/"/g,"'")}";"${(a.chantier||'').replace(/"/g,"'")}";${a.ht};${a.tva};${a.ttc};${statut}\n`;
+  });
+  dl('etat_achats_par_client.csv',c);
+}
 RENDER.achats=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="editAchat(null)">+ Facture d'achat</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="editAchat(null)">+ Facture d'achat</button> <button class="btn sm gh" onclick="window._achVueClient=!window._achVueClient;RENDER.achats()">${window._achVueClient?'📋 Vue factures':'👤 État par client'}</button>${window._achVueClient?' <button class="btn sm gh" onclick="printReport(\'p-achats\',\'État des achats par client\')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportAchatsParClientCSV()">⭳ CSV</button>':''}`;
   const q=(window._achq||'').toLowerCase();
-  const rows=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')).toLowerCase().includes(q)).map(a=>{
+  window._achClientExpanded=window._achClientExpanded||{};
+  if(window._achVueClient){
+    const parClient={};
+    ST.achats.forEach(a=>{const c=a.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[]}).achats.push(a);});
+    Object.values(parClient).forEach(v=>{v.nb=v.achats.length;v.ht=v.achats.reduce((s,a)=>s+a.ht,0);v.tva=v.achats.reduce((s,a)=>s+a.tva,0);v.ttc=v.achats.reduce((s,a)=>s+a.ttc,0);v.solde=v.achats.reduce((s,a)=>s+achatSolde(a),0);});
+    const clientsFiltres=Object.entries(parClient).filter(([c])=>!q||c.toLowerCase().includes(q)).sort((a,b)=>b[1].ttc-a[1].ttc);
+    const totTTC=clientsFiltres.reduce((s,[,v])=>s+v.ttc,0);
+    const totHT=clientsFiltres.reduce((s,[,v])=>s+v.ht,0);
+    const totSolde=clientsFiltres.reduce((s,[,v])=>s+v.solde,0);
+    document.getElementById('p-achats').innerHTML=`
+    <div class="grid kpis"><div class="card kpi o"><div class="lb">Clients avec achats liés</div><div class="v mono">${clientsFiltres.filter(([c])=>c!=='(sans client)').length}</div></div>
+    <div class="card kpi b"><div class="lb">Total HT</div><div class="v mono">${F0(totHT)}</div></div>
+    <div class="card kpi g"><div class="lb">Total TTC</div><div class="v mono">${F0(totTTC)}</div></div>
+    <div class="card kpi ${totSolde>0.5?'r':'g'}"><div class="lb">Reste à payer (fournisseurs)</div><div class="v mono">${F0(totSolde)}</div></div></div>
+    <div class="toolbar"><input class="search" placeholder="Rechercher un client…" value="${window._achq||''}" oninput="window._achq=this.value;RENDER.achats()"></div>
+    ${clientsFiltres.map(([c,v])=>{
+      const ouvert=!!window._achClientExpanded[c];
+      const detailRows=v.achats.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(a=>{
+        const solde=achatSolde(a),regle=achatMontantRegle(a);
+        const statut=reglementBadge(solde,regle,['Réglé','Partiel','À payer']);
+        return`<tr><td class="mono">${esc(a.numero)}</td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}</td><td style="font-size:11px;color:var(--mut)">${esc(a.chantier||'—')}</td>
+        <td class="ta-r mono">${F0(a.ht)}</td><td class="ta-r mono">${F0(a.tva)}</td><td class="ta-r mono">${F0(a.ttc)}</td><td class="ta-c">${statut}</td></tr>`;
+      }).join('');
+      return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+        <div style="padding:12px 16px;background:${c==='(sans client)'?'#8a8a8a':'var(--noir)'};color:#fff;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window._achClientExpanded['${c.replace(/'/g,"\\'")}']=!window._achClientExpanded['${c.replace(/'/g,"\\'")}'];RENDER.achats()">
+          <div><b>${ouvert?'▾':'▸'} ${esc(c)}</b> <span style="font-size:11px;opacity:.8">— ${v.nb} facture(s)</span></div>
+          <div style="text-align:right"><b>${F0(v.ttc)} FCFA</b>${v.solde>0.5?`<div style="font-size:10.5px;color:#ffb4a8">reste ${F0(v.solde)}</div>`:''}</div>
+        </div>
+        ${ouvert?`<table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Chantier</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th></tr></thead>
+        <tbody>${detailRows}</tbody>
+        <tfoot><tr class="foot-tr"><td colspan=4>Total ${esc(c)}</td><td class="ta-r mono">${F0(v.ht)}</td><td class="ta-r mono">${F0(v.tva)}</td><td class="ta-r mono">${F0(v.ttc)}</td><td></td></tr></tfoot></table>`:''}
+      </div>`;
+    }).join('')||'<div class="empty">Aucune donnée.</div>'}
+    <p style="margin-top:10px;color:var(--mut);font-size:12px">"(sans client)" = achats non liés (saisie manuelle ou mapping absent à l'import). Cliquez un client pour déplier le détail des factures.</p>`;
+    return;
+  }
+  const rows=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')+(a.clientNom||'')).toLowerCase().includes(q)).map(a=>{
     const solde=achatSolde(a),regle=achatMontantRegle(a);
     const statut=reglementBadge(solde,regle,['Réglé','Partiel','À payer']);
     const reste=solde>0.5&&regle>0?`<div style="font-size:10.5px;color:var(--mut);margin-top:2px">reste ${F0(solde)}</div>`:'';
     return `<tr>
-    <td class="mono"><b>${a.numero}</b></td><td class="mono">${dfr(a.date)}</td><td>${a.fournNom}<div style="font-size:11px;color:var(--mut)">Pièce ${a.piece||'—'} · ${a.nature==='immo'?'Immobilisation':a.nature==='service'?'Service':'Bien'}</div></td>
+    <td class="mono"><b>${a.numero}</b></td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}<div style="font-size:11px;color:var(--mut)">Pièce ${esc(a.piece||'—')} · ${a.nature==='immo'?'Immobilisation':a.nature==='service'?'Service':'Bien'}${a.clientNom?' · Client : <b>'+esc(a.clientNom)+'</b>':''}</div></td>
     <td class="ta-r mono">${F0(a.ht)}</td><td class="ta-r mono">${F0(a.tva)}</td><td class="ta-r mono"><b>${F0(a.ttc)}</b></td>
     <td class="ta-c">${statut}${reste}</td>
     <td class="ta-c"><button class="linkbtn" title="Règlements" onclick="reglerAchat('${a.id}')">💵</button> <button class="linkbtn" onclick="editAchat('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delAchat('${a.id}')">✕</button></td></tr>`;}).join('');
@@ -3770,6 +3815,45 @@ async function stgEnsureFournisseur(nom){
   ST.tiers.push(t);ST.comptes.push({numero:compte});
   return t;
 }
+async function stgEnsureClient(nom){
+  nom=(nom||'').trim();if(!nom)return null;
+  let t=ST.tiers.find(x=>x.type==='client'&&x.nom.trim().toUpperCase()===nom.toUpperCase());
+  if(t)return t;
+  const n=ST.tiers.filter(x=>x.type==='client').length+1;const compte='4111'+String(n).padStart(3,'0');
+  t={id:uid('t'),type:'client',compte,nom,ncc:'',tel:'',email:'',adresse:'',delai:0,plafond:0};
+  await put('tiers',t);
+  await put('comptes',{id:'c_'+compte,numero:compte,libelle:'Client — '+nom,type:'A',classe:'4'});
+  ST.tiers.push(t);ST.comptes.push({numero:compte});
+  return t;
+}
+/* ---- Mapping chantier→client (fichier FICHE DE SUIVI CLIENT CHANTIER) ---- */
+async function mappingChantierClient(){const m=await getOne('meta','mapping_chantier_client');return m?m.value:{};}
+function importMappingClient(file){
+  if(!file)return;const rd=new FileReader();
+  rd.onload=async()=>{
+    let map;try{map=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
+    if(typeof map!=='object'||Array.isArray(map)){toast('Format attendu : objet {"nom feuille":"nom client",...}.');return;}
+    await put('meta',{id:'mapping_chantier_client',value:map});
+    toast(Object.keys(map).length+' correspondance(s) chantier→client chargée(s).');
+  };rd.readAsText(file);
+}
+async function relierAchatsAuxClients(){
+  const map=await mappingChantierClient();
+  if(!Object.keys(map).length){toast('Importez d\'abord le mapping chantier→client (bouton ⭱ JSON Mapping Client).');return;}
+  const tousAchats=await all('achats');
+  const cibles=tousAchats.filter(a=>a.source==='staging_chantier'&&a.chantier&&!a.clientId);
+  if(!cibles.length){toast('Tous les achats importés sont déjà reliés à un client (ou aucun achat chantier trouvé).');return;}
+  if(!confirm(cibles.length+' achat(s) à relier à leur client via le mapping. Confirmer ?'))return;
+  let n=0,sansMapping=0;
+  for(const a of cibles){
+    const clientNom=map[a.chantier];
+    if(!clientNom){sansMapping++;continue;}
+    const cl=await stgEnsureClient(clientNom);
+    a.clientId=cl.id;a.clientNom=cl.nom;await put('achats',a);n++;
+  }
+  await loadAll();RENDER.achats&&RENDER.achats();
+  toast(n+' achat(s) relié(s) à leur client'+(sansMapping?', '+sansMapping+' sans correspondance dans le mapping':'')+'.');
+}
 async function bulkCreateFournisseursFromStaging(){
   const noms=[...new Set(ST.staging.filter(s=>s.kind==='achat_chantier').map(s=>(s.payload.fournisseur||'').trim()).filter(Boolean))];
   if(!noms.length){toast('Aucun fournisseur détecté dans le staging. Importez d\'abord le JSON Chantiers.');return;}
@@ -3845,6 +3929,8 @@ RENDER.staging=()=>{
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Caisse<input type="file" accept=".json" style="display:none" onchange="importStagingFile('caisse',this.files[0])"></label>
     <button class="btn sm gh" onclick="bulkCreateFournisseursFromStaging()">👥 Créer fournisseurs (chantiers)</button>
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Clients<input type="file" accept=".json" style="display:none" onchange="bulkImportTiersFile('client',this.files[0])"></label>
+    <label class="btn sm gh" style="cursor:pointer">⭱ JSON Mapping Client<input type="file" accept=".json" style="display:none" onchange="importMappingClient(this.files[0])"></label>
+    <button class="btn sm gh" onclick="relierAchatsAuxClients()">🔗 Relier achats aux clients</button>
     <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
     <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>
     ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}`;
@@ -3898,6 +3984,7 @@ async function stgValiderSelection(){
   if(!window._stgSel.size){toast('Aucune sélection.');return;}
   if(!confirm(window._stgSel.size+' ligne(s) à comptabiliser — chaque écriture sera routée vers l\'exercice correspondant à sa date (créé automatiquement si absent). Confirmer ?'))return;
   await stgEnsureCompteAttente();
+  const mapClient=await mappingChantierClient();
   let ok=0,skip=0,exCreated=0;
   const nbExAvant=ST.exercices.length;
   for(const id of Array.from(window._stgSel)){
@@ -3908,11 +3995,14 @@ async function stgValiderSelection(){
       const exObj=ST.exercices.find(x=>x.id===exId);
       if(exObj&&exObj.statut==='clôturé'){skip++;continue;}
       const fo=await stgEnsureFournisseur(p.fournisseur);
+      let clientId=null,clientNom=null;
+      const nomClient=mapClient[p.chantier];
+      if(nomClient){const cl=await stgEnsureClient(nomClient);clientId=cl.id;clientNom=cl.nom;}
       const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
       const ht=lignes.reduce((a,l)=>a+l.ht,0);
       const numero=await nextAchatNum(exId);
       const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
-        date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier};
+        date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier,clientId,clientNom};
       await put('achats',ach);await genAchatEcriture(ach);
     }else{
       const p=s.payload;const dateP=(p.date||today());
