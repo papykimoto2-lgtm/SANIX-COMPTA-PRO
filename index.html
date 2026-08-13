@@ -846,6 +846,34 @@ function go(p){
 /* ============ MODAL ============ */
 function openModal(html,wide){document.getElementById('modal').className='modal'+(wide?' wide':'');document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('on');}
 function closeModal(){document.getElementById('ov').classList.remove('on');}
+/* ---- Barre de progression réutilisable pour imports/traitements longs ---- */
+function progressStart(titre){
+  openModal(`<div class="mh"><h3>${esc(titre)}</h3></div>
+  <div class="mb">
+    <div style="background:var(--line);border-radius:8px;height:14px;overflow:hidden;margin-bottom:8px">
+      <div id="prog-bar" style="height:100%;width:0%;background:var(--cuivre);transition:width .15s linear"></div>
+    </div>
+    <div id="prog-label" style="font-size:12.5px;color:var(--mut)">Préparation…</div>
+    <div id="prog-errors" style="font-size:11.5px;color:var(--red);margin-top:8px;max-height:120px;overflow:auto"></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button></div>`,true);
+  return{
+    update(cur,total,label){
+      const pct=total?Math.round(cur/total*100):0;
+      const bar=document.getElementById('prog-bar');if(bar)bar.style.width=pct+'%';
+      const lab=document.getElementById('prog-label');if(lab)lab.textContent=(label||'')+' — '+cur+' / '+total+' ('+pct+'%)';
+    },
+    error(msg){
+      const box=document.getElementById('prog-errors');if(!box)return;
+      box.innerHTML+='<div>⚠ '+esc(msg)+'</div>';
+    },
+    done(resume){
+      const lab=document.getElementById('prog-label');if(lab){lab.textContent=resume;lab.style.color='var(--green)';lab.style.fontWeight='700';}
+      const bar=document.getElementById('prog-bar');if(bar)bar.style.background='var(--green)';
+    }
+  };
+}
+function progressYield(){return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));}
 document.getElementById('ov').onclick=e=>{if(e.target.id==='ov')closeModal();};
 
 /* ============ RENDER ============ */
@@ -3836,23 +3864,28 @@ function importMappingClient(file){
     await put('meta',{id:'mapping_chantier_client',value:map});
     toast(Object.keys(map).length+' correspondance(s) chantier→client chargée(s).');
   };rd.readAsText(file);
-}
-async function relierAchatsAuxClients(){
+}async function relierAchatsAuxClients(){
   const map=await mappingChantierClient();
   if(!Object.keys(map).length){toast('Importez d\'abord le mapping chantier→client (bouton ⭱ JSON Mapping Client).');return;}
   const tousAchats=await all('achats');
   const cibles=tousAchats.filter(a=>a.source==='staging_chantier'&&a.chantier&&!a.clientId);
   if(!cibles.length){toast('Tous les achats importés sont déjà reliés à un client (ou aucun achat chantier trouvé).');return;}
   if(!confirm(cibles.length+' achat(s) à relier à leur client via le mapping. Confirmer ?'))return;
-  let n=0,sansMapping=0;
-  for(const a of cibles){
+  const prog=progressStart('Rattachement des achats aux clients…');
+  let n=0,sansMapping=0,erreurs=0;
+  for(let i=0;i<cibles.length;i++){
+    const a=cibles[i];
+    prog.update(i+1,cibles.length,a.chantier);
     const clientNom=map[a.chantier];
     if(!clientNom){sansMapping++;continue;}
-    const cl=await stgEnsureClient(clientNom);
-    a.clientId=cl.id;a.clientNom=cl.nom;await put('achats',a);n++;
+    try{
+      const cl=await stgEnsureClient(clientNom);
+      a.clientId=cl.id;a.clientNom=cl.nom;await put('achats',a);n++;
+    }catch(err){erreurs++;prog.error(a.chantier+' : '+err.message);}
+    if(i%25===0)await progressYield();
   }
   await loadAll();RENDER.achats&&RENDER.achats();
-  toast(n+' achat(s) relié(s) à leur client'+(sansMapping?', '+sansMapping+' sans correspondance dans le mapping':'')+'.');
+  prog.done('Terminé — '+n+' relié(s)'+(sansMapping?', '+sansMapping+' sans correspondance':'')+(erreurs?', '+erreurs+' erreur(s)':'')+'.');
 }
 async function bulkCreateFournisseursFromStaging(){
   const noms=[...new Set(ST.staging.filter(s=>s.kind==='achat_chantier').map(s=>(s.payload.fournisseur||'').trim()).filter(Boolean))];
@@ -3871,20 +3904,29 @@ async function bulkImportTiersFile(type,file){
   rd.onload=async()=>{
     let arr;try{arr=JSON.parse(rd.result);}catch(e){toast('JSON invalide.');return;}
     if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
-    let created=0,existants=0;
-    for(const item of arr){
+    const prog=progressStart('Import '+(type==='client'?'clients':'fournisseurs')+'…');
+    let created=0,existants=0,erreurs=0;
+    for(let i=0;i<arr.length;i++){
+      const item=arr[i];
       const nom=(typeof item==='string'?item:item.nom||'').trim();
+      prog.update(i+1,arr.length,nom||'(vide)');
       if(!nom)continue;
-      const exist=ST.tiers.find(x=>x.type===type&&x.nom.trim().toUpperCase()===nom.toUpperCase());
-      if(exist){existants++;continue;}
-      const base=type==='client'?'4111':'4011';
-      const n=ST.tiers.filter(x=>x.type===type).length+1;const compte=base+String(n).padStart(3,'0');
-      const t={id:uid('t'),type,compte,nom,ncc:(typeof item==='object'&&item.ncc)||'',tel:(typeof item==='object'&&item.tel)||'',email:(typeof item==='object'&&item.email)||'',adresse:(typeof item==='object'&&item.adresse)||'',delai:0,plafond:0};
-      await put('tiers',t);
-      await put('comptes',{id:'c_'+compte,numero:compte,libelle:(type==='client'?'Client — ':'Fournisseur — ')+nom,type:type==='client'?'A':'P',classe:'4',aux:t.id});
-      ST.tiers.push(t);created++;
+      try{
+        const exist=ST.tiers.find(x=>x.type===type&&x.nom.trim().toUpperCase()===nom.toUpperCase());
+        if(exist){existants++;continue;}
+        const base=type==='client'?'4111':'4011';
+        const n=ST.tiers.filter(x=>x.type===type).length+1;const compte=base+String(n).padStart(3,'0');
+        const t={id:uid('t'),type,compte,nom,ncc:(typeof item==='object'&&item.ncc)||'',tel:(typeof item==='object'&&item.tel)||'',email:(typeof item==='object'&&item.email)||'',adresse:(typeof item==='object'&&item.adresse)||'',delai:0,plafond:0};
+        await put('tiers',t);
+        await put('comptes',{id:'c_'+compte,numero:compte,libelle:(type==='client'?'Client — ':'Fournisseur — ')+nom,type:type==='client'?'A':'P',classe:'4',aux:t.id});
+        ST.tiers.push(t);created++;
+      }catch(err){erreurs++;prog.error(nom+' : '+err.message);}
+      if(i%25===0)await progressYield();
     }
-    await loadAll();RENDER.staging();toast(created+' '+(type==='client'?'client(s)':'fournisseur(s)')+' créé(s), '+existants+' déjà existant(s).');
+    await loadAll();
+    const verif=ST.tiers.filter(x=>x.type===type).length;
+    prog.done('Terminé — '+created+' créé(s), '+existants+' déjà existant(s)'+(erreurs?', '+erreurs+' erreur(s)':'')+'. Total '+(type==='client'?'clients':'fournisseurs')+' en base : '+verif+'.');
+    RENDER.staging();
   };rd.readAsText(file);
 }
 function importStagingFile(kind,file){
@@ -3900,12 +3942,19 @@ function importStagingFile(kind,file){
       toast('⚠ Fichier incompatible avec "'+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'" — vérifiez que vous n\'avez pas inversé les deux fichiers.');
       return;
     }
-    let n=0;
-    for(const r of arr){
+    const prog=progressStart('Import '+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'…');
+    let n=0,erreurs=0;
+    for(let i=0;i<arr.length;i++){
+      const r=arr[i];
       const st=kind==='achat_chantier'?'en_attente':(r.type==='ouverture'?'ignore':'en_attente');
-      await put('staging',{id:uid('stg'),kind,status:st,payload:r,importedAt:Date.now()});n++;
+      try{
+        await put('staging',{id:uid('stg'),kind,status:st,payload:r,importedAt:Date.now()});n++;
+      }catch(err){erreurs++;prog.error('Ligne '+(i+1)+' : '+err.message);}
+      if(i%50===0){prog.update(i+1,arr.length,r.chantier||r.libelle||'');await progressYield();}
     }
-    await loadAll();RENDER.staging();toast(n+' ligne(s) chargée(s) en staging.');
+    await loadAll();
+    prog.done('Terminé — '+n+' ligne(s) chargée(s)'+(erreurs?', '+erreurs+' erreur(s)':'')+'. Total staging en base : '+ST.staging.length+'.');
+    RENDER.staging();
   };rd.readAsText(file);
 }
 async function stgViderTout(){
