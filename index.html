@@ -233,33 +233,42 @@ tbody tr:hover{background:#fbfcfe}
     <div class="exbar"><span>Exercice</span><select id="exSelect" onchange="switchEx(this.value)" style="flex:1;background:transparent;border:none;color:inherit;font-weight:700;font-size:inherit;cursor:pointer"></select></div>
     <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span> <span id="pendingBadge" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span></div>
     <nav class="nav" id="nav">
+      <a data-p="cockpit" class="on" style="font-weight:800;border-left:3px solid var(--cuivre)"><span class="ic">🎛</span>Cockpit</a>
+      <div class="grp-section" data-grp="ouverture-etape">
+      <div class="grp" onclick="toggleGrp(this)"><span>1 · Ouverture</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
+      <a data-p="ouverture"><span class="ic">⇱</span>Bilan d'ouverture</a>
+      <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
+      <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
+      </div></div>
       <div class="grp-section" data-grp="saisie">
-      <div class="grp" onclick="toggleGrp(this)"><span>1 · Saisie</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>2 · Saisie</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
+      <a data-p="staging"><span class="ic">⇵</span>Import Chantiers/Caisse</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
       </div></div>
       <div class="grp-section" data-grp="controle">
-      <div class="grp" onclick="toggleGrp(this)"><span>2 · Contrôle</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>3 · Contrôle</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="workflow"><span class="ic">⇉</span>Validation &amp; visa</a>
       <a data-p="lettrage"><span class="ic">⇄</span>Lettrage</a>
       <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
       <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
-      </div></div>
-      <div class="grp-section" data-grp="traitement">
-      <div class="grp" onclick="toggleGrp(this)"><span>3 · Traitement</span><span class="grp-arrow">▾</span></div>
-      <div class="grp-items">
       <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
       <a data-p="analytique"><span class="ic">◈</span>Comptabilité analytique</a>
       <a data-p="immo"><span class="ic">▦</span>Immobilisations</a>
       <a data-p="devises"><span class="ic">$</span>Multi-devises</a>
       </div></div>
+      <div class="grp-section" data-grp="visa">
+      <div class="grp" onclick="toggleGrp(this)"><span>4 · Visa</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
+      <a data-p="workflow"><span class="ic">⇉</span>Validation &amp; visa</a>
+      </div></div>
       <div class="grp-section" data-grp="etats">
-      <div class="grp" onclick="toggleGrp(this)"><span>4 · États comptables</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>5 · États</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="grandlivre"><span class="ic">≣</span>Grand livre</a>
       <a data-p="balance"><span class="ic">⚖</span>Balance générale</a>
@@ -267,33 +276,29 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
       <a data-p="flux"><span class="ic">≈</span>Flux de trésorerie</a>
       <a data-p="annexes"><span class="ic">▣</span>Notes annexes</a>
-      </div></div>
-      <div class="grp-section" data-grp="fiscalite">
-      <div class="grp" onclick="toggleGrp(this)"><span>5 · Fiscalité</span><span class="grp-arrow">▾</span></div>
-      <div class="grp-items">
       <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
       <a data-p="echeancier"><span class="ic">⏰</span>Échéancier fiscal</a>
       <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
       <a data-p="liasse"><span class="ic">▦</span>Liasse fiscale</a>
       </div></div>
+      <div class="grp-section" data-grp="cloture">
+      <div class="grp" onclick="toggleGrp(this)"><span>6 · Clôture</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-items">
+      <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture (+ FEC)</a>
+      </div></div>
       <div class="grp-section" data-grp="budget">
-      <div class="grp" onclick="toggleGrp(this)"><span>6 · Budget &amp; pilotage</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>7 · Pilotage</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="budget"><span class="ic">▲</span>Budget &amp; réalisé</a>
-      <a data-p="dash" class="on"><span class="ic">▚</span>Tableau de bord</a>
+      <a data-p="dash"><span class="ic">▚</span>Tableau de bord</a>
       <a data-p="analyse360"><span class="ic">◎</span>Analyse 360°</a>
       <a data-p="consolidation"><span class="ic">▩</span>Consolidation</a>
       </div></div>
       <div class="grp-section" data-grp="config">
-      <div class="grp" onclick="toggleGrp(this)"><span>7 · Configuration</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>8 · Configuration</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
       <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
-      <a data-p="staging"><span class="ic">⇵</span>Import Chantiers/Caisse</a>
-      <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
-      <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture</a>
-      <a data-p="ouverture"><span class="ic">⇱</span>Bilan d'ouverture</a>
-      <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
       <a data-p="audit"><span class="ic">◉</span>Journal d'audit</a>
       </div></div>
     </nav>
@@ -310,7 +315,8 @@ tbody tr:hover{background:#fbfcfe}
       <div class="r" id="pgActions"></div>
     </div>
     <div class="content">
-      <div class="page on" id="p-dash"></div>
+      <div class="page on" id="p-cockpit"></div>
+      <div class="page" id="p-dash"></div>
       <div class="page" id="p-analyse360"></div>
       <div class="page" id="p-consolidation"></div>
       <div class="page" id="p-passerelle"></div>
@@ -736,11 +742,11 @@ async function boot(){
       if(window._pendingN>0){e.preventDefault();e.returnValue='';return '';} // des changements ne sont pas encore synchronisés vers Supabase
     });
   }
-  bindNav();go('dash');
+  bindNav();go('cockpit');
 }
 
 /* ============ NAV ============ */
-const TITLES={staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -3141,7 +3147,75 @@ async function stgRejeterSelection(){
   window._stgSel.clear();await loadAll();RENDER.staging();toast('Sélection rejetée.');
 }
 
-/* ============ CAISSE — style ImmoSuite (sessions, PIN, bons E/S, écart, ventilation) ============ */
+/* ============ COCKPIT — écran d'accueil, file d'actions (style ImmoSuite) ============ */
+async function ckActions(){
+  const actions=[];
+  // 1. Écritures en brouillard à valider
+  const brouillard=ST.ecritures.filter(e=>(e.statut||'brouillard')==='brouillard').length;
+  if(brouillard)actions.push({icone:'⇉',urgent:false,titre:brouillard+' écriture(s) en brouillard',detail:'À valider dans le circuit de visa avant clôture.',boutons:[{lib:'Traiter',fn:"go('workflow')"}]});
+  // 2. Staging en attente
+  const stgAttente=ST.staging.filter(s=>s.status==='en_attente').length;
+  if(stgAttente)actions.push({icone:'⇵',urgent:false,titre:stgAttente+' ligne(s) importée(s) en attente',detail:'Chantiers / caisse à valider ou rejeter.',boutons:[{lib:'Traiter',fn:"go('staging')"}]});
+  // 3. Mouvements caisse clôturés à ventiler
+  const vent=caisseAVentilerStats();
+  if(vent.nb)actions.push({icone:'🧾',urgent:vent.nb>50,titre:vent.nb+' mouvement(s) de caisse à ventiler',detail:F0(vent.montant)+' FCFA en attente d\'imputation comptable.',boutons:[{lib:'Ventiler',fn:"go('caisse')"}]});
+  // 4. Écarts de caisse non régularisés
+  const ecartNR=caisseEcartNonRegularise();
+  if(ecartNR)actions.push({icone:'⚠',urgent:true,titre:'Écart(s) de caisse non régularisé(s)',detail:F0(ecartNR)+' FCFA d\'écart cumulé à justifier.',boutons:[{lib:'Régulariser',fn:"go('caisse')"}]});
+  // 5. Caisses ouvertes (rappel de clôture quotidienne)
+  const ouvertes=ST.caisses.filter(c=>caisseGetSessionOuverte(c.id)).length;
+  if(ouvertes)actions.push({icone:'💵',urgent:false,titre:ouvertes+' caisse(s) actuellement ouverte(s)',detail:'Penser à clôturer en fin de journée.',boutons:[{lib:'Voir',fn:"go('caisse')"}]});
+  // 6. Factures fournisseurs en retard
+  const retard=ST.achats.filter(a=>!a.regle&&a.echeance&&a.echeance<today()&&achatSolde(a)>0.5);
+  if(retard.length)actions.push({icone:'🛒',urgent:true,titre:retard.length+' facture(s) fournisseur en retard',detail:'Échéance dépassée, solde non réglé.',boutons:[{lib:'Voir',fn:"go('achats')"}]});
+  // 7. Échéances fiscales sous 7 jours
+  try{
+    const f=await fisc();const ech=fiscEcheances(f).filter(e=>e.jours<=7&&e.jours>=0);
+    if(ech.length)actions.push({icone:'⏰',urgent:true,titre:ech.length+' échéance(s) fiscale(s) sous 7 jours',detail:ech.map(e=>e.type).join(', '),boutons:[{lib:'Voir',fn:"go('echeancier')"}]});
+  }catch(e){}
+  // 8. Exercice courant sans bilan d'ouverture
+  const premier=ST.exercices.slice().sort((a,b)=>a.debut.localeCompare(b.debut))[0];
+  if(premier){
+    const hasOuv=(await all('ecritures')).some(e=>e.id==='e_ouv_'+premier.id);
+    if(!hasOuv)actions.push({icone:'⇱',urgent:false,titre:'Bilan d\'ouverture non saisi',detail:'Exercice '+premier.libelle+' — aucun solde initial enregistré.',boutons:[{lib:'Saisir',fn:"go('ouverture')"}]});
+  }
+  // 9. Comptes non lettrés (informatif, léger — seulement clients/fournisseurs)
+  const nonLettres=mouvements(l=>(l.compte||'').startsWith('4')&&!l.lettre).length;
+  if(nonLettres>20)actions.push({icone:'⇄',urgent:false,titre:nonLettres+' mouvement(s) tiers non lettré(s)',detail:'Comptes 4xx — lettrage à jour recommandé avant clôture.',boutons:[{lib:'Lettrer',fn:"go('lettrage')"}]});
+  // 10. Exercice clôturable (fin de période dépassée, encore ouvert)
+  const exp=ST.exercices.filter(e=>e.statut==='ouvert'&&e.fin&&e.fin<today());
+  if(exp.length)actions.push({icone:'🔒',urgent:false,titre:exp.length+' exercice(s) expiré(s) toujours ouvert(s)',detail:exp.map(e=>e.libelle).join(', '),boutons:[{lib:'Clôturer',fn:"go('exercices')"}]});
+  return actions;
+}
+RENDER.cockpit=async()=>{
+  document.getElementById('pgActions').innerHTML='';
+  const actions=await ckActions();
+  const nEx=ST.exercices.length,nComptes=ST.comptes.length,nEc=ST.ecritures.length;
+  let html=`<div class="grid kpis" style="margin-bottom:16px">
+    <div class="card kpi o"><div class="lb">Exercice actif</div><div class="v" style="font-size:16px">${curEx().libelle||'—'}</div></div>
+    <div class="card kpi g"><div class="lb">Écritures (exercice)</div><div class="v mono">${nEc}</div></div>
+    <div class="card kpi b"><div class="lb">Comptes actifs</div><div class="v mono">${nComptes}</div></div>
+    <div class="card kpi ${actions.filter(a=>a.urgent).length?'r':'g'}"><div class="lb">Actions urgentes</div><div class="v mono">${actions.filter(a=>a.urgent).length}</div></div>
+  </div>`;
+  if(!actions.length){
+    html+=`<div class="card" style="text-align:center;padding:32px">
+      <div style="font-size:38px;margin-bottom:8px">🏁</div>
+      <div style="font-weight:700;margin-bottom:4px">File vide — tout est traité.</div>
+      <div style="font-size:12px;color:var(--mut)">Le cockpit re-scanne vos données à chaque ouverture.</div></div>`;
+  }else{
+    html+=actions.map(a=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;border-left:4px solid ${a.urgent?'var(--red)':'var(--line)'}">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="font-size:20px;line-height:1">${a.icone}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap">
+            <strong style="font-size:13px">${a.urgent?'<span style="color:var(--red)">●</span> ':''}${esc(a.titre)}</strong>
+          </div>
+          <div style="font-size:11.5px;color:var(--mut);margin-top:3px;line-height:1.5">${esc(a.detail)}</div>
+          <div style="display:flex;gap:6px;margin-top:8px">${a.boutons.map(b=>`<button class="btn sm gh" onclick="${b.fn}">${b.lib}</button>`).join('')}</div>
+        </div></div></div>`).join('');
+  }
+  document.getElementById('p-cockpit').innerHTML=html;
+};
 function curUserFull(){return ST.users.find(u=>u.id===ST.user.id)||ST.users.find(u=>u.login===ST.user.login);}
 function caisseNomUser(login){const u=ST.users.find(x=>x.login===login);return u?(u.nom||u.login):(login||'—');}
 function caisseUserPeut(caisseId){if(can('admin'))return true;const c=ST.caisses.find(x=>x.id===caisseId);if(!c)return false;
