@@ -1678,49 +1678,71 @@ RENDER.bilan=()=>{
 
 /* ---- TVA ---- */
 RENDER.tva=()=>{
-  const months=[...new Set(ST.ecritures.map(e=>(e.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
-  const ym=window._tvaM||months[0]||today().slice(0,7);
+  const ym=window._tvaM||today().slice(0,7);
+  const prorata=window._tvaProrata!==undefined?window._tvaProrata:100;
   document.getElementById('pgActions').innerHTML=`<button class="btn sm" onclick="genLiquidationTVA('${ym}')">⇄ Écriture de liquidation</button> <button class="btn sm gh" onclick="printReport('p-tva','Déclaration TVA')">⎙ Imprimer</button>`;
-  let collectee=0,deductible=0;
-  ST.ecritures.forEach(e=>{if((e.date||'').slice(0,7)!==ym)return;e.lignes.forEach(l=>{const c=l.compte||'',d=+l.debit||0,cr=+l.credit||0;if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductible+=d-cr;});});
+  const lignesCollectee=mouvements((e,l)=>(e.date||'').slice(0,7)===ym&&(l.compte||'').startsWith('4431'));
+  const lignesDeductible=mouvements((e,l)=>(e.date||'').slice(0,7)===ym&&((l.compte||'').startsWith('4452')||(l.compte||'').startsWith('4451')));
+  const collectee=lignesCollectee.reduce((s,r)=>s+r.credit-r.debit,0);
+  const deductibleBrute=lignesDeductible.reduce((s,r)=>s+r.debit-r.credit,0);
+  const deductible=Math.round(deductibleBrute*prorata/100);
   const nette=collectee-deductible;
   let creditAnt=0;const cut=ym+'-01';
   ST.ecritures.forEach(e=>{if((e.date||'')>=cut)return;e.lignes.forEach(l=>{const c=l.compte||'';if(c.startsWith('4449'))creditAnt+=(+l.debit||0)-(+l.credit||0);});});
   creditAnt=Math.max(0,Math.round(creditAnt));
   const apres=nette-creditAnt;
-  const opts=(months.length?months:[ym]).map(x=>`<option value="${x}" ${x===ym?'selected':''}>${x}</option>`).join('');
   const liquide=!!ST.ecritures.find(e=>e.id==='e_tva_'+ym);
+  const ligneRow=r=>`<tr><td class="mono">${esc(r.compte)}</td><td style="font-size:12px">${esc(r.libelle)}</td><td class="ta-r mono">${F0(r.debit||r.credit)}</td></tr>`;
   document.getElementById('p-tva').innerHTML=`
-  <div class="toolbar"><label style="font-size:12.5px;margin-right:8px">Période</label><select class="search" style="max-width:160px" onchange="window._tvaM=this.value;RENDER.tva()">${opts}</select>${liquide?'<span class="badge b-green" style="margin-left:10px">Liquidée ✓</span>':''}</div>
-  <div class="grid kpis">
-    <div class="card kpi o"><div class="lb">TVA collectée (4431)</div><div class="v mono">${F(collectee)}</div><div class="f">Sur ventes · ${ym}</div></div>
-    <div class="card kpi b"><div class="lb">TVA déductible (4452)</div><div class="v mono">${F(deductible)}</div><div class="f">Sur achats/charges</div></div>
-    <div class="card kpi ${nette>=0?'r':'g'}"><div class="lb">TVA nette</div><div class="v mono">${F(nette)}</div><div class="f">${nette>=0?'À reverser (4441)':'Crédit reportable (4449)'}</div></div>
+  <div class="frow c3" style="margin-bottom:14px">
+    <div><label>Période (mois)</label><input type="month" value="${ym}" onchange="window._tvaM=this.value;RENDER.tva()"></div>
+    <div><label>Prorata de déduction (%)</label><input type="number" min="0" max="100" value="${prorata}" onchange="window._tvaProrata=Math.min(100,Math.max(0,+this.value||0));RENDER.tva()"></div>
+    <div style="align-self:flex-end">${liquide?'<span class="badge b-green">Liquidée ✓</span>':''}</div>
   </div>
-  <div class="card"><h3 style="margin-bottom:10px">Déclaration mensuelle — ${ym}</h3>
-  <table><tbody>
-    <tr><td>TVA facturée sur ventes</td><td class="ta-r mono">${F(collectee)}</td></tr>
-    <tr><td>TVA récupérable sur achats et charges</td><td class="ta-r mono">${F(deductible)}</td></tr>
-    ${creditAnt>0?`<tr><td>Crédit TVA antérieur reporté (4449)</td><td class="ta-r mono">− ${F(creditAnt)}</td></tr>`:''}
-    <tr class="foot-tr"><td>TVA NETTE ${apres>=0?'À PAYER':'À REPORTER'}</td><td class="ta-r mono ${apres>=0?'':'pos'}">${F(apres)}</td></tr>
-  </tbody></table>
-  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance : 15 du mois suivant (varie selon DGE/CME/SAID). Liquidation : débit 4431 / crédit 4452 / ${nette>=0?'crédit 4441 (TVA due)':'débit 4449 (crédit reportable)'}.</p>
-  </div>`;
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+    <div style="padding:10px 16px;font-weight:800;font-size:12.5px;color:var(--cuivre-d)">A — TVA collectée</div>
+    <table><thead><tr><th>Compte</th><th>Nature</th><th class="ta-r">Montant</th></tr></thead>
+    <tbody>${lignesCollectee.map(ligneRow).join('')||'<tr><td colspan=3 class="empty">Aucune TVA collectée sur la période.</td></tr>'}</tbody>
+    <tfoot><tr class="foot-tr"><td colspan=2>TOTAL TVA COLLECTÉE</td><td class="ta-r mono" style="color:var(--green)">${F0(collectee)}</td></tr></tfoot></table>
+  </div>
+  <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">
+    <div style="padding:10px 16px;font-weight:800;font-size:12.5px;color:var(--cuivre-d)">B — TVA déductible</div>
+    <table><thead><tr><th>Compte</th><th>Nature</th><th class="ta-r">Montant</th></tr></thead>
+    <tbody>${lignesDeductible.map(ligneRow).join('')||'<tr><td colspan=3 class="empty">Aucune TVA déductible sur la période.</td></tr>'}</tbody>
+    <tfoot>
+      <tr class="foot-tr"><td colspan=2>TVA déductible brute</td><td class="ta-r mono">${F0(deductibleBrute)}</td></tr>
+      ${prorata<100?`<tr class="foot-tr"><td colspan=2>Prorata de déduction appliqué (${prorata}%)</td><td class="ta-r mono">−${F0(deductibleBrute-deductible)}</td></tr>`:''}
+      <tr class="foot-tr"><td colspan=2>TOTAL TVA DÉDUCTIBLE</td><td class="ta-r mono" style="color:var(--red)">${F0(deductible)}</td></tr>
+    </tfoot></table>
+  </div>
+  <div class="card" style="border-left:4px solid var(--cuivre)">
+    <table style="border:none"><tbody>
+      <tr><td>TVA collectée</td><td class="ta-r mono">${F0(collectee)}</td></tr>
+      <tr><td>− TVA déductible</td><td class="ta-r mono">${F0(deductible)}</td></tr>
+      ${creditAnt>0?`<tr><td>− Crédit TVA antérieur reporté (4449)</td><td class="ta-r mono">${F0(creditAnt)}</td></tr>`:''}
+      <tr style="font-weight:800;border-top:2px solid var(--line)"><td>TVA NETTE ${apres>=0?'À PAYER':'À REPORTER'}</td><td class="ta-r mono" style="color:${apres>=0?'var(--red)':'var(--green)'}">${F0(Math.abs(apres))}</td></tr>
+    </tbody></table>
+  </div>
+  <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance : 15 du mois suivant (varie selon DGE/CME/SAID). Liquidation : débit 4431 / crédit 4452 / ${nette>=0?'crédit 4441 (TVA due)':'débit 4449 (crédit reportable)'}.</p>`;
 };
 async function genLiquidationTVA(ym){
-  let collectee=0,deductible=0,creditAnt=0;const cut=ym+'-01';
+  const prorata=window._tvaProrata!==undefined?window._tvaProrata:100;
+  let collectee=0,deductibleBrute=0,creditAnt=0;const cut=ym+'-01';
   ST.ecritures.forEach(e=>{
     if(e.id==='e_tva_'+ym)return;
     const em=(e.date||'').slice(0,7);
     e.lignes.forEach(l=>{const c=l.compte||'',d=+l.debit||0,cr=+l.credit||0;
-      if(em===ym){if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductible+=d-cr;}
+      if(em===ym){if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductibleBrute+=d-cr;}
       if((e.date||'')<cut&&c.startsWith('4449'))creditAnt+=d-cr;});
   });
-  collectee=Math.round(collectee);deductible=Math.round(deductible);creditAnt=Math.round(Math.max(0,creditAnt));
-  if(collectee<=0&&deductible<=0){toast('Aucune TVA sur la période.');return;}
+  collectee=Math.round(collectee);deductibleBrute=Math.round(deductibleBrute);
+  const deductible=Math.round(deductibleBrute*prorata/100);
+  creditAnt=Math.round(Math.max(0,creditAnt));
+  if(collectee<=0&&deductibleBrute<=0){toast('Aucune TVA sur la période.');return;}
   const net=collectee-deductible,eff=net-creditAnt;
   const lignes=[{compte:'4431',libelle:'TVA collectée liquidée',debit:collectee,credit:0,lettre:''},
-    {compte:'4452',libelle:'TVA déductible liquidée',debit:0,credit:deductible,lettre:''}];
+    {compte:'4452',libelle:'TVA déductible liquidée',debit:0,credit:deductibleBrute,lettre:''}];
+  if(prorata<100&&deductibleBrute>deductible)lignes.push({compte:'658',libelle:'TVA non récupérable (prorata '+prorata+'%)',debit:deductibleBrute-deductible,credit:0,lettre:''});
   if(creditAnt>0)lignes.push({compte:'4449',libelle:'Imputation crédit TVA antérieur',debit:0,credit:creditAnt,lettre:''});
   if(eff>=0)lignes.push({compte:'4441',libelle:'État, TVA due '+ym,debit:0,credit:eff,lettre:''});
   else lignes.push({compte:'4449',libelle:'État, crédit TVA à reporter '+ym,debit:-eff,credit:0,lettre:''});
