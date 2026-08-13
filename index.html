@@ -4074,6 +4074,7 @@ RENDER.staging=()=>{
     <label class="btn sm gh" style="cursor:pointer">⭱ JSON Mapping Client<input type="file" accept=".json" style="display:none" onchange="importMappingClient(this.files[0])"></label>
     <button class="btn sm gh" onclick="relierAchatsAuxClients()">🔗 Relier achats aux clients</button>
     <button class="btn sm" onclick="stgValiderSelection()">✓ Valider sélection</button>
+    <button class="btn sm" style="background:var(--green);color:#fff;font-weight:700" onclick="stgValiderTout()">✓✓ Valider TOUT (filtré)</button>
     <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter sélection</button>
     ${can('admin')?'<button class="btn sm gh" style="color:var(--red)" onclick="stgViderTout()">🗑 Vider staging</button>':''}
     ${can('admin')?'<button class="btn sm" style="background:var(--red);color:#fff" onclick="stgReinitialisationComplete()">⚠ Remise à zéro complète (staging + achats + écritures)</button>':''}`;
@@ -4123,46 +4124,78 @@ function stgToggle(id,checked){if(checked)window._stgSel.add(id);else window._st
 function stgToggleAllVisible(checked){
   document.querySelectorAll('[data-stg]').forEach(cb=>{cb.checked=checked;stgToggle(cb.dataset.stg,checked);});
 }
+async function stgValiderUneLigne(s,mapClient){
+  if(s.kind==='achat_chantier'){
+    const p=s.payload;const dateP=p.date||today();
+    const exId=await findOrCreateExercicePourDate(dateP);
+    const exObj=ST.exercices.find(x=>x.id===exId);
+    if(exObj&&exObj.statut==='clôturé')return'skip';
+    const fo=await stgEnsureFournisseur(p.fournisseur);
+    let clientId=null,clientNom=null;
+    const nomClient=mapClient[p.chantier];
+    if(nomClient){const cl=await stgEnsureClient(nomClient);clientId=cl.id;clientNom=cl.nom;}
+    const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
+    const ht=lignes.reduce((a,l)=>a+l.ht,0);
+    const numero=await nextAchatNum(exId);
+    const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
+      date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier,clientId,clientNom};
+    await put('achats',ach);await genAchatEcriture(ach);
+  }else{
+    const p=s.payload;const dateP=(p.date||today());
+    const exId=await findOrCreateExercicePourDate(dateP);
+    const exObj=ST.exercices.find(x=>x.id===exId);
+    if(exObj&&exObj.statut==='clôturé')return'skip';
+    const lignes=[];
+    if(p.entree>0)lignes.push({compte:'571',libelle:p.libelle,debit:Math.round(p.entree),credit:0},{compte:'4712',libelle:'À ventiler — '+p.libelle,debit:0,credit:Math.round(p.entree)});
+    if(p.sortie>0)lignes.push({compte:'4712',libelle:'À ventiler — '+p.libelle,debit:Math.round(p.sortie),credit:0},{compte:'571',libelle:p.libelle,debit:0,credit:Math.round(p.sortie)});
+    if(!lignes.length)return'vide';
+    await put('ecritures',{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'});
+  }
+  s.status='valide';s.valDate=today();await put('staging',s);
+  return'ok';
+}
 async function stgValiderSelection(){
   if(!window._stgSel.size){toast('Aucune sélection.');return;}
   if(!confirm(window._stgSel.size+' ligne(s) à comptabiliser — chaque écriture sera routée vers l\'exercice correspondant à sa date (créé automatiquement si absent). Confirmer ?'))return;
   await stgEnsureCompteAttente();
   const mapClient=await mappingChantierClient();
-  let ok=0,skip=0,exCreated=0;
+  const prog=progressStart('Validation de la sélection…');
+  let ok=0,skip=0;
+  const ids=Array.from(window._stgSel);
   const nbExAvant=ST.exercices.length;
-  for(const id of Array.from(window._stgSel)){
-    const s=ST.staging.find(x=>x.id===id);if(!s||s.status!=='en_attente')continue;
-    if(s.kind==='achat_chantier'){
-      const p=s.payload;const dateP=p.date||today();
-      const exId=await findOrCreateExercicePourDate(dateP);
-      const exObj=ST.exercices.find(x=>x.id===exId);
-      if(exObj&&exObj.statut==='clôturé'){skip++;continue;}
-      const fo=await stgEnsureFournisseur(p.fournisseur);
-      let clientId=null,clientNom=null;
-      const nomClient=mapClient[p.chantier];
-      if(nomClient){const cl=await stgEnsureClient(nomClient);clientId=cl.id;clientNom=cl.nom;}
-      const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
-      const ht=lignes.reduce((a,l)=>a+l.ht,0);
-      const numero=await nextAchatNum(exId);
-      const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
-        date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier,clientId,clientNom};
-      await put('achats',ach);await genAchatEcriture(ach);
-    }else{
-      const p=s.payload;const dateP=(p.date||today());
-      const exId=await findOrCreateExercicePourDate(dateP);
-      const exObj=ST.exercices.find(x=>x.id===exId);
-      if(exObj&&exObj.statut==='clôturé'){skip++;continue;}
-      const lignes=[];
-      if(p.entree>0)lignes.push({compte:'571',libelle:p.libelle,debit:Math.round(p.entree),credit:0},{compte:'4712',libelle:'À ventiler — '+p.libelle,debit:0,credit:Math.round(p.entree)});
-      if(p.sortie>0)lignes.push({compte:'4712',libelle:'À ventiler — '+p.libelle,debit:Math.round(p.sortie),credit:0},{compte:'571',libelle:p.libelle,debit:0,credit:Math.round(p.sortie)});
-      if(!lignes.length)continue;
-      await put('ecritures',{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'});
-    }
-    s.status='valide';s.valDate=today();await put('staging',s);ok++;
+  for(let i=0;i<ids.length;i++){
+    const s=ST.staging.find(x=>x.id===ids[i]);if(!s||s.status!=='en_attente')continue;
+    try{const r=await stgValiderUneLigne(s,mapClient);if(r==='ok')ok++;else if(r==='skip')skip++;}
+    catch(err){prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);}
+    if(i%20===0){prog.update(i+1,ids.length,'');await progressYield();}
   }
-  exCreated=ST.exercices.length-nbExAvant;
+  const exCreated=ST.exercices.length-nbExAvant;
   window._stgSel.clear();await loadAll();populateExSelect();RENDER.staging();
-  toast(ok+' ligne(s) comptabilisée(s)'+(exCreated?', '+exCreated+' exercice(s) créé(s) automatiquement':'')+(skip?', '+skip+' ignorée(s) (exercice clôturé)':'')+'.');
+  prog.done(ok+' ligne(s) comptabilisée(s)'+(exCreated?', '+exCreated+' exercice(s) créé(s) automatiquement':'')+(skip?', '+skip+' ignorée(s) (exercice clôturé)':'')+'.');
+}
+async function stgValiderTout(){
+  const mapClient=await mappingChantierClient();
+  const cibles=stgFiltered().filter(s=>s.status==='en_attente');
+  if(!cibles.length){toast('Rien à valider pour ce filtre.');return;}
+  if(!confirm('⚠ VALIDATION EN MASSE\n\n'+cibles.length+' ligne(s) "en attente" (selon le filtre Type/Recherche actuel) vont être comptabilisées d\'un coup.\n\nChaque écriture sera routée vers son exercice réel selon sa date. Les exercices manquants seront créés automatiquement. Ceci peut prendre plusieurs minutes pour un gros volume.\n\nConfirmer ?'))return;
+  await stgEnsureCompteAttente();
+  const prog=progressStart('🚀 Validation en masse — '+cibles.length+' ligne(s)');
+  let ok=0,skip=0,vide=0,erreurs=0;
+  const nbExAvant=ST.exercices.length;
+  for(let i=0;i<cibles.length;i++){
+    const s=cibles[i];
+    try{
+      const r=await stgValiderUneLigne(s,mapClient);
+      if(r==='ok')ok++;else if(r==='skip')skip++;else if(r==='vide')vide++;
+    }catch(err){
+      erreurs++;
+      if(erreurs<=30)prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);
+    }
+    if(i%30===0){prog.update(i+1,cibles.length,s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle);await progressYield();}
+  }
+  const exCreated=ST.exercices.length-nbExAvant;
+  await loadAll();populateExSelect();RENDER.staging();
+  prog.done('✅ '+ok+' ligne(s) comptabilisée(s)'+(exCreated?' · '+exCreated+' exercice(s) créé(s)':'')+(skip?' · '+skip+' ignorée(s) (exercice clôturé)':'')+(vide?' · '+vide+' vide(s)':'')+(erreurs?' · ⚠ '+erreurs+' erreur(s)':' · 0 erreur'));
 }
 async function stgRejeterSelection(){
   if(!window._stgSel.size){toast('Aucune sélection.');return;}
