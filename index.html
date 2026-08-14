@@ -3098,10 +3098,14 @@ async function clientEtatHTML(clientNom,achatsClient){
   const tri=achatsClient.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   const ht=tri.reduce((s,a)=>s+a.ht,0),tva=tri.reduce((s,a)=>s+a.tva,0),ttc=tri.reduce((s,a)=>s+a.ttc,0);
   const solde=tri.reduce((s,a)=>s+achatSolde(a),0);
+  const qr=QR.svg(`${s.nom||'SANIX'}|ETAT-CLIENT|${clientNom}|${Math.round(ttc)}|${today()}`,90)||'';
   return `<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;max-width:760px;margin:0 auto;padding:28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #B87333;padding-bottom:14px;margin-bottom:18px">
       <div><div style="font-weight:800;font-size:18px">${esc(s.nom||'SANIX')}</div><div style="font-size:11px;color:#666">${esc(s.adresse||'')}${s.tel?' · '+esc(s.tel):''}</div></div>
-      <div style="text-align:right"><div style="font-weight:800;font-size:15px;color:#B87333">ÉTAT DES DÉPENSES</div><div style="font-size:11px;color:#666">Édité le ${dfr(today())}</div></div>
+      <div style="text-align:right;display:flex;gap:10px;align-items:flex-start">
+        <div><div style="font-weight:800;font-size:15px;color:#B87333">ÉTAT DES DÉPENSES</div><div style="font-size:11px;color:#666">Édité le ${dfr(today())}</div></div>
+        <div>${qr}</div>
+      </div>
     </div>
     <div style="margin-bottom:16px"><div style="font-size:11px;color:#666">CLIENT</div><div style="font-weight:700;font-size:15px">${esc(clientNom)}</div>${tiers&&tiers.tel?`<div style="font-size:11px;color:#666">${esc(tiers.tel)}</div>`:''}</div>
     <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -3254,10 +3258,14 @@ async function achatHTML(id){
   if(!a)return'<p>Facture introuvable.</p>';
   const s=await societe();
   const solde=achatSolde(a),regle=achatMontantRegle(a);
+  const qr=QR.svg(`${s.nom||'SANIX'}|ACHAT|${a.numero}|${Math.round(a.ttc)}|${a.date}`,90)||'';
   return `<div style="font-family:'Segoe UI',sans-serif;color:#1C1C2E;max-width:700px;margin:0 auto;padding:28px">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #B87333;padding-bottom:14px;margin-bottom:18px">
       <div><div style="font-weight:800;font-size:18px">${esc(s.nom||'SANIX')}</div><div style="font-size:11px;color:#666">${esc(s.adresse||'')}${s.tel?' · '+esc(s.tel):''}</div></div>
-      <div style="text-align:right"><div style="font-weight:800;font-size:15px;color:#B87333">FACTURE D'ACHAT</div><div style="font-size:12px;font-weight:700">${esc(a.numero)}</div><div style="font-size:11px;color:#666">${dfr(a.date)}</div></div>
+      <div style="text-align:right;display:flex;gap:10px;align-items:flex-start">
+        <div><div style="font-weight:800;font-size:15px;color:#B87333">FACTURE D'ACHAT</div><div style="font-size:12px;font-weight:700">${esc(a.numero)}</div><div style="font-size:11px;color:#666">${dfr(a.date)}</div></div>
+        <div>${qr}</div>
+      </div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-bottom:16px">
       <div><div style="font-size:11px;color:#666">FOURNISSEUR</div><div style="font-weight:700">${esc(a.fournNom)}</div></div>
@@ -4772,11 +4780,16 @@ function caisseAppliquerPrincipal(inputId,selectId,infoId){
     sel.value=cpt.numero;sel.style.display='none';if(info)info.textContent='✔ Imputation directe sur '+cpt.numero+' — '+esc(cpt.libelle)+'.';
   }
 }
-function caisseImprimerBon(mvtId){
+async function caisseImprimerBon(mvtId){
   const m=ST.caisse_mouvements.find(x=>x.id===mvtId);if(!m)return;
   const c=ST.caisses.find(x=>x.id===m.caisseId);
+  const s=await societe();
+  const qr=QR.svg(`${s.nom||'SANIX'}|BON-CAISSE|${m.numero}|${Math.round(m.montant)}|${(m.date||'').slice(0,10)}`,80)||'';
   const html=`<div style="font-family:sans-serif;max-width:420px;margin:0 auto;padding:24px;font-size:13px">
-    <div style="text-align:center;font-weight:800;font-size:16px;margin-bottom:4px">${m.type==='entree'?'BON D\'ENTRÉE':'BON DE SORTIE'}</div>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+      <div style="font-weight:800;font-size:16px">${m.type==='entree'?'BON D\'ENTRÉE':'BON DE SORTIE'}</div>
+      <div>${qr}</div>
+    </div>
     <div style="text-align:center;color:#666;margin-bottom:16px">${esc(c?c.nom:'')}</div>
     <table style="width:100%;border-collapse:collapse">
       <tr><td style="padding:4px 0;color:#666">N°</td><td style="text-align:right;font-weight:700">${esc(m.numero)}</td></tr>
@@ -5783,6 +5796,7 @@ async function printLiasseNorm(){
   <tr><td style="height:90px;vertical-align:top">Nom : ${s.dirigeant||'—'}<br>Qualité : ${s.forme&&s.forme.includes('SA')?'Directeur Général':'Gérant'}<br>Date : ${dfr(curEx().fin||'')}<br><br>Signature :</td>
   <td style="vertical-align:top">Nom, cabinet et n° Ordre des Experts-Comptables :<br><br>Date de signature :<br><br>Cachet et signature :</td></tr></table>
   <div style="font-size:9px;text-align:center;margin-top:8px">Document généré par SANIX ComptaPro — à déposer sur e-impots.gouv.ci</div>
+  <div style="display:flex;justify-content:center;margin-top:8px">${QR.svg(`${s.nom}|LIASSE-NORM|${curEx().libelle}|${dfr(curEx().fin||'')}`,80)||''}</div>
   <div style="font-size:10px">Contrôle Actif=Passif N : ${fm(N.totalActif)} / ${fm(N.totalPassif)}. Postes agrégés. Notes détaillées : ventilation 4 chiffres requise.</div>
   <button class="np" onclick="window.print()" style="margin-top:10px;padding:8px 16px">Imprimer</button>
   </body></html>`);
