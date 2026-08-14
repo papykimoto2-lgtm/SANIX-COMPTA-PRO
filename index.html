@@ -2504,13 +2504,21 @@ async function cloturer(id){
   }
   const avertissements=A.filter(a=>a[0]==='warn');
   if(avertissements.length&&!confirm(avertissements.length+' avertissement(s) non bloquant(s) détecté(s) (trous de numérotation, comptes suspects…). Voir le module Anomalies pour le détail.\n\nClôturer quand même ?'))return;
-  if(!confirm('Clôturer définitivement cet exercice ? Génère les à-nouveaux.'))return;
   const e=ST.exercices.find(x=>x.id===id);
-  // exercice suivant (par date de début)
-  const suivant=ST.exercices.filter(x=>x.debut>e.debut).sort((a,b)=>a.debut<b.debut?-1:1)[0];
-  if(!suivant){toast('Créez d\'abord l\'exercice suivant.');return;}
-  // soldes de clôture par compte (bilan : classes 1 à 5)
-  const m={};ST.ecritures.filter(x=>x.exId===id).forEach(ec=>ec.lignes.forEach(l=>{if(!m[l.compte])m[l.compte]={d:0,c:0};m[l.compte].d+=+l.debit||0;m[l.compte].c+=+l.credit||0;}));
+  if(!e){toast('Exercice introuvable.');return;}
+  if(e.statut==='clôturé'){toast('Déjà clôturé.');return;}
+  // exercice suivant (par date de début) — créé automatiquement si absent (année civile suivante)
+  let suivant=ST.exercices.filter(x=>x.debut>e.debut).sort((a,b)=>a.debut<b.debut?-1:1)[0];
+  if(!suivant){
+    const anneeSuivante=String(+((e.fin||e.debut).slice(0,4))+1);
+    if(!confirm('Aucun exercice suivant. Créer automatiquement "Exercice '+anneeSuivante+'" (01/01→31/12) ?'))return;
+    const suivId=await findOrCreateExercicePourDate(anneeSuivante+'-01-01');
+    suivant=ST.exercices.find(x=>x.id===suivId);
+  }
+  if(!confirm('Clôturer définitivement '+e.libelle+' (date de fin '+dfr(e.fin)+') ? Génère les à-nouveaux sur '+suivant.libelle+'.'))return;
+  // soldes de clôture par compte de CET exercice précisément (pas l'exercice actif à l'écran — bug historique corrigé)
+  const ecrituresExercice=id===ST.exId?ST.ecritures:await allByIndex('ecritures','exId',id);
+  const m={};ecrituresExercice.forEach(ec=>ec.lignes.forEach(l=>{if(!m[l.compte])m[l.compte]={d:0,c:0};m[l.compte].d+=+l.debit||0;m[l.compte].c+=+l.credit||0;}));
   // résultat = produits - charges
   let produits=0,charges=0;for(const n in m){if(n[0]==='7')produits+=m[n].c-m[n].d;if(n[0]==='6')charges+=m[n].d-m[n].c;}
   const resultat=produits-charges;
@@ -2523,10 +2531,11 @@ async function cloturer(id){
   if(!ST.comptes.some(c=>c.numero===cptR))await put('comptes',{id:'c_'+cptR,numero:cptR,libelle:resultat>=0?'Report à nouveau créditeur':'Report à nouveau débiteur',type:resultat>=0?'P':'A',classe:'1'});
   const sd=lignes.reduce((s,l)=>s+l.debit,0),sc=lignes.reduce((s,l)=>s+l.credit,0);
   if(Math.abs(sd-sc)>=1)lignes.push({compte:cptR,libelle:'Ajustement à-nouveau',debit:sd<sc?sc-sd:0,credit:sd>sc?sd-sc:0});
-  await put('ecritures',{id:'e_an_'+suivant.id,date:suivant.debut,journal:'OD',piece:'AN-'+suivant.debut.slice(0,4),libelle:'À-nouveaux '+suivant.libelle,exId:suivant.id,lignes});
-  e.statut='clôturé';await put('exercices',e);
-  await loadAll();RENDER.exercices();
-  toast('Clôturé. À-nouveaux générés · résultat '+F(resultat));
+  if(!lignes.length){toast('Aucun mouvement sur cet exercice — rien à clôturer/reporter.');return;}
+  await put('ecritures',{id:'e_an_'+suivant.id,date:suivant.debut,journal:'OD',piece:'AN-'+suivant.debut.slice(0,4),libelle:'À-nouveaux '+suivant.libelle+' (depuis '+e.libelle+')',exId:suivant.id,lignes});
+  e.statut='clôturé';e.clotureLe=today();await put('exercices',e);
+  await loadAll();populateExSelect();RENDER.exercices();
+  toast('Clôturé '+e.libelle+'. À-nouveaux générés sur '+suivant.libelle+' · résultat '+F(resultat));
 }
 
 /* ---- Bilan d'ouverture (soldes initiaux par exercice) ---- */
