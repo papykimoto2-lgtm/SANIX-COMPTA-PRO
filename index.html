@@ -4130,18 +4130,19 @@ function importMappingClient(file){
   if(!cibles.length){toast('Tous les achats importés sont déjà reliés à un client (ou aucun achat chantier trouvé).');return;}
   if(!confirm(cibles.length+' achat(s) à relier à leur client via le mapping. Confirmer ?'))return;
   const prog=progressStart('Rattachement des achats aux clients…');
-  let n=0,sansMapping=0,erreurs=0;
+  let n=0,sansMapping=0,erreurs=0,buffer=[];
   for(let i=0;i<cibles.length;i++){
     const a=cibles[i];
-    prog.update(i+1,cibles.length,a.chantier);
     const clientNom=map[a.chantier];
-    if(!clientNom){sansMapping++;continue;}
-    try{
-      const cl=await stgEnsureClient(clientNom);
-      a.clientId=cl.id;a.clientNom=cl.nom;await put('achats',a);n++;
-    }catch(err){erreurs++;prog.error(a.chantier+' : '+err.message);}
-    if(i%25===0)await progressYield();
+    if(!clientNom){sansMapping++;}
+    else{
+      try{const cl=await stgEnsureClient(clientNom);a.clientId=cl.id;a.clientNom=cl.nom;buffer.push({store:'achats',record:a});n++;}
+      catch(err){erreurs++;prog.error(a.chantier+' : '+err.message);}
+    }
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(i%40===0){prog.update(i+1,cibles.length,a.chantier);await progressYield();}
   }
+  if(buffer.length)await putManyMixed(buffer);
   await loadAll();RENDER.achats&&RENDER.achats();
   prog.done('Terminé — '+n+' relié(s)'+(sansMapping?', '+sansMapping+' sans correspondance':'')+(erreurs?', '+erreurs+' erreur(s)':'')+'.');
 }
@@ -4220,14 +4221,17 @@ async function importComplet(file){
 async function bulkCreateFournisseursFromStaging(){
   const noms=[...new Set(ST.staging.filter(s=>s.kind==='achat_chantier').map(s=>(s.payload.fournisseur||'').trim()).filter(Boolean))];
   if(!noms.length){toast('Aucun fournisseur détecté dans le staging. Importez d\'abord le JSON Chantiers.');return;}
+  const prog=progressStart('Création des fournisseurs…');
   let created=0,existants=0;
-  for(const nom of noms){
+  for(let i=0;i<noms.length;i++){
+    const nom=noms[i];
     const before=ST.tiers.length;
     await stgEnsureFournisseur(nom);
     if(ST.tiers.length>before)created++;else existants++;
+    if(i%10===0){prog.update(i+1,noms.length,nom);await progressYield();}
   }
   await loadAll();RENDER.staging();
-  toast(created+' fournisseur(s) créé(s), '+existants+' déjà existant(s) sur '+noms.length+'.');
+  prog.done(created+' fournisseur(s) créé(s), '+existants+' déjà existant(s) sur '+noms.length+'.');
 }
 async function bulkImportTiersFile(type,file){
   if(!file)return;const rd=new FileReader();
@@ -4365,6 +4369,7 @@ RENDER.staging=()=>{
       <button class="btn sm" onclick="stgValiderSelection()">✓ Valider la sélection cochée</button>
       <button class="btn sm" style="background:var(--green);color:#fff;font-weight:700" onclick="stgValiderTout()">✓✓ Valider TOUT (selon filtre)</button>
       <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter la sélection</button>
+      <button class="btn sm gh" style="color:var(--red)" onclick="stgRejeterTout()">✕✕ Rejeter TOUT (filtré)</button>
     </div>
   </div>
   ${can('admin')?`<div class="card" style="margin-bottom:14px;border:1px solid #f0c4c4">
@@ -4513,8 +4518,27 @@ async function stgValiderTout(){
 }
 async function stgRejeterSelection(){
   if(!window._stgSel.size){toast('Aucune sélection.');return;}
-  for(const id of Array.from(window._stgSel)){const s=ST.staging.find(x=>x.id===id);if(s&&s.status==='en_attente'){s.status='rejete';await put('staging',s);}}
-  window._stgSel.clear();await loadAll();RENDER.staging();toast('Sélection rejetée.');
+  const items=[];
+  for(const id of Array.from(window._stgSel)){const s=ST.staging.find(x=>x.id===id);if(s&&s.status==='en_attente')items.push({store:'staging',record:{...s,status:'rejete'}});}
+  if(items.length>150){
+    const prog=progressStart('Rejet en cours…');
+    await putManyMixed(items,(d,t)=>prog.update(d,t,''));
+    prog.done(items.length+' ligne(s) rejetée(s).');
+  }else{
+    if(items.length)await putManyMixed(items);
+    toast(items.length+' ligne(s) rejetée(s).');
+  }
+  window._stgSel.clear();await loadAll();RENDER.staging();
+}
+async function stgRejeterTout(){
+  const cibles=stgFiltered().filter(s=>s.status==='en_attente');
+  if(!cibles.length){toast('Rien à rejeter pour ce filtre.');return;}
+  if(!confirm('Rejeter les '+cibles.length+' ligne(s) "en attente" selon le filtre actuel ? Elles ne seront jamais comptabilisées.'))return;
+  const prog=progressStart('Rejet en masse…');
+  const items=cibles.map(s=>({store:'staging',record:{...s,status:'rejete'}}));
+  await putManyMixed(items,(d,t)=>prog.update(d,t,''));
+  window._stgSel.clear();await loadAll();RENDER.staging();
+  prog.done(items.length+' ligne(s) rejetée(s).');
 }
 
 /* ============ COCKPIT — écran d'accueil, file d'actions (style ImmoSuite) ============ */
@@ -4691,12 +4715,113 @@ function caisseAVentilerStats(){const l=ST.caisse_mouvements.filter(m=>{if(m.sta
 function caisseEcartNonRegularise(){return ST.caisse_sessions.filter(s=>s.statut==='cloturee'&&(+s.ecart||0)!==0&&!s.ecartRegularise).reduce((a,s)=>a+Math.abs(+s.ecart||0),0);}
 async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisseId+'_'+type;const m=await getOne('meta',key);let seq=m?m.value:0;seq++;await put('meta',{id:key,value:seq});return(type==='entree'?'CE-':'CS-')+today().replace(/-/g,'')+'-'+String(seq).padStart(3,'0');}
 
+/* ---- Pont staging↔ventilation : reclasse les écritures 4712 issues de l'import historique (staging_caisse) ---- */
+window._histVentFiltre={q:'',exId:'tous'};window._histVentPage=1;
+async function histAVentilerListe(){
+  const toutes=await all('ecritures');
+  const cibles=[];
+  toutes.forEach(e=>{
+    if(e.source!=='staging_caisse')return;
+    e.lignes.forEach((l,li)=>{
+      if(l.compte!=='4712')return;
+      cibles.push({eid:e.id,li,date:e.date,libelle:e.libelle,piece:e.piece,montant:l.debit||l.credit,sens:l.debit?'debit':'credit',exId:e.exId});
+    });
+  });
+  return cibles;
+}
+async function renderHistoriqueVentilation(){
+  populateDlComptes();
+  const map=window._caisseVentMap||{};
+  const toutes=await histAVentilerListe();
+  const f=window._histVentFiltre;
+  const filtres=toutes.filter(x=>{
+    if(f.exId!=='tous'&&x.exId!==f.exId)return false;
+    if(f.q&&!(x.libelle||'').toLowerCase().includes(f.q.toLowerCase()))return false;
+    return true;
+  }).sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const pageSize=50,pages=Math.max(1,Math.ceil(filtres.length/pageSize));
+  if(window._histVentPage>pages)window._histVentPage=1;
+  const slice=filtres.slice((window._histVentPage-1)*pageSize,window._histVentPage*pageSize);
+  const rows=slice.map(x=>{
+    const suggestion=caisseRuleMatch(x.libelle,map);
+    const key=x.eid+'|'+x.li;
+    return`<tr><td class="mono">${dfr((x.date||'').slice(0,10))}</td><td>${esc(x.libelle)}</td><td class="ta-r mono">${F0(x.montant)}</td>
+    <td style="min-width:220px">${suggestion?`<div style="font-size:10px;color:var(--cuivre-d);margin-bottom:2px">💡 Suggestion : ${esc(suggestion)}</div>`:''}
+    <input list="dl-comptes" id="hv-principal-${key.replace(/\|/g,'_')}" placeholder="Compte principal (n°)" autocomplete="off" style="margin-bottom:4px" oninput="caisseAppliquerPrincipal('hv-principal-${key.replace(/\|/g,'_')}','hv-compte-${key.replace(/\|/g,'_')}','hv-info-${key.replace(/\|/g,'_')}')">
+    <select id="hv-compte-${key.replace(/\|/g,'_')}" style="display:none;margin-bottom:2px"></select>
+    <div id="hv-info-${key.replace(/\|/g,'_')}" style="font-size:10px;color:var(--mut)"></div></td>
+    <td><button class="btn sm" onclick="histReclasserLigne('${x.eid}',${x.li})">✓ Reclasser</button></td></tr>`;
+  }).join('');
+  document.getElementById('p-caisse').innerHTML=`
+  <div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">
+  🗄 Écritures générées lors de l'import du staging historique (2021-2026), en attente sur le compte d'attente <b>4712</b>. Reclassez-les vers leur vrai compte de charge/produit — la ligne d'écriture est corrigée directement, sans nouvelle écriture.</div>
+  <div class="grid kpis" style="margin-bottom:14px">
+    <div class="card kpi ${toutes.length?'r':'g'}"><div class="lb">Lignes 4712 à reclasser</div><div class="v mono">${toutes.length}</div></div>
+    <div class="card kpi o"><div class="lb">Montant total</div><div class="v mono">${F0(toutes.reduce((s,x)=>s+x.montant,0))}</div></div>
+  </div>
+  <div class="frow c3" style="margin-bottom:12px">
+    <div><label>Exercice</label><select onchange="window._histVentFiltre.exId=this.value;window._histVentPage=1;RENDER.caisse()">
+      <option value="tous">Tous</option>${ST.exercices.slice().sort((a,b)=>b.debut.localeCompare(a.debut)).map(e=>`<option value="${e.id}" ${f.exId===e.id?'selected':''}>${e.libelle}</option>`).join('')}</select></div>
+    <div><label>Recherche</label><input value="${esc(f.q)}" oninput="window._histVentFiltre.q=this.value;debounce('histVentSearch',()=>{window._histVentPage=1;RENDER.caisse()})" placeholder="Motif…"></div>
+    <div style="align-self:flex-end"><button class="btn sm gh" onclick="histReclasserAuto()">⚡ Reclasser automatiquement (règles)</button></div>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Motif</th><th class="ta-r">Montant</th><th>Compte réel</th><th></th></tr></thead><tbody>
+  ${rows||'<tr><td colspan=5 class="empty">Rien à reclasser — tout l\'historique est déjà ventilé 🎉</td></tr>'}
+  </tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._histVentPage=Math.max(1,window._histVentPage-1);RENDER.caisse()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._histVentPage}/${pages} — ${filtres.length} ligne(s)</span>
+    <button class="btn sm gh" onclick="window._histVentPage=Math.min(${pages},window._histVentPage+1);RENDER.caisse()">Suiv. ›</button>
+  </div>`;
+  toutes.forEach(x=>{
+    const s=caisseRuleMatch(x.libelle,map);if(!s)return;
+    const key=(x.eid+'|'+x.li).replace(/\|/g,'_');
+    const inp=document.getElementById('hv-principal-'+key);
+    if(inp){inp.value=s;caisseAppliquerPrincipal('hv-principal-'+key,'hv-compte-'+key,'hv-info-'+key);}
+  });
+}
+async function histReclasserLigne(eid,li){
+  const key=(eid+'|'+li).replace(/\|/g,'_');
+  const sel=document.getElementById('hv-compte-'+key);const compte=sel?sel.value:'';
+  if(!compte){toast('Sélectionnez un compte.');return;}
+  const e=await getOne('ecritures',eid);if(!e){toast('Écriture introuvable.');return;}
+  e.lignes[li].compte=compte;
+  await put('ecritures',e);
+  toast('Ligne reclassée sur '+compte+'.');
+  await renderHistoriqueVentilation();
+}
+async function histReclasserAuto(){
+  const map=await caisseVentilationMap();
+  const cibles=await histAVentilerListe();
+  const aTraiter=cibles.map(x=>({x,compte:caisseRuleMatch(x.libelle,map)})).filter(v=>v.compte);
+  if(!aTraiter.length){toast('Aucune correspondance trouvée dans les règles actuelles.');return;}
+  if(!confirm(aTraiter.length+' ligne(s) à reclasser automatiquement selon les règles configurées. Confirmer ?'))return;
+  const prog=progressStart('⚡ Reclassement automatique — '+aTraiter.length+' ligne(s)');
+  const parEcriture={};
+  aTraiter.forEach(({x,compte})=>{(parEcriture[x.eid]=parEcriture[x.eid]||[]).push({li:x.li,compte});});
+  const eids=Object.keys(parEcriture);
+  let buffer=[],n=0;
+  for(let i=0;i<eids.length;i++){
+    const eid=eids[i];
+    const e=await getOne('ecritures',eid);if(!e)continue;
+    parEcriture[eid].forEach(({li,compte})=>{e.lignes[li].compte=compte;n++;});
+    buffer.push({store:'ecritures',record:e});
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(i%40===0){prog.update(i+1,eids.length,'');await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  prog.done('✅ '+n+' ligne(s) reclassée(s) sur '+eids.length+' écriture(s).');
+  await renderHistoriqueVentilation();
+}
+
 RENDER.caisse=async()=>{
   window._caisseVentMap=await caisseVentilationMap();
   populateDlComptes();
   document.getElementById('pgActions').innerHTML=`${can('write')?'<button class="btn sm" onclick="caisseConfigModal(null)">+ Nouvelle caisse</button>':''}
   <button class="btn sm gh" onclick="caisseOpenVentilationConfig()">⚙ Configurer les règles</button>
-  <button class="btn sm gh" onclick="caisseVentilationAuto()">⚡ Ventilation automatique</button>`;
+  <button class="btn sm gh" onclick="caisseVentilationAuto()">⚡ Ventilation automatique</button>
+  <button class="btn sm gh" onclick="window._caisseVueHist=!window._caisseVueHist;RENDER.caisse()">${window._caisseVueHist?'💵 Vue caisse live':'🗄 Historique importé (4712)'}</button>`;
+  if(window._caisseVueHist){await renderHistoriqueVentilation();return;}
   const solde=caisseSoldeGlobalTempsReel(),vent=caisseAVentilerStats(),ecartNR=caisseEcartNonRegularise();
   const liste=caissesVisibles();
   const cards=liste.map(c=>{
@@ -4885,21 +5010,51 @@ function caisseRenderVentilationHTML(){
 }
 function cvToggle(id,checked){if(checked)window._cvSel.add(id);else window._cvSel.delete(id);RENDER.caisse();}
 function cvToggleAllVisible(checked){document.querySelectorAll('[data-cv]').forEach(cb=>{cb.checked=checked;if(checked)window._cvSel.add(cb.dataset.cv);else window._cvSel.delete(cb.dataset.cv);});RENDER.caisse();}
+function caisseConstruireVentilation(m,compte,viaAuto){
+  const c=ST.caisses.find(x=>x.id===m.caisseId);const cptCaisse=(c&&c.compte)||'571';
+  const lib=(m.type==='entree'?'Entrée caisse — ':'Sortie caisse — ')+(m.motif||'')+(m.beneficiaire?' — '+m.beneficiaire:'');
+  const lignes=m.type==='entree'
+    ?[{compte:cptCaisse,libelle:lib,debit:Math.round(m.montant),credit:0},{compte,libelle:lib,debit:0,credit:Math.round(m.montant)}]
+    :[{compte,libelle:lib,debit:Math.round(m.montant),credit:0},{compte:cptCaisse,libelle:lib,debit:0,credit:Math.round(m.montant)}];
+  const eid='e_cse_'+m.id;
+  return[
+    {store:'ecritures',record:{id:eid,exId:ST.exId,journal:'CA',date:(m.date||'').slice(0,10)||today(),piece:m.numero,libelle:lib,lignes,created:Date.now(),ventileAuto:!!viaAuto}},
+    {store:'caisse_mouvements',record:{...m,statut:'ventile',compteVentile:compte,ecritureId:eid,ventilePar:ST.user.login,ventileLe:today(),ventileAuto:!!viaAuto}}
+  ];
+}
 async function cvVentilerSelection(){
   const compte=document.getElementById('cv-bulk-compte').value;
   if(!compte){toast('Sélectionnez un compte de contrepartie.');return;}
   if(!confirm(window._cvSel.size+' mouvement(s) vers le compte '+compte+'. Confirmer ?'))return;
-  let n=0;for(const id of Array.from(window._cvSel)){await caisseVentilerLigne(id,compte);n++;}
-  window._cvSel.clear();toast(n+' mouvement(s) ventilé(s).');RENDER.caisse();
+  const ids=Array.from(window._cvSel);
+  const prog=ids.length>100?progressStart('Ventilation de la sélection…'):null;
+  let buffer=[],n=0;
+  for(let i=0;i<ids.length;i++){
+    const m=ST.caisse_mouvements.find(x=>x.id===ids[i]);if(!m)continue;
+    buffer.push(...caisseConstruireVentilation(m,compte,false));n++;
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(prog&&i%40===0){prog.update(i+1,ids.length,'');await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  window._cvSel.clear();await loadAll();RENDER.caisse();
+  if(prog)prog.done(n+' mouvement(s) ventilé(s).');else toast(n+' mouvement(s) ventilé(s).');
 }
 async function cvVentilerSelectionAuto(){
-  const map=await caisseVentilationMap();let n=0,skip=0;
-  for(const id of Array.from(window._cvSel)){
-    const m=ST.caisse_mouvements.find(x=>x.id===id);if(!m)continue;
+  const map=await caisseVentilationMap();
+  const ids=Array.from(window._cvSel);
+  const prog=ids.length>100?progressStart('Ventilation automatique de la sélection…'):null;
+  let buffer=[],n=0,skip=0;
+  for(let i=0;i<ids.length;i++){
+    const m=ST.caisse_mouvements.find(x=>x.id===ids[i]);if(!m)continue;
     const compte=caisseRuleMatch(m.motif,map);
-    if(compte){await caisseVentilerLigne(id,compte);n++;}else skip++;
+    if(compte){buffer.push(...caisseConstruireVentilation(m,compte,true));n++;}else skip++;
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(prog&&i%40===0){prog.update(i+1,ids.length,'');await progressYield();}
   }
-  window._cvSel.clear();toast(n+' ventilé(s) automatiquement'+(skip?', '+skip+' sans règle correspondante':'')+'.');RENDER.caisse();
+  if(buffer.length)await putManyMixed(buffer);
+  window._cvSel.clear();await loadAll();RENDER.caisse();
+  const msg=n+' ventilé(s) automatiquement'+(skip?', '+skip+' sans règle correspondante':'')+'.';
+  if(prog)prog.done(msg);else toast(msg);
 }
 async function caisseVentilerLigne(mvtId,viaAuto){
   const sel=document.getElementById('cv-compte-'+mvtId);
@@ -4932,10 +5087,20 @@ async function caisseVentilationAuto(){
   if(!Object.keys(map).length){toast('Aucune règle configurée (bouton ⚙ Configurer les règles).');return;}
   const enAttente=ST.caisse_mouvements.filter(m=>{if(m.statut==='ventile')return false;const s=ST.caisse_sessions.find(x=>x.id===m.sessionId);return s&&s.statut==='cloturee';});
   if(!enAttente.length){toast('Aucun mouvement à ventiler.');return;}
-  let appliques=0;
-  for(const m of enAttente){const compte=caisseRuleMatch(m.motif,map);if(compte){await caisseVentilerLigne(m.id,compte);appliques++;}}
-  toast(appliques?('⚡ '+appliques+' mouvement(s) ventilé(s) automatiquement. '+(enAttente.length-appliques)+' restent manuels.'):'Aucune correspondance trouvée.');
-  RENDER.caisse();
+  const aTraiter=enAttente.map(m=>({m,compte:caisseRuleMatch(m.motif,map)})).filter(x=>x.compte);
+  if(!aTraiter.length){toast('Aucune correspondance trouvée.');return;}
+  const prog=aTraiter.length>100?progressStart('⚡ Ventilation automatique — '+aTraiter.length+' mouvement(s)'):null;
+  let buffer=[];
+  for(let i=0;i<aTraiter.length;i++){
+    const{m,compte}=aTraiter[i];
+    buffer.push(...caisseConstruireVentilation(m,compte,true));
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(prog&&i%40===0){prog.update(i+1,aTraiter.length,'');await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  await loadAll();RENDER.caisse();
+  const msg='⚡ '+aTraiter.length+' mouvement(s) ventilé(s) automatiquement. '+(enAttente.length-aTraiter.length)+' restent manuels.';
+  if(prog)prog.done(msg);else toast(msg);
 }
 async function caisseOpenVentilationConfig(){
   window._caisseVentMap=await caisseVentilationMap();
