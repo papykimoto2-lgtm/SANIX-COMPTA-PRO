@@ -438,6 +438,33 @@ function delMany(store,ids,onProgress){
     nextChunk();
   });
 }
+/* Écriture en masse : un lot de records par store, une seule transaction multi-stores par lot.
+   items: [{store, record}, ...] — l'ordre est préservé, le flush se fait par paquets de CHUNK items toutes stores confondues. */
+function putManyMixed(items,onProgress){
+  return new Promise((resolve,reject)=>{
+    if(denyIfReadOnly()){reject(new Error('readonly'));return;}
+    if(!items.length){resolve(0);return;}
+    const CHUNK=400;
+    let i=0,done=0;
+    function nextChunk(){
+      if(i>=items.length){resolve(done);return;}
+      const batch=items.slice(i,i+CHUNK);
+      const storesSet=new Set();
+      batch.forEach(it=>{storesSet.add(it.store);});
+      const stores=[...storesSet];
+      const t=DB.transaction(stores,'readwrite');
+      const osCache={};stores.forEach(s=>osCache[s]=t.objectStore(s));
+      batch.forEach(it=>{osCache[it.store].put(it.record);});
+      t.oncomplete=()=>{
+        done+=batch.length;i+=CHUNK;
+        if(onProgress)onProgress(done,items.length);
+        requestAnimationFrame(()=>requestAnimationFrame(nextChunk));
+      };
+      t.onerror=()=>reject(t.error);
+    }
+    nextChunk();
+  });
+}
 /* Marqueur de suppression : propagé à Supabase pour éviter qu'un enregistrement supprimé localement ne soit "ressuscité" par un pull. */
 async function recordTombstone(store,id){
   try{const db=await idb();const rec={id:store+'::'+id,store,recId:id,ts:Date.now()};
@@ -3033,6 +3060,24 @@ RENDER.facturation=async()=>{
 
 /* ============ ACHATS FOURNISSEURS (TVA déductible · dettes 401) ============ */
 let AL=[];
+window._achSeqCache=null;
+function nextAchatNumFastInit(){window._achSeqCache={};}
+async function nextAchatNumFast(exId){
+  if(!window._achSeqCache)window._achSeqCache={};
+  if(window._achSeqCache[exId]===undefined){
+    const m=await getOne('meta','achSeq_'+exId);
+    window._achSeqCache[exId]=m?m.value:0;
+  }
+  window._achSeqCache[exId]++;
+  const ex=ST.exercices.find(e=>e.id===exId);
+  return 'ACH-'+((ex&&ex.debut||today()).slice(0,4))+'-'+String(window._achSeqCache[exId]).padStart(4,'0');
+}
+async function flushAchSeqCache(){
+  if(!window._achSeqCache)return;
+  const items=Object.keys(window._achSeqCache).map(exId=>({store:'meta',record:{id:'achSeq_'+exId,value:window._achSeqCache[exId]}}));
+  if(items.length)await putManyMixed(items);
+  window._achSeqCache=null;
+}
 async function nextAchatNum(exIdOverride){
   const ex=exIdOverride?(ST.exercices.find(e=>e.id===exIdOverride)||curEx()):curEx();
   const key='achSeq_'+ex.id;const m=await getOne('meta',key);let seq=m?m.value:0;seq++;await put('meta',{id:key,value:seq});
@@ -4368,35 +4413,40 @@ function stgToggle(id,checked){if(checked)window._stgSel.add(id);else window._st
 function stgToggleAllVisible(checked){
   document.querySelectorAll('[data-stg]').forEach(cb=>{cb.checked=checked;stgToggle(cb.dataset.stg,checked);});
 }
-async function stgValiderUneLigne(s,mapClient){
+async function stgValiderUneLigneBuild(s,mapClient){
+  const items=[];
   if(s.kind==='achat_chantier'){
     const p=s.payload;const dateP=p.date||today();
     const exId=await findOrCreateExercicePourDate(dateP);
     const exObj=ST.exercices.find(x=>x.id===exId);
-    if(exObj&&exObj.statut==='clôturé')return'skip';
+    if(exObj&&exObj.statut==='clôturé')return{status:'skip',items:[]};
     const fo=await stgEnsureFournisseur(p.fournisseur);
     let clientId=null,clientNom=null;
     const nomClient=mapClient[p.chantier];
     if(nomClient){const cl=await stgEnsureClient(nomClient);clientId=cl.id;clientNom=cl.nom;}
     const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
     const ht=lignes.reduce((a,l)=>a+l.ht,0);
-    const numero=await nextAchatNum(exId);
+    const numero=await nextAchatNumFast(exId);
     const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
       date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier,clientId,clientNom};
-    await put('achats',ach);await genAchatEcriture(ach);
+    items.push({store:'achats',record:ach});
+    const cptFourn=fo.compte;
+    const eLignes=lignes.map(l=>({compte:l.compte,libelle:l.des,debit:l.ht,credit:0,lettre:''}));
+    eLignes.push({compte:cptFourn,tiers:fo.id,libelle:'Fournisseur '+fo.nom,debit:0,credit:ht,lettre:''});
+    items.push({store:'ecritures',record:{id:'e_ach_'+ach.id,exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:dateP,piece:numero,libelle:'Achat '+numero+' — '+fo.nom,lignes:eLignes,created:Date.now()}});
   }else{
     const p=s.payload;const dateP=(p.date||today());
     const exId=await findOrCreateExercicePourDate(dateP);
     const exObj=ST.exercices.find(x=>x.id===exId);
-    if(exObj&&exObj.statut==='clôturé')return'skip';
+    if(exObj&&exObj.statut==='clôturé')return{status:'skip',items:[]};
     const lignes=[];
     if(p.entree>0)lignes.push({compte:'571',libelle:p.libelle,debit:Math.round(p.entree),credit:0},{compte:'4712',libelle:'À ventiler — '+p.libelle,debit:0,credit:Math.round(p.entree)});
     if(p.sortie>0)lignes.push({compte:'4712',libelle:'À ventiler — '+p.libelle,debit:Math.round(p.sortie),credit:0},{compte:'571',libelle:p.libelle,debit:0,credit:Math.round(p.sortie)});
-    if(!lignes.length)return'vide';
-    await put('ecritures',{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'});
+    if(!lignes.length)return{status:'vide',items:[]};
+    items.push({store:'ecritures',record:{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'}});
   }
-  s.status='valide';s.valDate=today();await put('staging',s);
-  return'ok';
+  items.push({store:'staging',record:{...s,status:'valide',valDate:today()}});
+  return{status:'ok',items};
 }
 async function stgValiderSelection(){
   if(!window._stgSel.size){toast('Aucune sélection.');return;}
@@ -4404,39 +4454,51 @@ async function stgValiderSelection(){
   await stgEnsureCompteAttente();
   const mapClient=await mappingChantierClient();
   const prog=progressStart('Validation de la sélection…');
-  let ok=0,skip=0;
+  nextAchatNumFastInit();
+  let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
   const ids=Array.from(window._stgSel);
   const nbExAvant=ST.exercices.length;
   for(let i=0;i<ids.length;i++){
     const s=ST.staging.find(x=>x.id===ids[i]);if(!s||s.status!=='en_attente')continue;
-    try{const r=await stgValiderUneLigne(s,mapClient);if(r==='ok')ok++;else if(r==='skip')skip++;}
-    catch(err){prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);}
+    try{
+      const r=await stgValiderUneLigneBuild(s,mapClient);
+      if(r.status==='ok'){ok++;buffer.push(...r.items);}
+      else if(r.status==='skip')skip++;else if(r.status==='vide')vide++;
+    }catch(err){erreurs++;prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);}
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
     if(i%20===0){prog.update(i+1,ids.length,'');await progressYield();}
   }
+  if(buffer.length)await putManyMixed(buffer);
+  await flushAchSeqCache();
   const exCreated=ST.exercices.length-nbExAvant;
   window._stgSel.clear();await loadAll();populateExSelect();RENDER.staging();
-  prog.done(ok+' ligne(s) comptabilisée(s)'+(exCreated?', '+exCreated+' exercice(s) créé(s) automatiquement':'')+(skip?', '+skip+' ignorée(s) (exercice clôturé)':'')+'.');
+  prog.done(ok+' ligne(s) comptabilisée(s)'+(exCreated?', '+exCreated+' exercice(s) créé(s) automatiquement':'')+(skip?', '+skip+' ignorée(s) (exercice clôturé)':'')+(erreurs?', ⚠ '+erreurs+' erreur(s)':'')+'.');
 }
 async function stgValiderTout(){
   const mapClient=await mappingChantierClient();
   const cibles=stgFiltered().filter(s=>s.status==='en_attente');
   if(!cibles.length){toast('Rien à valider pour ce filtre.');return;}
-  if(!confirm('⚠ VALIDATION EN MASSE\n\n'+cibles.length+' ligne(s) "en attente" (selon le filtre Type/Recherche actuel) vont être comptabilisées d\'un coup.\n\nChaque écriture sera routée vers son exercice réel selon sa date. Les exercices manquants seront créés automatiquement. Ceci peut prendre plusieurs minutes pour un gros volume.\n\nConfirmer ?'))return;
+  if(!confirm('⚠ VALIDATION EN MASSE\n\n'+cibles.length+' ligne(s) "en attente" (selon le filtre Type/Recherche actuel) vont être comptabilisées d\'un coup.\n\nChaque écriture sera routée vers son exercice réel selon sa date. Les exercices manquants seront créés automatiquement.\n\nConfirmer ?'))return;
   await stgEnsureCompteAttente();
   const prog=progressStart('🚀 Validation en masse — '+cibles.length+' ligne(s)');
-  let ok=0,skip=0,vide=0,erreurs=0;
+  nextAchatNumFastInit();
+  let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
   const nbExAvant=ST.exercices.length;
   for(let i=0;i<cibles.length;i++){
     const s=cibles[i];
     try{
-      const r=await stgValiderUneLigne(s,mapClient);
-      if(r==='ok')ok++;else if(r==='skip')skip++;else if(r==='vide')vide++;
+      const r=await stgValiderUneLigneBuild(s,mapClient);
+      if(r.status==='ok'){ok++;buffer.push(...r.items);}
+      else if(r.status==='skip')skip++;else if(r.status==='vide')vide++;
     }catch(err){
       erreurs++;
       if(erreurs<=30)prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);
     }
-    if(i%30===0){prog.update(i+1,cibles.length,s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle);await progressYield();}
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(i%50===0){prog.update(i+1,cibles.length,s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle);await progressYield();}
   }
+  if(buffer.length)await putManyMixed(buffer);
+  await flushAchSeqCache();
   const exCreated=ST.exercices.length-nbExAvant;
   await loadAll();populateExSelect();RENDER.staging();
   prog.done('✅ '+ok+' ligne(s) comptabilisée(s)'+(exCreated?' · '+exCreated+' exercice(s) créé(s)':'')+(skip?' · '+skip+' ignorée(s) (exercice clôturé)':'')+(vide?' · '+vide+' vide(s)':'')+(erreurs?' · ⚠ '+erreurs+' erreur(s)':' · 0 erreur'));
