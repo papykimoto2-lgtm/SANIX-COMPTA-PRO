@@ -2874,12 +2874,13 @@ function formModeCompte(rgDateVal,rgMontantVal){
 }
 
 /* ---- Règlements factures clients ---- */
-function reglerFacture(id){
-  const f=ST.factures.find(x=>x.id===id);if(!f)return;
+async function reglerFacture(id){
+  const f=ST.factures.find(x=>x.id===id)||(await all('factures')).find(x=>x.id===id);if(!f){toast('Facture introuvable.');return;}
+  const exF=ST.exercices.find(x=>x.id===f.exId);const verrouille=exF&&exF.statut==='clôturé';
   const solde=soldeTTC(f),regle=sommeReglements(f);
   const regs=(f.reglements||[]).slice().sort((a,b)=>a.date<b.date?-1:1);
   const rows=regs.map(r=>`<tr><td class="mono">${dfr(r.date)}</td><td>${r.mode||'—'}</td><td>${r.ref||''}</td><td class="ta-r mono">${F0(r.montant)}</td>
-    <td class="ta-c">${exLocked()?'':`<button class="linkbtn" style="color:var(--red)" onclick="delReglementFacture('${f.id}','${r.id}')">✕</button>`}</td></tr>`).join('');
+    <td class="ta-c">${verrouille?'':`<button class="linkbtn" style="color:var(--red)" onclick="delReglementFacture('${f.id}','${r.id}')">✕</button>`}</td></tr>`).join('');
   openModal(`
     <div class="mh"><h3>Règlements — ${f.numero} <span style="font-weight:400;color:var(--mut);font-size:13px">${f.clientNom}</span></h3><button class="x" onclick="closeModal()">×</button></div>
     <div class="mb">
@@ -2890,16 +2891,17 @@ function reglerFacture(id){
       </div>
       <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Mode</th><th>Réf.</th><th class="ta-r">Montant</th><th></th></tr></thead>
       <tbody>${rows||'<tr><td colspan=5 class="empty">Aucun règlement enregistré.</td></tr>'}</tbody></table></div>
-      ${solde>0.5&&!exLocked()?`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--cuivre-d);font-weight:700;margin:16px 0 8px">Nouveau règlement</div>${formModeCompte(today(),solde)}`
+      ${solde>0.5&&!verrouille?`<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--cuivre-d);font-weight:700;margin:16px 0 8px">Nouveau règlement</div>${formModeCompte(today(),solde)}`
       :solde<=0.5?'<div class="hl" style="background:#e2f4ec;border-left:3px solid var(--green);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:12px">Facture intégralement réglée.</div>'
-      :'<div class="hl" style="background:#fbf0d8;border-left:3px solid var(--amber);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:12px">Exercice clôturé : règlement verrouillé.</div>'}
+      :'<div class="hl" style="background:#fbf0d8;border-left:3px solid var(--amber);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:12px">Exercice '+(exF?exF.libelle:'')+' clôturé : règlement verrouillé.</div>'}
     </div>
-    <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button>${solde>0.5&&!exLocked()?`<button class="btn sm" onclick="addReglementFacture('${f.id}')">+ Enregistrer le règlement</button>`:''}</div>
+    <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button>${solde>0.5&&!verrouille?`<button class="btn sm" onclick="addReglementFacture('${f.id}')">+ Enregistrer le règlement</button>`:''}</div>
   `);
 }
 async function addReglementFacture(id){
-  if(exLocked()){toast('Exercice clôturé. Règlement interdit.');return;}
-  const f=ST.factures.find(x=>x.id===id);if(!f)return;
+  const f=ST.factures.find(x=>x.id===id)||(await all('factures')).find(x=>x.id===id);if(!f){toast('Facture introuvable.');return;}
+  const exF=ST.exercices.find(x=>x.id===f.exId);
+  if(exF&&exF.statut==='clôturé'){toast('Exercice '+exF.libelle+' clôturé. Règlement interdit.');return;}
   const solde=soldeTTC(f);
   const montant=+document.getElementById('rgMontant').value||0;
   if(montant<=0){toast('Montant invalide.');return;}
@@ -2910,12 +2912,13 @@ async function addReglementFacture(id){
   await put('factures',f);
   await genReglementFactureEcriture(f,reg);
   await loadAll();reglerFacture(id);RENDER.facturation();
-  toast('Règlement de '+F0(reg.montant)+' enregistré sur '+f.numero+(soldeTTC(ST.factures.find(x=>x.id===id))<=0.5?' · facture soldée':'.'));
+  toast('Règlement de '+F0(reg.montant)+' enregistré sur '+f.numero+(soldeTTC(f)<=0.5?' · facture soldée':'.'));
 }
 async function delReglementFacture(factureId,regId){
-  if(exLocked()){toast('Exercice clôturé. Suppression interdite.');return;}
+  const f=ST.factures.find(x=>x.id===factureId)||(await all('factures')).find(x=>x.id===factureId);if(!f){toast('Facture introuvable.');return;}
+  const exF=ST.exercices.find(x=>x.id===f.exId);
+  if(exF&&exF.statut==='clôturé'){toast('Exercice '+exF.libelle+' clôturé. Suppression interdite.');return;}
   if(!confirm('Supprimer ce règlement ? (annule aussi l\'écriture de trésorerie)'))return;
-  const f=ST.factures.find(x=>x.id===factureId);if(!f)return;
   f.reglements=(f.reglements||[]).filter(r=>r.id!==regId);
   await put('factures',f);await del('ecritures','e_freg_'+factureId+'_'+regId);
   await loadAll();reglerFacture(factureId);RENDER.facturation();toast('Règlement supprimé.');
@@ -3406,7 +3409,15 @@ async function nextFacNum(type){
 }
 function newFacture(type){editFacture(null,type);}
 async function editFacture(id,type){
-  const f=id?ST.factures.find(x=>x.id===id):null;type=f?f.type:type;
+  const f=id?(ST.factures.find(x=>x.id===id)||(await all('factures')).find(x=>x.id===id)):null;
+  if(id&&!f){toast('Facture introuvable.');return;}
+  if(f){
+    const exF=ST.exercices.find(x=>x.id===f.exId);
+    if(exF&&exF.statut==='clôturé'){toast('Cette facture appartient à un exercice clôturé ('+exF.libelle+') — modification impossible.');return;}
+    if(f.exId!==ST.exId&&!confirm('Cette facture appartient à '+(exF?exF.libelle:'un autre exercice')+', pas à l\'exercice courant. Continuer la modification ?'))return;
+  }
+  type=f?f.type:type;
+  window._editingFacture=f;
   FL=f?JSON.parse(JSON.stringify(f.lignes)):[{des:'',qte:1,pu:0,tva:18}];
   const clients=ST.tiers.filter(t=>t.type==='client');
   openModal(`
@@ -3460,7 +3471,6 @@ function facBal(){
   document.getElementById('fTTC').textContent=F0(ht+tva+aibV);
 }
 async function saveFacture(id,type){
-  if(exLocked()){toast('Exercice clôturé. Facturation verrouillée.');return;}
   const nom=document.getElementById('fNom').value.trim();
   if(!nom){toast('Client obligatoire.');return;}
   if(FL.some(l=>!l.des||!l.pu)){toast('Chaque ligne : désignation + prix.');return;}
@@ -3470,20 +3480,24 @@ async function saveFacture(id,type){
   const aibEl=document.getElementById('fAib');const aib=aibEl?(+aibEl.value||0):0;const aibV=ht*aib/100;
   const ncc=document.getElementById('fNcc')?document.getElementById('fNcc').value.trim():'';
   if(type==='fne'&&!ncc){toast('NCC client obligatoire pour une FNE.');return;}
-  const old=id?ST.factures.find(f=>f.id===id):null;
+  const old=id?(window._editingFacture&&window._editingFacture.id===id?window._editingFacture:ST.factures.find(f=>f.id===id)):null;
+  const exIdCible=old?old.exId:ST.exId;
+  const exCible=ST.exercices.find(x=>x.id===exIdCible);
+  if(exCible&&exCible.statut==='clôturé'){toast('Exercice '+exCible.libelle+' clôturé. Facturation verrouillée.');return;}
   const numero=id?old.numero:await nextFacNum(type);
-  const fac={id:id||uid('f'),exId:ST.exId,numero,type,date:document.getElementById('fDate').value,
+  const fac={id:id||uid('f'),exId:exIdCible,numero,type,date:document.getElementById('fDate').value,
     clientId,clientNom:nom,ncc,aib,aibV,lignes:FL,ht,tva,ttc:ht+tva+aibV,reglements:old?(old.reglements||[]):[],
-    fneRef:'',fneToken:'',fneCertified:false,created:Date.now()};
+    fneRef:'',fneToken:'',fneCertified:false,created:old?old.created:Date.now()};
   let msg;
   if(type==='fne'){
-    if(id){const o=ST.factures.find(f=>f.id===id);fac.fneRef=o.fneRef;fac.fneToken=o.fneToken;fac.fneId=o.fneId;fac.fneCertified=o.fneCertified;msg='FNE '+numero+' mise à jour.';}
+    if(id){fac.fneRef=old.fneRef;fac.fneToken=old.fneToken;fac.fneId=old.fneId;fac.fneCertified=old.fneCertified;msg='FNE '+numero+' mise à jour.';}
     else{const c=await certifyFNE(fac);
       if(c.ok){fac.fneRef=c.ref;fac.fneToken=c.token;fac.fneId=c.id;fac.fneBalance=c.balance;fac.fneItems=c.items||[];fac.fneCertified=true;msg='FNE certifiée DGI · '+c.ref+(c.balance!=null?' · stickers restants '+c.balance:'');}
       else{fac.fneRef=genFneRef(numero);fac.fneCertified=false;fac.fneWarn=c.reason;msg='FNE enregistrée NON certifiée ('+c.reason+') · réf provisoire '+fac.fneRef;}}
   } else msg='Facture '+numero+' enregistrée.';
   await put('factures',fac);
   await genFactureEcriture(fac);
+  window._editingFacture=null;
   await loadAll();closeModal();RENDER.facturation();toast(msg);
 }
 function genFneRef(num){ // référence de certification simulée (la vraie vient de la plateforme DGI)
@@ -3498,10 +3512,19 @@ async function genFactureEcriture(f){
     {compte:'701',libelle:'Ventes',debit:0,credit:f.ht,lettre:''},
     {compte:'4431',libelle:'TVA collectée',debit:0,credit:f.tva,lettre:''}];
   if(f.aibV>0)lignes.push({compte:'4499',libelle:'AIB '+f.aib+'%',debit:0,credit:f.aibV,lettre:''});
-  const e={id:'e_fac_'+f.id,exId:ST.exId,journal:'VT',date:f.date,piece:f.numero,libelle:'Facture '+f.numero+' — '+f.clientNom,lignes,created:Date.now()};
+  const e={id:'e_fac_'+f.id,exId:f.exId||ST.exId,journal:'VT',date:f.date,piece:f.numero,libelle:'Facture '+f.numero+' — '+f.clientNom,lignes,created:Date.now()};
   await put('ecritures',e);
 }
-async function delFacture(id){const f=ST.factures.find(x=>x.id===id);if(!confirm('Supprimer '+f.numero+' ? (annule aussi l\'écriture et ses règlements)'))return;await del('factures',id);await del('ecritures','e_fac_'+id);for(const r of (f.reglements||[]))await del('ecritures','e_freg_'+id+'_'+r.id);await loadAll();RENDER.facturation();toast('Facture supprimée.');}
+async function delFacture(id){
+  const f=ST.factures.find(x=>x.id===id)||(await all('factures')).find(x=>x.id===id);
+  if(!f){toast('Facture introuvable.');return;}
+  const exF=ST.exercices.find(x=>x.id===f.exId);
+  if(exF&&exF.statut==='clôturé'){toast('Exercice '+exF.libelle+' clôturé — suppression impossible.');return;}
+  if(!confirm('Supprimer '+f.numero+' ? (annule aussi l\'écriture et ses règlements)'))return;
+  await del('factures',id);await del('ecritures','e_fac_'+id);
+  for(const r of (f.reglements||[]))await del('ecritures','e_freg_'+id+'_'+r.id);
+  await loadAll();RENDER.facturation();toast('Facture supprimée.');
+}
 
 async function factureHTML(id){
   const f=ST.factures.find(x=>x.id===id);const s=await societe();
