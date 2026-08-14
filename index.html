@@ -234,6 +234,7 @@ tbody tr:hover{background:#fbfcfe}
     <div class="exbar" style="border-top:none;padding-top:0"><span id="netBadge" style="font-size:11px;font-weight:700;color:#7be0af">● en ligne</span> <span id="pendingBadge" style="font-size:10.5px;color:var(--mut);margin-left:6px"></span></div>
     <nav class="nav" id="nav">
       <a data-p="cockpit" class="on" style="font-weight:800;border-left:3px solid var(--cuivre)"><span class="ic">🎛</span>Cockpit</a>
+      <a data-p="messagerie"><span class="ic">💬</span>Messagerie interne<span id="msgNavBadge" class="badge b-red" style="display:none;margin-left:6px"></span></a>
       <div class="grp-section" data-grp="ouverture-etape">
       <div class="grp" onclick="toggleGrp(this)"><span>1 · Ouverture</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
@@ -319,6 +320,7 @@ tbody tr:hover{background:#fbfcfe}
     <div class="content">
       <div id="pgNote"></div>
       <div class="page on" id="p-cockpit"></div>
+      <div class="page" id="p-messagerie"></div>
       <div class="page" id="p-dash"></div>
       <div class="page" id="p-analyse360"></div>
       <div class="page" id="p-consolidation"></div>
@@ -368,11 +370,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=11;
+const DB_BASE='sanix_comptapro', DB_VER=12;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -602,7 +604,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -722,6 +724,8 @@ async function loadAll(){
   ST.caisse_sessions=await all('caisse_sessions');
   ST.caisse_mouvements=await all('caisse_mouvements');
   ST.releve_bancaire=await all('releve_bancaire');
+  ST.msg_conv=await all('msg_conv');
+  ST.msg_msg=await all('msg_msg');
   const cur=await getOne('meta','exCourant');
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
   ST.ecritures=(await allByIndex('ecritures','exId',ST.exId)).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
@@ -821,6 +825,7 @@ async function boot(){
   window.__seen=window.__seen||{};logAudit('login','users',ST.user.login);
   const ls=await getOne('meta','lastSync');window._lastSync=ls?ls.value:'';
   updateNetBadge();updatePendingBadge();startAutosync();
+  msgUpdateBadge();
   if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true); // rattrape au démarrage les factures restées provisoires
   setInterval(()=>{if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true);updatePendingBadge();},120000); // nouvelle tentative toutes les 2 min, indépendamment de la config Supabase
   if(typeof window!=='undefined'){
@@ -834,7 +839,7 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -871,6 +876,7 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  messagerie:"Communication interne entre utilisateurs du logiciel (admin, comptable, caissier…) — conversations directes ou groupes, pièces jointes. Séparé des échanges avec les clients/fournisseurs (WhatsApp/Email restent dans Facturation/Achats).",
   balageee:"Créances clients et dettes fournisseurs ventilées par ancienneté (0-30 / 31-60 / 61-90 / +90 jours) — outil standard de révision des comptes, base pour décider des provisions pour créances douteuses.",
   cockpit:"Écran d'accueil : liste ce qu'il y a à traiter aujourd'hui (brouillard, staging, caisse, échéances), pas des chiffres à contempler. Se re-scanne à chaque ouverture.",
   dash:"Vue d'ensemble chiffrée de l'exercice actif : CA, charges, trésorerie, résultat. Pour l'action au quotidien, préférez le Cockpit.",
@@ -923,6 +929,7 @@ function go(p){
   document.getElementById('pgNote').innerHTML=note?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">ℹ ${note}</div>`:'';
   if(p==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);return;}
   RENDER[p]&&RENDER[p]();
+  msgUpdateBadge();
 }
 
 /* ============ MODAL ============ */
@@ -4539,6 +4546,159 @@ async function stgRejeterTout(){
   await putManyMixed(items,(d,t)=>prog.update(d,t,''));
   window._stgSel.clear();await loadAll();RENDER.staging();
   prog.done(items.length+' ligne(s) rejetée(s).');
+}
+
+/* ============ MESSAGERIE INTERNE (style ImmoSuite) ============ */
+window._msgTab='direct';window._msgConvActive=null;window._msgSearch='';
+function msgAutresUtilisateurs(){return ST.users.filter(u=>u.id!==ST.user.id);}
+function msgNomUser(id){const u=ST.users.find(x=>x.id===id);return u?(u.nom||u.login):'?';}
+function msgInitiales(nom){const p=(nom||'?').trim().split(/\s+/);return((p[0]||'')[0]||'?').toUpperCase()+((p[1]||'')[0]||'').toUpperCase();}
+function msgConvNom(c){
+  if(c.type==='groupe')return c.nom||'Groupe';
+  const autreId=c.membres.find(id=>id!==ST.user.id);
+  return msgNomUser(autreId);
+}
+function msgConvMessages(convId){return ST.msg_msg.filter(m=>m.convId===convId).sort((a,b)=>a.createdAt-b.createdAt);}
+function msgConvNonLus(c){return ST.msg_msg.filter(m=>m.convId===c.id&&m.auteurId!==ST.user.id&&!(m.lu||[]).includes(ST.user.id)).length;}
+function msgTotalNonLus(){return ST.msg_conv.filter(c=>(c.membres||[]).includes(ST.user.id)).reduce((s,c)=>s+msgConvNonLus(c),0);}
+function msgUpdateBadge(){
+  const n=msgTotalNonLus();const b=document.getElementById('msgNavBadge');
+  if(!b)return;
+  if(n>0){b.textContent=n>99?'99+':n;b.style.display='';}else{b.style.display='none';}
+}
+function msgMesConversations(){
+  return ST.msg_conv.filter(c=>(c.membres||[]).includes(ST.user.id)&&c.type===(window._msgTab==='direct'?'direct':'groupe'))
+    .filter(c=>!window._msgSearch||msgConvNom(c).toLowerCase().includes(window._msgSearch.toLowerCase()))
+    .sort((a,b)=>(b.lastMsgAt||b.createdAt||0)-(a.lastMsgAt||a.createdAt||0));
+}
+RENDER.messagerie=()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="msgOuvrirNouveauGroupe()">👥 Nouveau groupe</button> <button class="btn sm" onclick="msgOuvrirNouveauMessage()">✉ Message direct</button>`;
+  const convs=msgMesConversations();
+  const listHtml=convs.map(c=>{
+    const nonLus=msgConvNonLus(c);
+    const msgs=msgConvMessages(c.id);
+    const dernier=msgs[msgs.length-1];
+    const nom=msgConvNom(c);
+    const actif=window._msgConvActive===c.id;
+    return`<div onclick="msgOuvrirConversation('${c.id}')" style="display:flex;gap:10px;padding:10px 12px;cursor:pointer;border-radius:8px;background:${actif?'#fbf3ea':'transparent'};align-items:center" onmouseover="this.style.background='${actif?'#fbf3ea':'#f7f5f0'}'" onmouseout="this.style.background='${actif?'#fbf3ea':'transparent'}'">
+      <div style="width:38px;height:38px;border-radius:50%;background:${c.type==='groupe'?'#2c5aa0':'var(--cuivre)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0">${c.type==='groupe'?'👥':esc(msgInitiales(nom))}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;justify-content:space-between"><b style="font-size:13px">${esc(nom)}</b>${dernier?`<span style="font-size:10px;color:var(--mut)">${new Date(dernier.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'})}</span>`:''}</div>
+        <div style="font-size:11.5px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${dernier?esc((dernier.texte||'📎 Pièce jointe').slice(0,40)):'Nouvelle conversation'}</div>
+      </div>
+      ${nonLus?`<span class="badge b-red" style="flex-shrink:0">${nonLus}</span>`:''}
+    </div>`;
+  }).join('');
+  const convActive=window._msgConvActive?ST.msg_conv.find(c=>c.id===window._msgConvActive):null;
+  document.getElementById('p-messagerie').innerHTML=`
+  <div style="display:grid;grid-template-columns:300px 1fr;gap:16px;height:calc(100vh - 220px);min-height:500px">
+    <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:10px"><input placeholder="🔍 Rechercher…" value="${esc(window._msgSearch)}" oninput="window._msgSearch=this.value;RENDER.messagerie()"></div>
+      <div style="display:flex;border-bottom:1px solid var(--line)">
+        <button style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-weight:700;font-size:12.5px;border-bottom:2px solid ${window._msgTab==='direct'?'var(--cuivre)':'transparent'};color:${window._msgTab==='direct'?'var(--cuivre-d)':'var(--mut)'}" onclick="window._msgTab='direct';RENDER.messagerie()">💬 Direct</button>
+        <button style="flex:1;padding:8px;border:none;background:none;cursor:pointer;font-weight:700;font-size:12.5px;border-bottom:2px solid ${window._msgTab==='groupes'?'var(--cuivre)':'transparent'};color:${window._msgTab==='groupes'?'var(--cuivre-d)':'var(--mut)'}" onclick="window._msgTab='groupes';RENDER.messagerie()">👥 Groupes</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:6px">${listHtml||'<div class="empty" style="padding:20px 10px">Aucune conversation.</div>'}</div>
+    </div>
+    <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:hidden">
+      ${convActive?msgRenderChatHTML(convActive):`
+      <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--mut)">
+        <div style="font-size:44px;margin-bottom:10px">💬</div>
+        <div style="font-weight:700;font-size:15px;color:inherit">Sélectionnez une conversation</div>
+        <div style="font-size:12px;margin-top:4px">ou créez un nouveau message</div>
+      </div>`}
+    </div>
+  </div>`;
+  msgUpdateBadge();
+};
+function msgRenderChatHTML(c){
+  const nom=msgConvNom(c);
+  const msgs=msgConvMessages(c.id);
+  const bulles=msgs.map(m=>{
+    const moi=m.auteurId===ST.user.id;
+    return`<div style="display:flex;justify-content:${moi?'flex-end':'flex-start'};margin-bottom:8px">
+      <div style="max-width:65%;background:${moi?'var(--cuivre)':'#f0ede6'};color:${moi?'#fff':'#1C1C2E'};padding:8px 12px;border-radius:14px;${moi?'border-bottom-right-radius:4px':'border-bottom-left-radius:4px'}">
+        ${!moi&&c.type==='groupe'?`<div style="font-size:10px;font-weight:700;opacity:.8;margin-bottom:2px">${esc(msgNomUser(m.auteurId))}</div>`:''}
+        ${m.texte?`<div style="font-size:13px;white-space:pre-wrap">${esc(m.texte)}</div>`:''}
+        ${m.piece?`<div style="margin-top:4px"><a href="${m.piece.data}" download="${esc(m.piece.nom)}" style="color:${moi?'#fff':'var(--cuivre-d)'};font-size:11.5px;text-decoration:underline">📎 ${esc(m.piece.nom)}</a></div>`:''}
+        <div style="font-size:9.5px;opacity:.7;margin-top:3px;text-align:right">${new Date(m.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
+      </div></div>`;
+  }).join('');
+  return`
+  <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px">
+    <div style="width:36px;height:36px;border-radius:50%;background:${c.type==='groupe'?'#2c5aa0':'var(--cuivre)'};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px">${c.type==='groupe'?'👥':esc(msgInitiales(nom))}</div>
+    <div><b style="font-size:14px">${esc(nom)}</b>${c.type==='groupe'?`<div style="font-size:10.5px;color:var(--mut)">${(c.membres||[]).length} membre(s)</div>`:''}</div>
+  </div>
+  <div id="msg-scroll" style="flex:1;overflow-y:auto;padding:16px;background:#fdfcfa">${bulles||'<div class="empty">Aucun message. Écrivez le premier !</div>'}</div>
+  <div style="padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:8px;align-items:flex-end">
+    <label class="linkbtn" style="cursor:pointer;font-size:18px" title="Joindre un fichier">📎<input type="file" id="msg-file-input" style="display:none" onchange="msgFichierChoisi(this.files[0])"></label>
+    <textarea id="msg-texte" rows="1" placeholder="Écrire un message…" style="flex:1;resize:none;border-radius:18px;padding:9px 14px" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();msgEnvoyer('${c.id}');}"></textarea>
+    <button class="btn sm" style="border-radius:50%;width:38px;height:38px;padding:0" onclick="msgEnvoyer('${c.id}')">➤</button>
+  </div>
+  <div id="msg-attach-preview" style="display:none;padding:0 14px 8px;font-size:11px;color:var(--mut)"></div>`;
+}
+window._msgPieceEnAttente=null;
+function msgFichierChoisi(file){
+  if(!file)return;if(file.size>3*1024*1024){toast('Fichier trop lourd (max 3 Mo).');return;}
+  const rd=new FileReader();rd.onload=()=>{
+    window._msgPieceEnAttente={nom:file.name,type:file.type,data:rd.result};
+    const box=document.getElementById('msg-attach-preview');if(box){box.style.display='';box.innerHTML='📎 '+esc(file.name)+' <button class="linkbtn" onclick="window._msgPieceEnAttente=null;document.getElementById(\'msg-attach-preview\').style.display=\'none\'">✕ retirer</button>';}
+  };rd.readAsDataURL(file);
+}
+async function msgEnvoyer(convId){
+  const ta=document.getElementById('msg-texte');
+  const texte=ta?ta.value.trim():'';
+  const piece=window._msgPieceEnAttente;
+  if(!texte&&!piece)return;
+  const m={id:uid('msg'),convId,auteurId:ST.user.id,texte,piece:piece||null,createdAt:Date.now(),lu:[ST.user.id]};
+  await put('msg_msg',m);
+  const c=ST.msg_conv.find(x=>x.id===convId);
+  if(c){c.lastMsgAt=Date.now();await put('msg_conv',c);}
+  window._msgPieceEnAttente=null;
+  await loadAll();RENDER.messagerie();
+  setTimeout(()=>{const box=document.getElementById('msg-scroll');if(box)box.scrollTop=box.scrollHeight;},50);
+}
+async function msgOuvrirConversation(convId){
+  window._msgConvActive=convId;
+  const msgsNonLus=ST.msg_msg.filter(m=>m.convId===convId&&m.auteurId!==ST.user.id&&!(m.lu||[]).includes(ST.user.id));
+  for(const m of msgsNonLus){m.lu=[...(m.lu||[]),ST.user.id];await put('msg_msg',m);}
+  if(msgsNonLus.length)await loadAll();
+  RENDER.messagerie();
+  setTimeout(()=>{const box=document.getElementById('msg-scroll');if(box)box.scrollTop=box.scrollHeight;},50);
+}
+function msgOuvrirNouveauMessage(){
+  const autres=msgAutresUtilisateurs();
+  if(!autres.length){toast('Aucun autre utilisateur enregistré.');return;}
+  openModal(`<div class="mh"><h3>✉ Nouveau message direct</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb"><div class="frow"><label>Destinataire</label><select id="msg-dest">${autres.map(u=>`<option value="${u.id}">${esc(u.nom||u.login)} (${u.role})</option>`).join('')}</select></div></div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="msgCreerDirect()">Démarrer</button></div>`);
+}
+async function msgCreerDirect(){
+  const destId=document.getElementById('msg-dest').value;
+  let c=ST.msg_conv.find(x=>x.type==='direct'&&(x.membres||[]).includes(ST.user.id)&&(x.membres||[]).includes(destId));
+  if(!c){c={id:uid('conv'),type:'direct',membres:[ST.user.id,destId],createdAt:Date.now()};await put('msg_conv',c);await loadAll();}
+  closeModal();window._msgTab='direct';await msgOuvrirConversation(c.id);
+}
+function msgOuvrirNouveauGroupe(){
+  const autres=msgAutresUtilisateurs();
+  if(!autres.length){toast('Aucun autre utilisateur enregistré.');return;}
+  openModal(`<div class="mh"><h3>👥 Nouveau groupe</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><label>Nom du groupe</label><input id="msg-grp-nom" placeholder="Ex : Comptabilité"></div>
+    <div class="frow"><label>Membres</label>
+    <div style="max-height:200px;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:8px">
+      ${autres.map(u=>`<label style="display:block;padding:4px 0;font-size:13px"><input type="checkbox" value="${u.id}" class="msg-grp-membre"> ${esc(u.nom||u.login)} (${u.role})</label>`).join('')}
+    </div></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="msgCreerGroupe()">Créer</button></div>`);
+}
+async function msgCreerGroupe(){
+  const nom=document.getElementById('msg-grp-nom').value.trim();
+  if(!nom){toast('Nom du groupe requis.');return;}
+  const membres=[ST.user.id,...Array.from(document.querySelectorAll('.msg-grp-membre:checked')).map(el=>el.value)];
+  if(membres.length<2){toast('Sélectionnez au moins un membre.');return;}
+  const c={id:uid('conv'),type:'groupe',nom,membres,createdAt:Date.now()};
+  await put('msg_conv',c);await loadAll();closeModal();window._msgTab='groupes';await msgOuvrirConversation(c.id);
 }
 
 /* ============ COCKPIT — écran d'accueil, file d'actions (style ImmoSuite) ============ */
