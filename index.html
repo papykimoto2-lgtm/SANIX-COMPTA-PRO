@@ -5095,9 +5095,10 @@ async function ckActions(){
     const hasOuv=(await all('ecritures')).some(e=>e.id==='e_ouv_'+premier.id);
     if(!hasOuv)actions.push({icone:'⇱',urgent:false,titre:'Bilan d\'ouverture non saisi',detail:'Exercice '+premier.libelle+' — aucun solde initial enregistré.',boutons:[{lib:'Saisir',fn:"go('ouverture')"}]});
   }
-  // 9. Comptes non lettrés (informatif, léger — seulement clients/fournisseurs)
-  const nonLettres=mouvements((e,l)=>(l.compte||'').startsWith('4')&&!l.lettre).length;
-  if(nonLettres>20)actions.push({icone:'⇄',urgent:false,titre:nonLettres+' mouvement(s) tiers non lettré(s)',detail:'Comptes 4xx — lettrage à jour recommandé avant clôture.',boutons:[{lib:'Lettrer',fn:"go('lettrage')"}]});
+  // 9. Comptes tiers non lettrés (informatif, léger — mêmes comptes que le module Lettrage : uniquement ceux liés à une fiche tiers)
+  const cptsAux=new Set(ST.comptes.filter(c=>c.aux).map(c=>c.numero));
+  const nonLettres=mouvements((e,l)=>cptsAux.has(l.compte)&&!l.lettre).length;
+  if(nonLettres>20)actions.push({icone:'⇄',urgent:false,titre:nonLettres+' mouvement(s) tiers non lettré(s)',detail:'Comptes clients/fournisseurs (liés à une fiche tiers) — lettrage à jour recommandé avant clôture.',boutons:[{lib:'Lettrer',fn:"go('lettrage')"}]});
   // 10. Exercice clôturable (fin de période dépassée, encore ouvert)
   const exp=ST.exercices.filter(e=>e.statut==='ouvert'&&e.fin&&e.fin<today());
   if(exp.length)actions.push({icone:'🔒',urgent:false,titre:exp.length+' exercice(s) expiré(s) toujours ouvert(s)',detail:exp.map(e=>e.libelle).join(', '),boutons:[{lib:'Clôturer',fn:"go('exercices')"}]});
