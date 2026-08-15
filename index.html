@@ -249,21 +249,13 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
-      <a data-p="staging"><span class="ic">⇵</span>Import Chantiers/Caisse</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
       </div></div>
       <div class="grp-section" data-grp="controle">
       <div class="grp" onclick="toggleGrp(this)"><span>3 · Contrôle</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="lettrage"><span class="ic">⇄</span>Lettrage</a>
-      <a data-p="balageee"><span class="ic">⏳</span>Balance âgée</a>
-      <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
-      <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
-      <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
-      <a data-p="rentabilite"><span class="ic">🏗</span>Rentabilité chantiers</a>
-      <a data-p="analytique"><span class="ic">◈</span>Comptabilité analytique</a>
-      <a data-p="immo"><span class="ic">▦</span>Immobilisations</a>
-      <a data-p="devises"><span class="ic">$</span>Multi-devises</a>
+      <a data-p="controle"><span class="ic">⇄</span>Contrôle &amp; rapprochements</a>
+      <a data-p="tiersrenta"><span class="ic">◫</span>Tiers &amp; rentabilité</a>
       </div></div>
       <div class="grp-section" data-grp="visa">
       <div class="grp" onclick="toggleGrp(this)"><span>4 · Visa</span><span class="grp-arrow">▾</span></div>
@@ -273,17 +265,8 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp-section" data-grp="etats">
       <div class="grp" onclick="toggleGrp(this)"><span>5 · États</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="grandlivre"><span class="ic">≣</span>Grand livre</a>
-      <a data-p="periodique"><span class="ic">📅</span>État périodique</a>
-      <a data-p="balance"><span class="ic">⚖</span>Balance générale</a>
-      <a data-p="resultat"><span class="ic">∑</span>Compte de résultat</a>
-      <a data-p="bilan"><span class="ic">▤</span>Bilan (Actif/Passif)</a>
-      <a data-p="flux"><span class="ic">≈</span>Flux de trésorerie</a>
-      <a data-p="annexes"><span class="ic">▣</span>Notes annexes</a>
-      <a data-p="tva"><span class="ic">%</span>Déclaration TVA</a>
-      <a data-p="echeancier"><span class="ic">⏰</span>Échéancier fiscal</a>
-      <a data-p="teledec"><span class="ic">⇪</span>Télédéclarations</a>
-      <a data-p="liasse"><span class="ic">▦</span>Liasse fiscale</a>
+      <a data-p="etatsfin"><span class="ic">≣</span>États financiers</a>
+      <a data-p="fiscalite"><span class="ic">%</span>Fiscalité</a>
       </div></div>
       <div class="grp-section" data-grp="cloture">
       <div class="grp" onclick="toggleGrp(this)"><span>6 · Clôture</span><span class="grp-arrow">▾</span></div>
@@ -291,17 +274,15 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture (+ FEC)</a>
       </div></div>
       <div class="grp-section" data-grp="budget">
-      <div class="grp" onclick="toggleGrp(this)"><span>7 · Pilotage</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>7 · Pilotage &amp; auxiliaire</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="budget"><span class="ic">▲</span>Budget &amp; réalisé</a>
-      <a data-p="dash"><span class="ic">▚</span>Tableau de bord</a>
-      <a data-p="analyse360"><span class="ic">◎</span>Analyse 360°</a>
-      <a data-p="consolidation"><span class="ic">▩</span>Consolidation</a>
+      <a data-p="pilotage"><span class="ic">▚</span>Pilotage</a>
+      <a data-p="auxiliaire"><span class="ic">▦</span>Comptabilité auxiliaire</a>
       </div></div>
       <div class="grp-section" data-grp="config">
       <div class="grp" onclick="toggleGrp(this)"><span>8 · Configuration</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage</a>
+      <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage (+ Import Chantiers/Caisse)</a>
       <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
       <a data-p="audit"><span class="ic">◉</span>Journal d'audit</a>
       </div></div>
@@ -320,6 +301,7 @@ tbody tr:hover{background:#fbfcfe}
     </div>
     <div class="content">
       <div id="pgNote"></div>
+      <div id="pgSubTabs" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
       <div class="page on" id="p-cockpit"></div>
       <div class="page" id="p-messagerie"></div>
       <div class="page" id="p-dash"></div>
@@ -845,7 +827,25 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const GROUPES_TABS={
+  controle:{label:'Contrôle & rapprochements',subs:[['lettrage','⇄'],['rappro','≈'],['anomalies','⚠']]},
+  tiersrenta:{label:'Tiers & rentabilité',subs:[['tierscompta','◫'],['balageee','⏳'],['rentabilite','🏗']]},
+  etatsfin:{label:'États financiers',subs:[['grandlivre','≣'],['periodique','📅'],['balance','⚖'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣']]},
+  fiscalite:{label:'Fiscalité',subs:[['tva','%'],['echeancier','⏰'],['teledec','⇪'],['liasse','▦']]},
+  pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩']]},
+  auxiliaire:{label:'Comptabilité auxiliaire',subs:[['immo','▦'],['analytique','◈'],['devises','$'],['budget','▲']]}
+};
+const SUB_TO_GROUP={};
+Object.entries(GROUPES_TABS).forEach(([g,def])=>def.subs.forEach(([sub])=>SUB_TO_GROUP[sub]=g));
+window._groupLastSub={};
+const TITLES={
+  controle:['Contrôle & rapprochements','Lettrage · Rapprochement bancaire · IA Anomalies'],
+  tiersrenta:['Tiers & rentabilité','Comptabilité tiers · Balance âgée · Rentabilité chantiers'],
+  etatsfin:['États financiers','Grand livre · Balance · Résultat · Bilan · Flux · Annexes · État périodique'],
+  fiscalite:['Fiscalité','TVA · Échéancier · Télédéclarations · Liasse fiscale'],
+  pilotage:['Pilotage','Tableau de bord · Analyse 360° · Consolidation'],
+  auxiliaire:['Comptabilité auxiliaire','Immobilisations · Analytique · Devises · Budget'],
+  balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -882,6 +882,12 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  controle:"Trois outils de contrôle regroupés : Lettrage (rapprocher factures/règlements), Rapprochement bancaire (relevé vs comptabilité), IA Anomalies (détection automatique d'incohérences).",
+  tiersrenta:"Vue tiers regroupée : solde détaillé par client/fournisseur, créances/dettes par ancienneté, et rentabilité par chantier (encaissé − dépensé).",
+  etatsfin:"Tous les états comptables réglementaires et de pilotage en un seul endroit, navigables par onglet.",
+  fiscalite:"TVA, échéances fiscales, télédéclarations et liasse fiscale regroupées.",
+  pilotage:"Tableau de bord, analyse stratégique et consolidation multi-sociétés.",
+  auxiliaire:"Modules complémentaires à la comptabilité générale : immobilisations, analytique, devises, budget.",
   rentabilite:"Un client verse un acompte/solde sur un chantier (recette) ; les fournisseurs de ce chantier sont réglés total ou partiel (dépense déjà suivie dans Achats). Cette page croise les deux pour calculer la marge réelle par chantier.",
   messagerie:"Communication interne entre utilisateurs du logiciel (admin, comptable, caissier…) — conversations directes ou groupes, pièces jointes. Séparé des échanges avec les clients/fournisseurs (WhatsApp/Email restent dans Facturation/Achats).",
   balageee:"Créances clients et dettes fournisseurs ventilées par ancienneté (0-30 / 31-60 / 61-90 / +90 jours) — outil standard de révision des comptes, base pour décider des provisions pour créances douteuses.",
@@ -924,18 +930,27 @@ const MODULE_NOTES={
   audit:"Journal immuable de toutes les actions sensibles (connexions, créations, suppressions) — traçabilité pour le contrôle interne."
 };
 function go(p){
-  window._curPage=p;
-  expandGrpFor(p);
-  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
+  let realP=p,groupId=null;
+  if(GROUPES_TABS[p]){groupId=p;realP=window._groupLastSub[p]||GROUPES_TABS[p].subs[0][0];}
+  else if(SUB_TO_GROUP[p]){groupId=SUB_TO_GROUP[p];realP=p;}
+  if(groupId)window._groupLastSub[groupId]=realP;
+  window._curPage=realP;
+  expandGrpFor(groupId||realP);
+  document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===(groupId||realP)));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
-  document.getElementById('p-'+p).classList.add('on');
-  const t=TITLES[p]||[p,''];document.getElementById('pgTitle').textContent=t[0];
-  document.getElementById('pgSub').textContent=t[1]+(p==='bilan'?dfr(curEx().fin):'');
+  document.getElementById('p-'+realP).classList.add('on');
+  const t=TITLES[groupId||realP]||[realP,''];document.getElementById('pgTitle').textContent=t[0];
+  document.getElementById('pgSub').textContent=t[1]+(realP==='bilan'?dfr(curEx().fin):'');
   document.getElementById('pgActions').innerHTML='';
-  const note=MODULE_NOTES[p];
+  const note=MODULE_NOTES[groupId||realP];
   document.getElementById('pgNote').innerHTML=note?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">ℹ ${note}</div>`:'';
-  if(p==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);return;}
-  RENDER[p]&&RENDER[p]();
+  const subTabsEl=document.getElementById('pgSubTabs');
+  if(groupId){
+    subTabsEl.style.display='flex';
+    subTabsEl.innerHTML=GROUPES_TABS[groupId].subs.map(([sub,ic])=>`<button class="btn sm ${sub===realP?'':'gh'}" onclick="go('${sub}')">${ic} ${TITLES[sub]?TITLES[sub][0]:sub}</button>`).join('');
+  }else{subTabsEl.style.display='none';subTabsEl.innerHTML='';}
+  if(realP==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);msgUpdateBadge();return;}
+  RENDER[realP]&&RENDER[realP]();
   msgUpdateBadge();
 }
 
@@ -3819,7 +3834,7 @@ RENDER.parametrage=()=>{
   else if(tab==='stockage')body=stockageHTML();
   else if(tab==='import')body=importHTML();
   document.getElementById('p-parametrage').innerHTML=`
-  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('comptable','Paramètres comptables')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}</div>
+  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('comptable','Paramètres comptables')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}<button class="btn sm" style="background:var(--cuivre)" onclick="go('staging')">⇵ Import Chantiers/Caisse</button></div>
   ${body}`;
   if(tab==='societe')societeForm();
   if(tab==='comptable')comptableForm();
@@ -5970,30 +5985,31 @@ async function delFiliale(i){const fils=window._fils;fils.splice(i,1);await put(
 /* ---- IA détection anomalies ---- */
 function scanAnomalies(){
   const A=[];const m=soldesParCompte();
+  const push=(sev,titre,detail,key,fn)=>A.push([sev,titre,detail,fn||null,key||(titre+'|'+detail).slice(0,140)]);
   // 1. écritures déséquilibrées
   ST.ecritures.forEach(e=>{const d=e.lignes.reduce((s,l)=>s+(+l.debit||0),0),c=e.lignes.reduce((s,l)=>s+(+l.credit||0),0);
-    if(Math.abs(d-c)>=1)A.push(['bad','Écriture déséquilibrée',`${e.piece||e.libelle} — écart ${F(d-c)}`]);});
+    if(Math.abs(d-c)>=1)push('bad','Écriture déséquilibrée',`${e.piece||e.libelle} — écart ${F(d-c)}`,'deseq|'+e.id,`editEcriture('${e.id}')`);});
   // 2. comptes non référencés
-  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if(l.compte&&!ST.comptes.some(c=>c.numero===l.compte))A.push(['warn','Compte inexistant au plan',l.compte+' ('+(e.piece||e.libelle)+')']);}));
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if(l.compte&&!ST.comptes.some(c=>c.numero===l.compte))push('warn','Compte inexistant au plan',l.compte+' ('+(e.piece||e.libelle)+')','cptmanq|'+l.compte,`go('plan')`);}));
   // 3. montants négatifs
-  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if((+l.debit||0)<0||(+l.credit||0)<0)A.push(['bad','Montant négatif',e.piece||e.libelle]);}));
+  ST.ecritures.forEach(e=>e.lignes.forEach(l=>{if((+l.debit||0)<0||(+l.credit||0)<0)push('bad','Montant négatif',e.piece||e.libelle,'negatif|'+e.id,`editEcriture('${e.id}')`);}));
   // 4. doublons potentiels (même date, montant, libellé)
   const seen={};ST.ecritures.forEach(e=>{const tot=e.lignes.reduce((s,l)=>s+(+l.debit||0),0);const k=e.date+'|'+tot+'|'+(e.libelle||'').toLowerCase();
-    if(seen[k])A.push(['warn','Doublon possible',`${e.libelle} — ${dfr(e.date)} · ${F(tot)}`]);seen[k]=1;});
+    if(seen[k])push('warn','Doublon possible',`${e.libelle} — ${dfr(e.date)} · ${F(tot)}`,'doublon|'+e.id,`editEcriture('${e.id}')`);seen[k]=1;});
   // 5. clients dépassant plafond
   ST.tiers.filter(t=>t.type==='client'&&t.plafond>0).forEach(t=>{const s=m[t.compte]||{debit:0,credit:0};const solde=s.debit-s.credit;
-    if(solde>t.plafond)A.push(['warn','Plafond client dépassé',`${t.nom} — ${F(solde)} > ${F(t.plafond)}`]);});
+    if(solde>t.plafond)push('warn','Plafond client dépassé',`${t.nom} — ${F(solde)} > ${F(t.plafond)}`,'plafond|'+t.id,`go('tiers')`);});
   // 6. TVA collectée sans ventes
   const tvaC=(m['4431']||{debit:0,credit:0});const ventes=(-classeSolde('7'));
-  if((tvaC.credit-tvaC.debit)>0&&ventes<=0)A.push(['warn','TVA collectée sans produit','Vérifier comptes de vente']);
+  if((tvaC.credit-tvaC.debit)>0&&ventes<=0)push('warn','TVA collectée sans produit','Vérifier comptes de vente','tvasansvente',`go('fiscalite')`);
   // 7. charge anormalement élevée (> 3x moyenne classe 6)
   const charges6={};for(const n in m)if(n[0]==='6')charges6[n]=m[n].debit-m[n].credit;
   const vals=Object.values(charges6).filter(v=>v>0);const moy=vals.reduce((a,b)=>a+b,0)/(vals.length||1);
-  for(const n in charges6)if(charges6[n]>moy*3&&vals.length>2)A.push(['info','Charge élevée vs moyenne',n+' — '+F(charges6[n])]);
+  for(const n in charges6)if(charges6[n]>moy*3&&vals.length>2)push('info','Charge élevée vs moyenne',n+' — '+F(charges6[n]),'chargeelevee|'+n,`window._glFiltre={du:'${n}',au:'${n}',sousComptes:true,dateDeb:'',dateFin:''};go('grandlivre')`);
   // 8. écritures hors exercice
-  const ex=curEx();ST.ecritures.filter(e=>e.exId===ST.exId).forEach(e=>{if(e.date<ex.debut||e.date>ex.fin)A.push(['warn','Date hors exercice',`${e.piece||e.libelle} — ${dfr(e.date)}`]);});
+  const ex=curEx();ST.ecritures.filter(e=>e.exId===ST.exId).forEach(e=>{if(e.date<ex.debut||e.date>ex.fin)push('warn','Date hors exercice',`${e.piece||e.libelle} — ${dfr(e.date)}`,'horsex|'+e.id,`editEcriture('${e.id}')`);});
   // 9. tiers sans NCC (client facturé FNE)
-  ST.factures.filter(f=>f.type==='fne'&&!f.clientNcc).forEach(f=>A.push(['warn','Facture FNE sans NCC',f.numero||'']));
+  ST.factures.filter(f=>f.type==='fne'&&!f.clientNcc).forEach(f=>push('warn','Facture FNE sans NCC',f.numero||'','fnesansncc|'+f.id,`editFacture('${f.id}','fne')`));
   // 10. Trous dans la numérotation des pièces (obligation de continuité — AUDCIF art. 19)
   const groupes={};
   ST.ecritures.forEach(e=>{
@@ -6004,38 +6020,107 @@ function scanAnomalies(){
     const nums=[...new Set(groupes[prefix])].sort((a,b)=>a-b);
     if(nums.length<2)continue;
     const trous=[];for(let i=nums[0];i<nums[nums.length-1];i++)if(!nums.includes(i))trous.push(i);
-    if(trous.length)A.push(['warn','Trou dans la numérotation',prefix+' — '+trous.length+' pièce(s) manquante(s) (ex : '+prefix+'-'+String(trous[0]).padStart(4,'0')+')']);
+    if(trous.length)push('warn','Trou dans la numérotation',prefix+' — '+trous.length+' pièce(s) manquante(s) (ex : '+prefix+'-'+String(trous[0]).padStart(4,'0')+')','trounum|'+prefix);
   }
   // 11. Triangulation Bilan = Balance = Grand livre (contrôle d'intégrité globale)
   let tdG=0,tcG=0;for(const n in m){tdG+=m[n].debit;tcG+=m[n].credit;}
-  if(Math.abs(tdG-tcG)>=1)A.push(['bad','Balance générale non équilibrée','Total débit '+F(tdG)+' ≠ total crédit '+F(tcG)+' — écart '+F(tdG-tcG)]);
+  if(Math.abs(tdG-tcG)>=1)push('bad','Balance générale non équilibrée','Total débit '+F(tdG)+' ≠ total crédit '+F(tcG)+' — écart '+F(tdG-tcG),'balancenoneq',`go('etatsfin')`);
   // 12. Compte de liaison 890 (bilan d'ouverture) non soldé — à ventiler par l'expert-comptable
-  const c890=m['890'];if(c890&&Math.abs(c890.debit-c890.credit)>=1)A.push(['warn','Compte de liaison 890 non soldé','Écart bilan d\'ouverture '+F(c890.debit-c890.credit)+' à ventiler sur les bons comptes.']);
+  const c890=m['890'];if(c890&&Math.abs(c890.debit-c890.credit)>=1)push('warn','Compte de liaison 890 non soldé','Écart bilan d\'ouverture '+F(c890.debit-c890.credit)+' à ventiler sur les bons comptes.','liaison890',`go('ouverture')`);
   // 13. Créances clients anciennes (>90j) sans provision pour dépréciation
   const seuil90=new Date();seuil90.setDate(seuil90.getDate()-90);const seuil90str=seuil90.toISOString().slice(0,10);
   ST.tiers.filter(t=>t.type==='client').forEach(t=>{
     const s=m[t.compte];if(!s)return;const solde=s.debit-s.credit;if(solde<=0.5)return;
     const dernierMvt=mouvementsDuCompte(t.compte).slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
-    if(dernierMvt&&dernierMvt.date<seuil90str)A.push(['info','Créance ancienne sans provision',t.nom+' — '+F0(solde)+' FCFA, dernier mouvement '+dfr(dernierMvt.date)]);
+    if(dernierMvt&&dernierMvt.date<seuil90str)push('info','Créance ancienne sans provision',t.nom+' — '+F0(solde)+' FCFA, dernier mouvement '+dfr(dernierMvt.date),'creanceold|'+t.id,`go('tiersrenta')`);
+  });
+  // 14. Immobilisations sans dotation sur l'exercice courant
+  const anneeEx=+(curEx().debut||'').slice(0,4);
+  ST.immos.filter(im=>im.statut!=='cede').forEach(im=>{
+    const aDot=ST.ecritures.some(e=>e.id==='e_dot_'+im.id+'_'+anneeEx);
+    if(!aDot&&dotationExercice(im)>0)push('info','Immobilisation sans dotation cette année',im.libelle+' ('+im.code+') — amortissement '+anneeEx+' non passé','sansdot|'+im.id,`go('auxiliaire')`);
+  });
+  // 15. Factures FNE non certifiées depuis plus de 7 jours
+  const seuil7=new Date();seuil7.setDate(seuil7.getDate()-7);const seuil7str=seuil7.toISOString().slice(0,10);
+  ST.factures.filter(f=>f.type==='fne'&&!f.fneCertified&&f.date<seuil7str).forEach(f=>push('warn','FNE provisoire depuis +7 jours',f.numero+' — '+f.clientNom+' — jamais certifiée par la DGI','fneprov|'+f.id,`retryFNE('${f.id}')`));
+  // 16. Fournisseurs en attente de paiement depuis plus de 90 jours
+  ST.achats.filter(a=>!a.regle&&achatSolde(a)>0.5&&a.date<seuil90str).forEach(a=>push('warn','Fournisseur en attente +90 jours',a.numero+' — '+a.fournNom+' — '+F0(achatSolde(a))+' FCFA dû depuis '+dfr(a.date),'fournold|'+a.id,`reglerAchat('${a.id}')`));
+  // 17. Écritures avec libellé vide ou trop court
+  ST.ecritures.filter(e=>!e.libelle||e.libelle.trim().length<3).forEach(e=>push('info','Libellé d\'écriture vide ou trop court',e.piece||e.id,'libellevide|'+e.id,`editEcriture('${e.id}')`));
+  // 18. Compte d'attente caisse (4712) ancien non ventilé
+  const c4712=m['4712'];
+  if(c4712&&Math.abs(c4712.debit-c4712.credit)>=1){
+    const mvts4712=mouvementsDuCompte('4712');const plusAncien=mvts4712.slice().sort((a,b)=>a.date.localeCompare(b.date))[0];
+    if(plusAncien&&plusAncien.date<seuil90str)push('warn','Compte d\'attente caisse ancien non ventilé','Solde '+F(c4712.debit-c4712.credit)+' — mouvement le plus ancien : '+dfr(plusAncien.date),'attente4712',`go('caisse')`);
+  }
+  // 19. Caisse restée ouverte plus de 48h
+  const seuil2j=new Date();seuil2j.setDate(seuil2j.getDate()-2);const seuil2jStr=seuil2j.toISOString().slice(0,10);
+  ST.caisse_sessions.filter(s=>s.statut==='ouverte'&&s.date<seuil2jStr).forEach(s=>{
+    const c=ST.caisses.find(x=>x.id===s.caisseId);
+    push('warn','Caisse ouverte depuis plus de 48h',(c?c.nom:'')+' — session du '+dfr(s.date)+' jamais clôturée','caisseouv|'+s.id,`go('caisse')`);
+  });
+  // 20. Journal utilisé inexistant dans la table journaux
+  const journauxValides=new Set(ST.journaux.map(j=>j.code));
+  const journauxManquants=new Set();
+  ST.ecritures.forEach(e=>{if(e.journal&&!journauxValides.has(e.journal))journauxManquants.add(e.journal);});
+  journauxManquants.forEach(jc=>push('info','Journal non référencé','Code "'+jc+'" utilisé mais absent de la table des journaux','journalmanq|'+jc));
+  // 21. Caissier assigné sans PIN configuré (sécurité)
+  ST.caisses.forEach(c=>{
+    (c.caissiereIds||[]).forEach(uid=>{
+      const u=ST.users.find(x=>x.id===uid);
+      if(u&&!u.caissePinHash)push('info','Caissier sans code PIN',(u.nom||u.login)+' — assigné à "'+c.nom+'" sans PIN de sécurité','pinmanq|'+u.id,`window._pgTab='users';go('parametrage')`);
+    });
   });
   return A;
 }
-RENDER.anomalies=()=>{
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-anomalies','Rapport anomalies')">⎙ Imprimer</button>`;
-  const A=scanAnomalies();
+window._anoIgnoreesCache=null;
+async function anoIgnorees(){if(window._anoIgnoreesCache)return window._anoIgnoreesCache;const m=await getOne('meta','anomalies_ignorees');window._anoIgnoreesCache=m?m.value:[];return window._anoIgnoreesCache;}
+async function anoIgnorer(key){const l=await anoIgnorees();if(!l.includes(key))l.push(key);await put('meta',{id:'anomalies_ignorees',value:l});window._anoIgnoreesCache=l;RENDER.anomalies();}
+async function anoReactiver(key){const l=await anoIgnorees();const i=l.indexOf(key);if(i>=0)l.splice(i,1);await put('meta',{id:'anomalies_ignorees',value:l});window._anoIgnoreesCache=l;RENDER.anomalies();}
+async function anoReactiverTout(){await put('meta',{id:'anomalies_ignorees',value:[]});window._anoIgnoreesCache=[];RENDER.anomalies();toast('Toutes les anomalies ignorées sont réactivées.');}
+RENDER.anomalies=async()=>{
+  const ignorees=await anoIgnorees();
+  window._anoFiltre=window._anoFiltre||'';window._anoQ=window._anoQ||'';window._anoVoirIgnorees=window._anoVoirIgnorees||false;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="RENDER.anomalies()">🔄 Rescanner</button> <button class="btn sm gh" onclick="printReport('p-anomalies','Rapport anomalies')">⎙ Imprimer</button>`;
+  const Atoutes=scanAnomalies();
+  const A=Atoutes.filter(a=>window._anoVoirIgnorees?true:!ignorees.includes(a[4]));
   const nb={bad:A.filter(x=>x[0]==='bad').length,warn:A.filter(x=>x[0]==='warn').length,info:A.filter(x=>x[0]==='info').length};
+  const nbIgnorees=Atoutes.filter(a=>ignorees.includes(a[4])).length;
   const col={bad:['#fdf0ed','var(--red)','⚠'],warn:['#fbf0d8','var(--amber)','!'],info:['#e9f1fb','var(--blue)','ℹ']};
-  const rows=A.map(a=>{const c=col[a[0]];return`<tr><td class="ta-c"><b style="color:${c[1]}">${c[2]}</b></td><td><b>${a[1]}</b></td><td style="font-size:12.5px;color:var(--mut)">${a[2]}</td></tr>`;}).join('');
+  const filtres=A.filter(a=>!window._anoFiltre||a[0]===window._anoFiltre)
+    .filter(a=>!window._anoQ||(a[1]+' '+a[2]).toLowerCase().includes(window._anoQ.toLowerCase()));
+  const rows=filtres.map(a=>{
+    const c=col[a[0]];const estIgnoree=ignorees.includes(a[4]);
+    return`<tr style="${estIgnoree?'opacity:.5':''}"><td class="ta-c"><b style="color:${c[1]}">${c[2]}</b></td><td><b>${esc(a[1])}</b></td><td style="font-size:12.5px;color:var(--mut)">${esc(a[2])}</td>
+    <td class="ta-c" style="white-space:nowrap">
+      ${a[3]&&!estIgnoree?`<button class="btn sm" onclick="${a[3].replace(/"/g,'&quot;')}">→ Traiter</button>`:''}
+      ${estIgnoree?`<button class="linkbtn" onclick="anoReactiver('${a[4].replace(/'/g,"\\'")}')">↺ Réactiver</button>`:`<button class="linkbtn" title="Ignorer cette anomalie" onclick="anoIgnorer('${a[4].replace(/'/g,"\\'")}')">🔕</button>`}
+    </td></tr>`;
+  }).join('');
   document.getElementById('p-anomalies').innerHTML=`
   <div class="grid kpis" style="margin-bottom:12px">
     <div class="card kpi r"><div class="lb">Critiques</div><div class="v mono">${nb.bad}</div></div>
     <div class="card kpi o"><div class="lb">Avertissements</div><div class="v mono">${nb.warn}</div></div>
     <div class="card kpi b"><div class="lb">Informations</div><div class="v mono">${nb.info}</div></div>
-    <div class="card kpi ${A.length===0?'g':'o'}"><div class="lb">Score santé</div><div class="v mono">${Math.max(0,100-nb.bad*15-nb.warn*5)}%</div></div>
+    <div class="card kpi ${Atoutes.length===0?'g':'o'}"><div class="lb">Score santé</div><div class="v mono">${Math.max(0,100-nb.bad*15-nb.warn*5)}%</div></div>
   </div>
-  ${A.length===0?'<div class="card" style="text-align:center;padding:30px"><div style="font-size:32px">✓</div><b style="color:var(--green)">Aucune anomalie détectée.</b><div style="color:var(--mut);font-size:13px">Comptabilité saine.</div></div>':
-  `<div class="tbl-wrap"><table><thead><tr><th></th><th>Anomalie</th><th>Détail</th></tr></thead><tbody>${rows}</tbody></table></div>`}
-  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">9 contrôles</b> : équilibre, comptes, doublons, plafonds, TVA, dates, charges, FNE. Analyse locale, sans envoi externe.</div>`;
+  <div class="frow c3" style="margin-bottom:12px">
+    <div><label>Sévérité</label><select onchange="window._anoFiltre=this.value;RENDER.anomalies()">
+      <option value="">Toutes</option>
+      <option value="bad" ${window._anoFiltre==='bad'?'selected':''}>⚠ Critiques</option>
+      <option value="warn" ${window._anoFiltre==='warn'?'selected':''}>! Avertissements</option>
+      <option value="info" ${window._anoFiltre==='info'?'selected':''}>ℹ Informations</option>
+    </select></div>
+    <div><label>Recherche</label><input value="${esc(window._anoQ)}" oninput="window._anoQ=this.value;debounce('anoSearch',()=>RENDER.anomalies())" placeholder="Mot-clé…"></div>
+    <div style="align-self:flex-end;display:flex;gap:10px;align-items:center">
+      <label style="font-size:12px"><input type="checkbox" ${window._anoVoirIgnorees?'checked':''} onchange="window._anoVoirIgnorees=this.checked;RENDER.anomalies()"> Voir les ignorées (${nbIgnorees})</label>
+      ${nbIgnorees?'<button class="btn sm gh" onclick="anoReactiverTout()">↺ Tout réactiver</button>':''}
+    </div>
+  </div>
+  ${Atoutes.length===0?'<div class="card" style="text-align:center;padding:30px"><div style="font-size:32px">✓</div><b style="color:var(--green)">Aucune anomalie détectée.</b><div style="color:var(--mut);font-size:13px">Comptabilité saine.</div></div>':
+  filtres.length===0?'<div class="empty">Aucune anomalie pour ce filtre.</div>':
+  `<div class="tbl-wrap"><table><thead><tr><th></th><th>Anomalie</th><th>Détail</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`}
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">21 contrôles</b> : équilibre, comptes, doublons, plafonds, TVA, dates, charges, FNE, numérotation, triangulation, provisions, immobilisations, règlements fournisseurs, caisse, sécurité. Chaque anomalie est cliquable ("→ Traiter") ou peut être ignorée durablement (🔕). Analyse locale, sans envoi externe.</div>`;
 };
 
 /* ---- Journal d'audit ---- */
