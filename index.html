@@ -845,7 +845,7 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -929,7 +929,7 @@ function go(p){
   document.querySelectorAll('#nav a').forEach(a=>a.classList.toggle('on',a.dataset.p===p));
   document.querySelectorAll('.page').forEach(x=>x.classList.remove('on'));
   document.getElementById('p-'+p).classList.add('on');
-  const t=TITLES[p];document.getElementById('pgTitle').textContent=t[0];
+  const t=TITLES[p]||[p,''];document.getElementById('pgTitle').textContent=t[0];
   document.getElementById('pgSub').textContent=t[1]+(p==='bilan'?dfr(curEx().fin):'');
   document.getElementById('pgActions').innerHTML='';
   const note=MODULE_NOTES[p];
