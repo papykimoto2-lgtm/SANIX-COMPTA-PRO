@@ -4735,7 +4735,9 @@ async function rentaListeChantiers(){
     const resteEncaisser=montantOffre?Math.max(0,montantOffre-encaisse):null;
     const marge=encaisse-coutHT;
     const margePct=encaisse>0?Math.round(marge/encaisse*100):null;
-    return{...c,coutHT,coutTTC,regleFourn,resteFourn,encaisse,montantOffre,resteEncaisser,marge,margePct};
+    const duree=rentaDuree(c,offre);
+    return{...c,coutHT,coutTTC,regleFourn,resteFourn,encaisse,montantOffre,resteEncaisser,marge,margePct,
+      localisation:offre?offre.localisation:'',duree};
   }).sort((a,b)=>b.encaisse-a.encaisse||b.coutTTC-a.coutTTC);
 }
 RENDER.rentabilite=async()=>{
@@ -4773,10 +4775,11 @@ RENDER.rentabilite=async()=>{
       <div style="padding:12px 16px;background:${c.marge>=0?'var(--noir)':'#7a2e2e'};color:#fff;display:flex;justify-content:space-between;align-items:center">
         <div style="cursor:pointer;flex:1" onclick="window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}']=!window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}'];RENDER.rentabilite()">
           <b>${ouvert?'▾':'▸'} ${esc(c.chantier)}</b> <span style="font-size:11px;opacity:.85">— ${esc(c.clientNom||'(client non identifié)')}</span>
+          <div style="font-size:10.5px;opacity:.75;margin-top:2px">${c.localisation?'📍 '+esc(c.localisation)+' · ':''}${c.duree?'⏱ '+esc(c.duree.lib)+(c.duree.enCours?' (en cours)':' (terminé)'):''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaEncaissementModal('${c.chantier.replace(/'/g,"\\'")}','${(c.clientNom||'').replace(/'/g,"\\'")}','${c.clientId||''}')">+ Encaissement</button>
-          <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaOffreModal('${c.chantier.replace(/'/g,"\\'")}',${c.montantOffre||0})">💰 Offre</button>
+          <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaOffreModal('${c.chantier.replace(/'/g,"\\'")}',${c.montantOffre||0})">ℹ️ Infos</button>
           <div style="text-align:right"><b>${F0(c.marge)} FCFA</b><div style="font-size:10.5px;opacity:.8">marge${c.margePct!==null?' '+c.margePct+'%':''}</div></div>
         </div>
       </div>
@@ -4832,23 +4835,47 @@ async function rentaSupprimerEncaissement(id){
   await loadAll();RENDER.rentabilite();toast('Encaissement supprimé.');
 }
 function rentaOffreModal(chantier,montantActuel){
-  openModal(`<div class="mh"><h3>💰 Montant de l'offre — ${esc(chantier)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  const existant=ST.chantier_offres.find(o=>o.chantier===chantier)||{};
+  openModal(`<div class="mh"><h3>ℹ️ Infos chantier — ${esc(chantier)}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
-    <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Montant du devis/offre accepté par le client pour ce chantier — permet de calculer le reste à encaisser.</div>
     <div class="frow"><label>Montant de l'offre (FCFA)</label><input type="number" id="roffre-montant" value="${montantActuel||0}"></div>
+    <div class="frow"><label>Localisation (quartier, ville, commune…)</label><input id="roffre-localisation" value="${esc(existant.localisation||'')}" placeholder="Ex : Cocody Angré, Abidjan"></div>
+    <div class="frow c2">
+      <div><label>Date de début des travaux</label><input type="date" id="roffre-debut" value="${existant.dateDebut||''}"></div>
+      <div><label>Date de fin (si terminé — sinon laisser vide)</label><input type="date" id="roffre-fin" value="${existant.dateFin||''}"></div>
+    </div>
+    <div style="font-size:11px;color:var(--mut);margin-top:2px">Si la date de début n'est pas renseignée, la durée est estimée depuis la première facture d'achat du chantier.</div>
   </div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="rentaSaveOffre('${chantier.replace(/'/g,"\\'")}')">Enregistrer</button></div>`,true);
 }
 async function rentaSaveOffre(chantier){
   const montant=+document.getElementById('roffre-montant').value||0;
+  const localisation=document.getElementById('roffre-localisation').value.trim();
+  const dateDebut=document.getElementById('roffre-debut').value||'';
+  const dateFin=document.getElementById('roffre-fin').value||'';
   const existant=ST.chantier_offres.find(o=>o.chantier===chantier);
-  await put('chantier_offres',{id:existant?existant.id:uid('roffre'),chantier,montantOffre:Math.round(montant),updatedAt:Date.now()});
-  await loadAll();closeModal();RENDER.rentabilite();toast('Montant de l\'offre enregistré.');
+  await put('chantier_offres',{id:existant?existant.id:uid('roffre'),chantier,montantOffre:Math.round(montant),localisation,dateDebut,dateFin,updatedAt:Date.now()});
+  await loadAll();closeModal();RENDER.rentabilite();toast('Infos chantier enregistrées.');
+}
+function rentaDuree(c,offre){
+  const debut=offre&&offre.dateDebut?offre.dateDebut:
+    (c.achats.length?c.achats.reduce((min,a)=>a.date&&(!min||a.date<min)?a.date:min,null):null);
+  if(!debut)return null;
+  const fin=offre&&offre.dateFin?offre.dateFin:today();
+  const jours=Math.floor((new Date(fin)-new Date(debut))/86400000);
+  if(jours<0)return null;
+  const mois=Math.floor(jours/30.44);
+  const enCours=!(offre&&offre.dateFin);
+  let lib;
+  if(mois<1)lib=jours+' jour(s)';
+  else if(mois<12)lib=mois+' mois';
+  else lib=Math.floor(mois/12)+' an(s) '+(mois%12?( mois%12)+' mois':'');
+  return{jours,lib,enCours,debut,fin:offre&&offre.dateFin?offre.dateFin:null};
 }
 function rentaExportCSV(){
   const liste=window._rentaListe||[];
-  let c='Chantier;Client;Offre;Encaissé;Reste à encaisser;Coût fournisseurs HT;Réglé fournisseurs;Reste à payer;Marge;Marge %\n';
-  liste.forEach(x=>{c+=`"${x.chantier.replace(/"/g,"'")}";"${(x.clientNom||'').replace(/"/g,"'")}";${x.montantOffre||''};${x.encaisse};${x.resteEncaisser!==null?x.resteEncaisser:''};${x.coutHT};${x.regleFourn};${x.resteFourn};${x.marge};${x.margePct!==null?x.margePct:''}\n`;});
+  let c='Chantier;Client;Localisation;Durée;Offre;Encaissé;Reste à encaisser;Coût fournisseurs HT;Réglé fournisseurs;Reste à payer;Marge;Marge %\n';
+  liste.forEach(x=>{c+=`"${x.chantier.replace(/"/g,"'")}";"${(x.clientNom||'').replace(/"/g,"'")}";"${(x.localisation||'').replace(/"/g,"'")}";"${x.duree?x.duree.lib+(x.duree.enCours?' (en cours)':' (terminé)'):''}";${x.montantOffre||''};${x.encaisse};${x.resteEncaisser!==null?x.resteEncaisser:''};${x.coutHT};${x.regleFourn};${x.resteFourn};${x.marge};${x.margePct!==null?x.margePct:''}\n`;});
   dl('rentabilite_chantiers.csv',c);
 }
 
