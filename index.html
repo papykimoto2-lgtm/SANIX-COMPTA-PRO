@@ -4517,8 +4517,11 @@ RENDER.staging=()=>{
       ?`${esc(p.chantier)} — ${esc(p.fournisseur)} — ${(p.lignes||[]).length} ligne(s) — ${F0(p.total_ttc)} FCFA`
       :`${esc(p.mois_feuille)} — ${esc(p.libelle)} — E:${F0(p.entree)} S:${F0(p.sortie)}`;
     const badge=s.status==='valide'?'<span class="badge b-green">validé</span>':s.status==='rejete'?'<span class="badge b-gray">rejeté</span>':s.status==='ignore'?'<span class="badge b-gray">ignoré</span>':'<span class="badge b-cuivre">en attente</span>';
+    const raison=s.status==='rejete'&&s.rejetRaison?`<div style="font-size:10.5px;color:var(--red);margin-top:2px">⚠ ${esc(s.rejetRaison)}</div>`:'';
+    const actionReouvrir=s.status==='rejete'?`<button class="linkbtn" title="Remettre en attente pour retraiter" onclick="stgReouvrirLigne('${s.id}')">↺</button>`:'';
     return`<tr><td class="ta-c"><input type="checkbox" data-stg="${s.id}" ${window._stgSel.has(s.id)?'checked':''} onchange="stgToggle('${s.id}',this.checked)"></td>
-    <td>${s.kind==='achat_chantier'?'Chantier':'Caisse'}</td><td>${p.date||''}</td><td>${desc}</td><td class="ta-c">${badge}</td></tr>`;
+    <td>${s.kind==='achat_chantier'?'Chantier':'Caisse'}</td><td>${p.date||''}</td><td>${desc}${raison}</td><td class="ta-c">${badge}</td>
+    <td class="ta-c">${actionReouvrir} <button class="linkbtn" title="Voir le détail brut" onclick="stgVoirDetail('${s.id}')">👁</button></td></tr>`;
   }).join('');
   document.getElementById('p-staging').innerHTML=`
   ${panneauImport}
@@ -4536,8 +4539,8 @@ RENDER.staging=()=>{
     <div><label>Recherche</label><input value="${window._stgFiltre.q}" oninput="window._stgFiltre.q=this.value;debounce('stgSearch',()=>{window._stgPage=1;RENDER.staging()})" placeholder="Fournisseur, chantier, libellé…"></div>
   </div>
   <div style="margin-bottom:8px"><label><input type="checkbox" onchange="stgToggleAllVisible(this.checked)"> Sélectionner la page (${slice.length})</label> — ${window._stgSel.size} sélectionné(s) au total</div>
-  <div class="tbl-wrap"><table><thead><tr><th></th><th>Type</th><th>Date</th><th>Détail</th><th class="ta-c">Statut</th></tr></thead>
-  <tbody>${rows||'<tr><td colspan=5 class="empty">Aucune ligne — importez un JSON.</td></tr>'}</tbody></table></div>
+  <div class="tbl-wrap"><table><thead><tr><th></th><th>Type</th><th>Date</th><th>Détail</th><th class="ta-c">Statut</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=6 class="empty">Aucune ligne — importez un JSON.</td></tr>'}</tbody></table></div>
   <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
     <button class="btn sm gh" onclick="window._stgPage=Math.max(1,window._stgPage-1);RENDER.staging()">‹ Préc.</button>
     <span style="font-size:12px">Page ${window._stgPage}/${pages}</span>
@@ -4658,6 +4661,24 @@ async function stgRejeterSelection(){
     toast(items.length+' ligne(s) rejetée(s).');
   }
   window._stgSel.clear();await loadAll();RENDER.staging();
+}
+async function stgReouvrirLigne(id){
+  const s=ST.staging.find(x=>x.id===id);if(!s)return;
+  s.status='en_attente';delete s.rejetRaison;delete s.valDate;
+  await put('staging',s);await loadAll();RENDER.staging();toast('Ligne remise en attente.');
+}
+function stgVoirDetail(id){
+  const s=ST.staging.find(x=>x.id===id);if(!s)return;
+  const p=s.payload;
+  openModal(`<div class="mh"><h3>Détail brut — ${s.kind==='achat_chantier'?'Chantier':'Caisse'}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><label>Statut</label><input value="${s.status}${s.rejetRaison?' — '+esc(s.rejetRaison):''}" disabled style="background:#f4f2ec"></div>
+    <div style="margin-top:10px;padding:12px;background:#f7f5f0;border-radius:8px;font-size:11.5px;font-family:monospace;white-space:pre-wrap;max-height:340px;overflow:auto">${esc(JSON.stringify(p,null,2))}</div>
+  </div>
+  <div class="mf">
+    <button class="btn gh sm" onclick="closeModal()">Fermer</button>
+    ${s.status==='rejete'?`<button class="btn sm" onclick="closeModal();stgReouvrirLigne('${id}')">↺ Remettre en attente</button>`:''}
+  </div>`,true);
 }
 async function stgNettoyerLignesVides(){
   const cibles=ST.staging.filter(s=>s.status==='en_attente'&&s.kind==='caisse'&&!(+s.payload.entree||0)&&!(+s.payload.sortie||0));
