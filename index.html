@@ -831,6 +831,7 @@ async function boot(){
   updateNetBadge();updatePendingBadge();startAutosync();
   msgUpdateBadge();
   populateDlComptes();
+  paramCpt(); // préchauffe le cache mémoire des comptes techniques — évite tout délai au premier clic sur une modale (ex. provision Balance âgée)
   if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true); // rattrape au démarrage les factures restées provisoires
   setInterval(()=>{if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true);updatePendingBadge();},120000); // nouvelle tentative toutes les 2 min, indépendamment de la config Supabase
   if(typeof window!=='undefined'){
@@ -3769,7 +3770,10 @@ RENDER.parametrage=()=>{
   if(tab==='societe')societeForm();
   if(tab==='comptable')comptableForm();
 };
-async function paramCpt(){let p=await getOne('meta','paramCpt');if(!p){p={id:'paramCpt',value:{
+window._paramCptCache=null;
+async function paramCpt(){
+  if(window._paramCptCache)return window._paramCptCache;
+  let p=await getOne('meta','paramCpt');if(!p){p={id:'paramCpt',value:{
   cptClient:'411',cptFourn:'401',cptVente:'701',cptAchat:'601',cptTvaColl:'4431',cptTvaDed:'4452',cptAib:'4499',
   cptBanque:'521',cptCaisse:'571',cptRemise:'709',cptFraisBank:'631',cptEcartPlus:'776',cptEcartMoins:'676',
   cptDotation:'6813',cptResultat:'12',tauxTva:'18',tauxAib:'1',tauxAcompteBIC:'0.5',pctCnpsPatronale:'72',
@@ -3787,6 +3791,7 @@ async function paramCpt(){let p=await getOne('meta','paramCpt');if(!p){p={id:'pa
     p.value.cptClientDefaut='4111';p.value.cptFournDefaut='4011';p.value.cptChantierDefaut='604';p.value.cptAttente='4712';
     await put('meta',p);
   } // migration douce
+  window._paramCptCache=p.value;
   return p.value;}
 async function comptableForm(){const p=await paramCpt();const el=document.getElementById('pgCpt');if(!el)return;
   const opt=sel=>ST.comptes.map(c=>`<option value="${c.numero}" ${sel===c.numero?'selected':''}>${c.numero} — ${c.libelle}</option>`).join('');
@@ -3828,6 +3833,7 @@ async function saveParamCpt(){const g=x=>document.getElementById(x).value;
   cptProvDotationClient:g('pProvDotC'),cptProvDepreciationClient:g('pProvDepC'),cptProvDotationFourn:g('pProvDotF'),cptProvDepreciationFourn:g('pProvDepF'),
   cptTvaDue:g('pTvaDue'),cptTvaCredit:g('pTvaCredit'),cptTvaNonRecup:g('pTvaNonRecup'),cptProduitCession:g('pProduitCession'),cptVNCCession:g('pVNCCession'),
   cptClientDefaut:g('pClientDef'),cptFournDefaut:g('pFournDef'),cptChantierDefaut:g('pChantierDef'),cptAttente:g('pAttente')}});
+  window._paramCptCache=null;
   toast('Paramètres comptables enregistrés.');
 }
 async function societeForm(){const s=await societe();const el=document.getElementById('pgSoc');if(!el)return;
