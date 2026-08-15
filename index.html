@@ -826,6 +826,7 @@ async function boot(){
   const ls=await getOne('meta','lastSync');window._lastSync=ls?ls.value:'';
   updateNetBadge();updatePendingBadge();startAutosync();
   msgUpdateBadge();
+  populateDlComptes();
   if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true); // rattrape au démarrage les factures restées provisoires
   setInterval(()=>{if(typeof navigator==='undefined'||navigator.onLine!==false)reconcileFNE(true);updatePendingBadge();},120000); // nouvelle tentative toutes les 2 min, indépendamment de la config Supabase
   if(typeof window!=='undefined'){
@@ -1891,26 +1892,27 @@ RENDER.tva=()=>{
   <p style="margin-top:10px;color:var(--mut);font-size:12.5px">Échéance : 15 du mois suivant (varie selon DGE/CME/SAID). Liquidation : débit 4431 / crédit 4452 / ${nette>=0?'crédit 4441 (TVA due)':'débit 4449 (crédit reportable)'}.</p>`;
 };
 async function genLiquidationTVA(ym){
+  const p=await paramCpt();
   const prorata=window._tvaProrata!==undefined?window._tvaProrata:100;
   let collectee=0,deductibleBrute=0,creditAnt=0;const cut=ym+'-01';
   ST.ecritures.forEach(e=>{
     if(e.id==='e_tva_'+ym)return;
     const em=(e.date||'').slice(0,7);
     e.lignes.forEach(l=>{const c=l.compte||'',d=+l.debit||0,cr=+l.credit||0;
-      if(em===ym){if(c.startsWith('4431'))collectee+=cr-d;if(c.startsWith('4452')||c.startsWith('4451'))deductibleBrute+=d-cr;}
-      if((e.date||'')<cut&&c.startsWith('4449'))creditAnt+=d-cr;});
+      if(em===ym){if(c.startsWith(p.cptTvaColl))collectee+=cr-d;if(c.startsWith(p.cptTvaDed)||c.startsWith('4451'))deductibleBrute+=d-cr;}
+      if((e.date||'')<cut&&c.startsWith(p.cptTvaCredit))creditAnt+=d-cr;});
   });
   collectee=Math.round(collectee);deductibleBrute=Math.round(deductibleBrute);
   const deductible=Math.round(deductibleBrute*prorata/100);
   creditAnt=Math.round(Math.max(0,creditAnt));
   if(collectee<=0&&deductibleBrute<=0){toast('Aucune TVA sur la période.');return;}
   const net=collectee-deductible,eff=net-creditAnt;
-  const lignes=[{compte:'4431',libelle:'TVA collectée liquidée',debit:collectee,credit:0,lettre:''},
-    {compte:'4452',libelle:'TVA déductible liquidée',debit:0,credit:deductibleBrute,lettre:''}];
-  if(prorata<100&&deductibleBrute>deductible)lignes.push({compte:'658',libelle:'TVA non récupérable (prorata '+prorata+'%)',debit:deductibleBrute-deductible,credit:0,lettre:''});
-  if(creditAnt>0)lignes.push({compte:'4449',libelle:'Imputation crédit TVA antérieur',debit:0,credit:creditAnt,lettre:''});
-  if(eff>=0)lignes.push({compte:'4441',libelle:'État, TVA due '+ym,debit:0,credit:eff,lettre:''});
-  else lignes.push({compte:'4449',libelle:'État, crédit TVA à reporter '+ym,debit:-eff,credit:0,lettre:''});
+  const lignes=[{compte:p.cptTvaColl,libelle:'TVA collectée liquidée',debit:collectee,credit:0,lettre:''},
+    {compte:p.cptTvaDed,libelle:'TVA déductible liquidée',debit:0,credit:deductibleBrute,lettre:''}];
+  if(prorata<100&&deductibleBrute>deductible)lignes.push({compte:p.cptTvaNonRecup,libelle:'TVA non récupérable (prorata '+prorata+'%)',debit:deductibleBrute-deductible,credit:0,lettre:''});
+  if(creditAnt>0)lignes.push({compte:p.cptTvaCredit,libelle:'Imputation crédit TVA antérieur',debit:0,credit:creditAnt,lettre:''});
+  if(eff>=0)lignes.push({compte:p.cptTvaDue,libelle:'État, TVA due '+ym,debit:0,credit:eff,lettre:''});
+  else lignes.push({compte:p.cptTvaCredit,libelle:'État, crédit TVA à reporter '+ym,debit:-eff,credit:0,lettre:''});
   const jl=ST.journaux.find(j=>j.code==='OD')?'OD':'VT';
   const e={id:'e_tva_'+ym,exId:ST.exId,journal:jl,date:ym+'-'+new Date(+ym.slice(0,4),+ym.slice(5,7),0).getDate(),piece:'TVA-'+ym,libelle:'Liquidation TVA '+ym,lignes,created:Date.now()};
   await put('ecritures',e);await loadAll();RENDER.tva();
@@ -1979,7 +1981,7 @@ RENDER.balageee=()=>{
     <td class="ta-r mono">${F0(l.tr0_30)||'—'}</td><td class="ta-r mono">${F0(l.tr31_60)||'—'}</td><td class="ta-r mono">${F0(l.tr61_90)||'—'}</td>
     <td class="ta-r mono" style="color:${l.trPlus90?'var(--red)':'inherit'};font-weight:${l.trPlus90?'700':'400'}">${l.trPlus90?F0(l.trPlus90):'—'}</td>
     <td class="ta-r mono" style="font-weight:700">${F0(l.solde)}</td>
-    <td class="ta-c">${l.trPlus90>0.5?`<button class="btn sm gh" onclick="balageeeProvision('${l.compte}','${esc(l.nom).replace(/'/g,"\\'")}',${l.trPlus90})">+ Provision</button>`:''}</td></tr>`).join('');
+    <td class="ta-c">${l.trPlus90>0.5?`<button class="btn sm gh" onclick="balageeeProvisionModal('${l.compte}','${esc(l.nom).replace(/'/g,"\\'")}',${l.trPlus90},'${type}')">+ Provision</button>`:''}</td></tr>`).join('');
   document.getElementById('p-balageee').innerHTML=`
   <div class="grid kpis" style="margin-bottom:14px">
     <div class="card kpi b"><div class="lb">Total ${type==='client'?'créances':'dettes'}</div><div class="v mono">${F0(tot.solde)}</div></div>
@@ -1991,13 +1993,64 @@ RENDER.balageee=()=>{
   <tbody>${rows||'<tr><td colspan=8 class="empty">Aucun solde ouvert.</td></tr>'}</tbody>
   <tfoot><tr class="foot-tr"><td colspan=2>TOTAUX</td><td class="ta-r mono">${F0(tot.tr0_30)}</td><td class="ta-r mono">${F0(tot.tr31_60)}</td><td class="ta-r mono">${F0(tot.tr61_90)}</td><td class="ta-r mono">${F0(tot.trPlus90)}</td><td class="ta-r mono">${F0(tot.solde)}</td><td></td></tr></tfoot></table></div>`;
 };
-async function balageeeProvision(compteClient,nom,montant){
-  if(!confirm('Passer une provision pour dépréciation sur '+nom+' ('+F0(montant)+' FCFA, ancienneté +90j) ?\nÉcriture : débit 6594 (dotation) / crédit 491 (dépréciation créances).'))return;
-  if(!ST.comptes.some(c=>c.numero==='491'))await put('comptes',{id:'c_491',numero:'491',libelle:'Dépréciation des comptes clients',type:'A',classe:'4'});
-  if(!ST.comptes.some(c=>c.numero==='6594'))await put('comptes',{id:'c_6594',numero:'6594',libelle:'Dotations dépréciations créances clients',type:'C',classe:'6'});
-  await put('ecritures',{id:uid('e_prov'),exId:ST.exId,journal:'OD',date:today(),piece:'PROV-'+today().slice(0,4),libelle:'Provision créance douteuse — '+nom,
-    lignes:[{compte:'6594',libelle:'Dotation provision — '+nom,debit:Math.round(montant),credit:0},{compte:'491',libelle:'Dépréciation — '+nom,debit:0,credit:Math.round(montant)}],created:Date.now()});
-  await loadAll();RENDER.balageee();toast('Provision passée pour '+nom+'.');
+async function balageeeProvisionModal(compteTiers,nom,montant,type){
+  populateDlComptes();
+  const p=await paramCpt();
+  const cptDotation=type==='client'?p.cptProvDotationClient:p.cptProvDotationFourn;
+  const cptDepreciation=type==='client'?p.cptProvDepreciationClient:p.cptProvDepreciationFourn;
+  const libDotation='Dotations dépréciations créances '+(type==='client'?'clients':'fournisseurs débiteurs');
+  const libDepreciation='Dépréciation des comptes '+(type==='client'?'clients':'fournisseurs débiteurs');
+  openModal(`<div class="mh"><h3>⚠ Provision pour dépréciation — ${esc(nom)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="hl" style="background:#fdeeec;border-left:3px solid var(--red);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">
+    Créance de plus de 90 jours sans mouvement — ${F0(montant)} FCFA. La provision constate le risque de non-recouvrement sans annuler la créance (toujours due juridiquement).</div>
+    <div class="frow c2">
+      <div><label>Compte ${type==='client'?'client':'fournisseur'}</label><input value="${esc(compteTiers)} — ${esc(nom)}" disabled style="background:#f4f2ec"></div>
+      <div><label>Montant de la créance</label><input value="${F0(montant)} FCFA" disabled style="background:#f4f2ec"></div>
+    </div>
+    <div class="frow c2">
+      <div><label>Taux de provision (%)</label><input type="number" id="bap-taux" value="100" min="1" max="100" onchange="balageeeProvisionRecalc(${montant})"></div>
+      <div><label>Montant provisionné</label><input id="bap-montant" type="number" value="${Math.round(montant)}"></div>
+    </div>
+    <div class="frow c3">
+      <div><label>Date</label><input type="date" id="bap-date" value="${today()}"></div>
+      <div><label>Compte dotation</label><input id="bap-cpt-dotation" list="dl-comptes" autocomplete="off" value="${esc(cptDotation)}"></div>
+      <div><label>Compte dépréciation</label><input id="bap-cpt-depreciation" list="dl-comptes" autocomplete="off" value="${esc(cptDepreciation)}"></div>
+    </div>
+    <div style="font-size:11px;color:var(--mut);margin-top:2px">Comptes par défaut modifiables ici pour ce cas précis. Pour changer le défaut de manière permanente : Paramétrage → Paramètres comptables → Provisions.</div>
+    <div style="margin-top:12px;padding:10px 14px;background:#f7f5f0;border-radius:8px;font-size:12px">
+      <b>Écriture générée (journal OD)</b>
+      <table style="width:100%;margin-top:6px;font-size:11.5px"><tbody>
+        <tr><td class="mono" id="bap-prev-cpt1">${esc(cptDotation)}</td><td>${esc(libDotation)}</td><td class="ta-r mono" id="bap-prev-debit">${Math.round(montant)}</td><td></td></tr>
+        <tr><td class="mono" id="bap-prev-cpt2">${esc(cptDepreciation)}</td><td>${esc(libDepreciation)} — ${esc(nom)}</td><td></td><td class="ta-r mono" id="bap-prev-credit">${Math.round(montant)}</td></tr>
+      </tbody></table>
+    </div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" style="background:var(--red)" onclick="balageeeProvisionValider('${compteTiers}','${esc(nom).replace(/'/g,"\\'")}','${type}')">⚠ Passer la provision</button></div>`,true);
+  document.getElementById('bap-cpt-dotation').addEventListener('input',e=>document.getElementById('bap-prev-cpt1').textContent=e.target.value);
+  document.getElementById('bap-cpt-depreciation').addEventListener('input',e=>document.getElementById('bap-prev-cpt2').textContent=e.target.value);
+}
+function balageeeProvisionRecalc(montantBase){
+  const taux=+document.getElementById('bap-taux').value||0;
+  const m=Math.round(montantBase*taux/100);
+  document.getElementById('bap-montant').value=m;
+  document.getElementById('bap-prev-debit').textContent=F0(m);
+  document.getElementById('bap-prev-credit').textContent=F0(m);
+}
+async function balageeeProvisionValider(compteTiers,nom,type){
+  const montant=+document.getElementById('bap-montant').value||0;
+  if(montant<=0){toast('Montant invalide.');return;}
+  const date=document.getElementById('bap-date').value||today();
+  const cptDotation=document.getElementById('bap-cpt-dotation').value.trim();
+  const cptDepreciation=document.getElementById('bap-cpt-depreciation').value.trim();
+  if(!cptDotation||!cptDepreciation){toast('Comptes dotation/dépréciation requis.');return;}
+  const libDotation='Dotations dépréciations créances '+(type==='client'?'clients':'fournisseurs débiteurs');
+  const libDepreciation='Dépréciation des comptes '+(type==='client'?'clients':'fournisseurs débiteurs');
+  if(!ST.comptes.some(c=>c.numero===cptDepreciation))await put('comptes',{id:'c_'+cptDepreciation,numero:cptDepreciation,libelle:libDepreciation,type:'A',classe:cptDepreciation[0]});
+  if(!ST.comptes.some(c=>c.numero===cptDotation))await put('comptes',{id:'c_'+cptDotation,numero:cptDotation,libelle:libDotation,type:'C',classe:cptDotation[0]});
+  await put('ecritures',{id:uid('e_prov'),exId:ST.exId,journal:'OD',date,piece:'PROV-'+date.slice(0,4),libelle:'Provision créance douteuse — '+nom,
+    lignes:[{compte:cptDotation,libelle:'Dotation provision — '+nom,debit:Math.round(montant),credit:0},{compte:cptDepreciation,libelle:'Dépréciation — '+nom,debit:0,credit:Math.round(montant)}],created:Date.now()});
+  await loadAll();closeModal();RENDER.balageee();toast('Provision de '+F0(montant)+' FCFA passée pour '+nom+'.');
 }
 
 /* ---- Rapprochement bancaire ---- */
@@ -2353,13 +2406,14 @@ function cutoffGenererLignes(nature,compteReg,compteContrepartie,libelle,ht,tva)
   return{cur,extourne};
 }
 async function ouvrirCutoff(exId){
+  populateDlComptes();
   window._cutoffExId=exId;
   const ex=ST.exercices.find(x=>x.id===exId);
   openModal(`<div class="mh"><h3>📆 Régularisations de fin d'exercice ${ex?ex.libelle.replace(/[^0-9]/g,''):''}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
     <div class="frow c2">
       <div><label>Nature</label><select id="cf-nature" onchange="cutoffMajExplain()">${Object.entries(NATURES_CUTOFF).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}</select></div>
-      <div><label>Compte de contrepartie</label><input id="cf-compte" placeholder="Ex : 6132"></div>
+      <div><label>Compte de contrepartie</label><input id="cf-compte" list="dl-comptes" autocomplete="off" placeholder="Ex : 6132"></div>
     </div>
     <div class="frow"><div><label>Libellé</label><input id="cf-libelle" placeholder="Ex : Loyer janvier N+1 payé d'avance"></div></div>
     <div class="frow c2">
@@ -2839,10 +2893,11 @@ async function saveAvoir(origId){
   await loadAll();closeModal();RENDER.facturation();toast(msg);
 }
 async function genAvoirEcriture(av,orig){
-  const cl=ST.tiers.find(t=>t.id===av.clientId);const cptClient=cl?cl.compte:'4111';
+  const p=await paramCpt();
+  const cl=ST.tiers.find(t=>t.id===av.clientId);const cptClient=cl?cl.compte:p.cptClientDefaut;
   const ht=Math.abs(av.ht),tva=Math.abs(av.tva),ttc=Math.abs(av.ttc);
-  const lignes=[{compte:'701',libelle:'Avoir sur ventes',debit:ht,credit:0,lettre:''},
-    {compte:'4431',libelle:'TVA sur avoir',debit:tva,credit:0,lettre:''},
+  const lignes=[{compte:p.cptVente,libelle:'Avoir sur ventes',debit:ht,credit:0,lettre:''},
+    {compte:p.cptTvaColl,libelle:'TVA sur avoir',debit:tva,credit:0,lettre:''},
     {compte:cptClient,tiers:av.clientId,libelle:'Client '+av.clientNom,debit:0,credit:ttc,lettre:''}];
   const e={id:'e_fac_'+av.id,exId:ST.exId,journal:'VT',date:av.date,piece:av.numero,libelle:'Avoir '+av.numero+' / '+orig.numero,lignes,created:Date.now()};
   await put('ecritures',e);
@@ -2924,13 +2979,14 @@ async function delReglementFacture(factureId,regId){
   await loadAll();reglerFacture(factureId);RENDER.facturation();toast('Règlement supprimé.');
 }
 async function genReglementFactureEcriture(f,reg){
-  const cl=ST.tiers.find(t=>t.id===f.clientId);const cptClient=cl?cl.compte:'4111';
+  const p=await paramCpt();
+  const cl=ST.tiers.find(t=>t.id===f.clientId);const cptClient=cl?cl.compte:p.cptClientDefaut;
   const lignes=[
     {compte:reg.compte,libelle:(reg.mode||'Règlement')+' — '+f.clientNom,debit:reg.montant,credit:0,lettre:''},
     {compte:cptClient,tiers:f.clientId,libelle:'Règlement facture '+f.numero,debit:0,credit:reg.montant,lettre:''}
   ];
   const jl=(reg.compte||'').startsWith('57')?(ST.journaux.find(j=>j.code==='CA')?'CA':'OD'):(ST.journaux.find(j=>j.code==='BQ')?'BQ':'OD');
-  const e={id:'e_freg_'+f.id+'_'+reg.id,exId:ST.exId,journal:jl,date:reg.date,piece:f.numero+'-R',libelle:'Règlement '+f.numero+' — '+f.clientNom+(reg.ref?' ('+reg.ref+')':''),lignes,created:Date.now()};
+  const e={id:'e_freg_'+f.id+'_'+reg.id,exId:f.exId||ST.exId,journal:jl,date:reg.date,piece:f.numero+'-R',libelle:'Règlement '+f.numero+' — '+f.clientNom+(reg.ref?' ('+reg.ref+')':''),lignes,created:Date.now()};
   await put('ecritures',e);
 }
 
@@ -2986,7 +3042,8 @@ async function delReglementAchat(achatId,regId){
   await loadAll();reglerAchat(achatId);RENDER.achats();toast('Règlement supprimé.');
 }
 async function genReglementAchatEcriture(a,reg){
-  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:'4011';
+  const p=await paramCpt();
+  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:p.cptFournDefaut;
   const lignes=[
     {compte:cptFourn,tiers:a.fournId,libelle:'Règlement '+a.fournNom,debit:reg.montant,credit:0,lettre:''},
     {compte:reg.compte,libelle:(reg.mode||'Règlement')+' — '+a.fournNom,debit:0,credit:reg.montant,lettre:''}
@@ -2994,7 +3051,7 @@ async function genReglementAchatEcriture(a,reg){
   if(a.nature==='service'&&a.tva>0){
     const tvaPart=Math.round(a.tva*reg.montant/a.ttc);
     if(tvaPart>0){
-      lignes.push({compte:'4452',libelle:'TVA déductible exigible (règlement partiel service)',debit:tvaPart,credit:0,lettre:''});
+      lignes.push({compte:p.cptTvaDed,libelle:'TVA déductible exigible (règlement partiel service)',debit:tvaPart,credit:0,lettre:''});
       lignes.push({compte:'4453',libelle:'Transfert TVA en attente',debit:0,credit:tvaPart,lettre:''});
     }
   }
@@ -3392,9 +3449,10 @@ async function delAchat(id){
   await loadAll();RENDER.achats();toast('Facture d\'achat supprimée.');
 }
 async function genAchatEcriture(a){
-  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:'4011';
+  const p=await paramCpt();
+  const fo=ST.tiers.find(t=>t.id===a.fournId);const cptFourn=fo?fo.compte:p.cptFournDefaut;
   const lignes=a.lignes.map(l=>({compte:l.compte,libelle:l.des,debit:Math.round(l.ht),credit:0,lettre:''}));
-  if(a.tva>0){const cptTva=a.nature==='immo'?'4451':a.nature==='service'?'4453':'4452';
+  if(a.tva>0){const cptTva=a.nature==='immo'?'4451':a.nature==='service'?'4453':p.cptTvaDed;
     const lib=a.nature==='immo'?'TVA récup. immobilisations':a.nature==='service'?'TVA déductible en attente (service)':'TVA déductible';
     lignes.push({compte:cptTva,libelle:lib,debit:Math.round(a.tva),credit:0,lettre:''});}
   lignes.push({compte:cptFourn,tiers:a.fournId,libelle:'Fournisseur '+a.fournNom,debit:0,credit:Math.round(a.ttc),lettre:''});
@@ -3505,13 +3563,14 @@ function genFneRef(num){ // référence de certification simulée (la vraie vien
   return 'FNE'+(curEx().debut||today()).slice(0,4)+h.toString(36).toUpperCase().padStart(8,'0');
 }
 async function genFactureEcriture(f){
-  // écriture VT auto : client débit TTC / 70x crédit HT / 4431 crédit TVA / AIB 4494
+  // écriture VT auto : client débit TTC / 70x crédit HT / TVA collectée / AIB
+  const p=await paramCpt();
   const cl=ST.tiers.find(t=>t.id===f.clientId);
-  const cptClient=cl?cl.compte:'4111';
+  const cptClient=cl?cl.compte:p.cptClientDefaut;
   const lignes=[{compte:cptClient,tiers:f.clientId,libelle:'Client '+f.clientNom,debit:f.ttc,credit:0,lettre:''},
-    {compte:'701',libelle:'Ventes',debit:0,credit:f.ht,lettre:''},
-    {compte:'4431',libelle:'TVA collectée',debit:0,credit:f.tva,lettre:''}];
-  if(f.aibV>0)lignes.push({compte:'4499',libelle:'AIB '+f.aib+'%',debit:0,credit:f.aibV,lettre:''});
+    {compte:p.cptVente,libelle:'Ventes',debit:0,credit:f.ht,lettre:''},
+    {compte:p.cptTvaColl,libelle:'TVA collectée',debit:0,credit:f.tva,lettre:''}];
+  if(f.aibV>0)lignes.push({compte:p.cptAib,libelle:'AIB '+f.aib+'%',debit:0,credit:f.aibV,lettre:''});
   const e={id:'e_fac_'+f.id,exId:f.exId||ST.exId,journal:'VT',date:f.date,piece:f.numero,libelle:'Facture '+f.numero+' — '+f.clientNom,lignes,created:Date.now()};
   await put('ecritures',e);
 }
@@ -3683,8 +3742,21 @@ RENDER.parametrage=()=>{
 async function paramCpt(){let p=await getOne('meta','paramCpt');if(!p){p={id:'paramCpt',value:{
   cptClient:'411',cptFourn:'401',cptVente:'701',cptAchat:'601',cptTvaColl:'4431',cptTvaDed:'4452',cptAib:'4499',
   cptBanque:'521',cptCaisse:'571',cptRemise:'709',cptFraisBank:'631',cptEcartPlus:'776',cptEcartMoins:'676',
-  cptDotation:'6813',cptResultat:'12',tauxTva:'18',tauxAib:'1',tauxAcompteBIC:'0.5',pctCnpsPatronale:'72'}};await put('meta',p);}
+  cptDotation:'6813',cptResultat:'12',tauxTva:'18',tauxAib:'1',tauxAcompteBIC:'0.5',pctCnpsPatronale:'72',
+  cptProvDotationClient:'6594',cptProvDepreciationClient:'491',cptProvDotationFourn:'6595',cptProvDepreciationFourn:'491F',
+  cptTvaDue:'4441',cptTvaCredit:'4449',cptTvaNonRecup:'658',cptProduitCession:'775',cptVNCCession:'6813',
+  cptClientDefaut:'4111',cptFournDefaut:'4011',cptChantierDefaut:'604',cptAttente:'4712'}};await put('meta',p);}
   if(p.value.tauxAcompteBIC===undefined){p.value.tauxAcompteBIC='0.5';p.value.pctCnpsPatronale='72';await put('meta',p);} // migration douce
+  if(p.value.cptProvDotationClient===undefined){
+    p.value.cptProvDotationClient='6594';p.value.cptProvDepreciationClient='491';
+    p.value.cptProvDotationFourn='6595';p.value.cptProvDepreciationFourn='491F';await put('meta',p);
+  } // migration douce
+  if(p.value.cptTvaDue===undefined){
+    p.value.cptTvaDue='4441';p.value.cptTvaCredit='4449';p.value.cptTvaNonRecup='658';
+    p.value.cptProduitCession='775';p.value.cptVNCCession='6813';
+    p.value.cptClientDefaut='4111';p.value.cptFournDefaut='4011';p.value.cptChantierDefaut='604';p.value.cptAttente='4712';
+    await put('meta',p);
+  } // migration douce
   return p.value;}
 async function comptableForm(){const p=await paramCpt();const el=document.getElementById('pgCpt');if(!el)return;
   const opt=sel=>ST.comptes.map(c=>`<option value="${c.numero}" ${sel===c.numero?'selected':''}>${c.numero} — ${c.libelle}</option>`).join('');
@@ -3701,6 +3773,16 @@ async function comptableForm(){const p=await paramCpt();const el=document.getEle
     <div class="frow c3">${f('pBanque','Banque (521)',p.cptBanque)}${f('pCaisse','Caisse (571)',p.cptCaisse)}${f('pFrais','Frais bancaires (631)',p.cptFraisBank)}</div>
     <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Divers</div>
     <div class="frow c3">${f('pEcP','Gain de change (776)',p.cptEcartPlus)}${f('pEcM','Perte de change (676)',p.cptEcartMoins)}${f('pDot','Dotation amort. (6813)',p.cptDotation)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Provisions pour dépréciation (Balance âgée)</div>
+    <div class="frow c2">${f('pProvDotC','Dotation provision clients (6594)',p.cptProvDotationClient)}${f('pProvDepC','Dépréciation comptes clients (491)',p.cptProvDepreciationClient)}</div>
+    <div class="frow c2">${f('pProvDotF','Dotation provision fournisseurs (6595)',p.cptProvDotationFourn)}${f('pProvDepF','Dépréciation comptes fournisseurs (491F)',p.cptProvDepreciationFourn)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">TVA — liquidation</div>
+    <div class="frow c3">${f('pTvaDue','TVA due (4441)',p.cptTvaDue)}${f('pTvaCredit','Crédit TVA à reporter (4449)',p.cptTvaCredit)}${f('pTvaNonRecup','TVA non récupérable (658)',p.cptTvaNonRecup)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Immobilisations — cessions</div>
+    <div class="frow c2">${f('pProduitCession','Produit de cession (775)',p.cptProduitCession)}${f('pVNCCession','VNC élément cédé (6813)',p.cptVNCCession)}</div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Comptes par défaut (tiers sans fiche)</div>
+    <div class="frow c3">${f('pClientDef','Client sans fiche (4111)',p.cptClientDefaut)}${f('pFournDef','Fournisseur sans fiche (4011)',p.cptFournDefaut)}${f('pChantierDef','Achat chantier — import (604)',p.cptChantierDefaut)}</div>
+    <div class="frow"><div><label>Compte d'attente — import caisse à ventiler (4712)</label><input id="pAttente" list="dl-comptes" autocomplete="off" value="${p.cptAttente}"></div></div>
     <div class="frow c3"><div><label>Taux TVA (%)</label><input type="number" id="pTvaTx" value="${p.tauxTva}"></div><div><label>Taux AIB (%)</label><input type="number" id="pAibTx" value="${p.tauxAib}"></div><div></div></div>
     <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Télédéclarations (fiscal &amp; social) — à ajuster selon le régime et la loi de finances en vigueur</div>
     <div class="frow c2">
@@ -3712,7 +3794,10 @@ async function comptableForm(){const p=await paramCpt();const el=document.getEle
   </div>`;
 }
 async function saveParamCpt(){const g=x=>document.getElementById(x).value;
-  await put('meta',{id:'paramCpt',value:{cptClient:g('pClient'),cptFourn:g('pFourn'),cptVente:g('pVente'),cptAchat:g('pAchat'),cptTvaColl:g('pTvaC'),cptTvaDed:g('pTvaD'),cptAib:g('pAib'),cptBanque:g('pBanque'),cptCaisse:g('pCaisse'),cptRemise:g('pRemise'),cptFraisBank:g('pFrais'),cptEcartPlus:g('pEcP'),cptEcartMoins:g('pEcM'),cptDotation:g('pDot'),cptResultat:'12',tauxTva:+g('pTvaTx')||18,tauxAib:+g('pAibTx')||1,tauxAcompteBIC:+g('pAcBic')||0.5,pctCnpsPatronale:+g('pCnpsPat')||72}});
+  await put('meta',{id:'paramCpt',value:{cptClient:g('pClient'),cptFourn:g('pFourn'),cptVente:g('pVente'),cptAchat:g('pAchat'),cptTvaColl:g('pTvaC'),cptTvaDed:g('pTvaD'),cptAib:g('pAib'),cptBanque:g('pBanque'),cptCaisse:g('pCaisse'),cptRemise:g('pRemise'),cptFraisBank:g('pFrais'),cptEcartPlus:g('pEcP'),cptEcartMoins:g('pEcM'),cptDotation:g('pDot'),cptResultat:'12',tauxTva:+g('pTvaTx')||18,tauxAib:+g('pAibTx')||1,tauxAcompteBIC:+g('pAcBic')||0.5,pctCnpsPatronale:+g('pCnpsPat')||72,
+  cptProvDotationClient:g('pProvDotC'),cptProvDepreciationClient:g('pProvDepC'),cptProvDotationFourn:g('pProvDotF'),cptProvDepreciationFourn:g('pProvDepF'),
+  cptTvaDue:g('pTvaDue'),cptTvaCredit:g('pTvaCredit'),cptTvaNonRecup:g('pTvaNonRecup'),cptProduitCession:g('pProduitCession'),cptVNCCession:g('pVNCCession'),
+  cptClientDefaut:g('pClientDef'),cptFournDefaut:g('pFournDef'),cptChantierDefaut:g('pChantierDef'),cptAttente:g('pAttente')}});
   toast('Paramètres comptables enregistrés.');
 }
 async function societeForm(){const s=await societe();const el=document.getElementById('pgSoc');if(!el)return;
@@ -4016,12 +4101,13 @@ RENDER.immo=()=>{
 };
 function newImmo(){editImmo(null);}
 function editImmo(id){
+  populateDlComptes();
   const im=id?ST.immos.find(x=>x.id===id):null;
   openModal(`<div class="mh"><h3>${im?'Modifier':'Nouvelle'} immobilisation</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb"><div class="frow c2"><div><label>Code</label><input id="iCode" value="${im?im.code:''}" placeholder="IMMO-001"></div>
   <div><label>Catégorie</label><select id="iCat">${IMMO_CAT.map(c=>`<option ${im&&im.categorie===c?'selected':''}>${c}</option>`).join('')}</select></div></div>
   <div class="frow"><div><label>Désignation</label><input id="iLib" value="${im?im.libelle:''}" placeholder="Ex : Camion Hyundai"></div></div>
-  <div class="frow c2"><div><label>Compte immo (2xx)</label><input id="iCpt" value="${im?im.compte:'2441'}" placeholder="2441"></div>
+  <div class="frow c2"><div><label>Compte immo (2xx)</label><input id="iCpt" list="dl-comptes" autocomplete="off" value="${im?im.compte:'2441'}" placeholder="2441"></div>
   <div><label>Date d'acquisition</label><input type="date" id="iDate" value="${im?im.dateAcq:today()}"></div></div>
   <div class="frow c3"><div><label>Valeur d'origine (HT)</label><input type="number" id="iVal" value="${im?im.valeur:0}"></div>
   <div><label>Durée (ans)</label><input type="number" id="iDur" value="${im?im.duree:5}"></div>
@@ -4049,18 +4135,17 @@ function viewImmo(id){const im=ST.immos.find(x=>x.id===id);const pa=planAmort(im
 async function delImmo(id){const im=ST.immos.find(x=>x.id===id);if(!confirm('Supprimer '+im.libelle+' ?'))return;await del('immos',id);await loadAll();RENDER.immo();toast('Immobilisation supprimée.');}
 async function cederImmo(id){const im=ST.immos.find(x=>x.id===id);
   const px=prompt('Prix de cession (FCFA) :','0');if(px===null)return;
+  const p=await paramCpt();
   const prix=+px||0;const y=+curEx().debut.slice(0,4);
   const pa=planAmort(im);const cur=pa.find(x=>x.an===y)||pa[pa.length-1]||{cumul:0,vnc:im.valeur};
   const cumul=cur.cumul,vnc=cur.vnc;const cpt28=im.compte[0]+'8'+im.compte.slice(2);
-  const ens=[{compte:cpt28,libelle:'Amort. cédé '+im.code,debit:cumul,credit:0},
-    {compte:'6813',libelle:'VNC cédée '+im.code,debit:0,credit:0}];
   // écriture de cession : sortie du bien + produit
   const lignes=[
     {compte:cpt28,libelle:'Reprise amort. '+im.code,debit:cumul,credit:0},
-    {compte:'6813',libelle:'VNC élément cédé '+im.code,debit:vnc,credit:0},
+    {compte:p.cptVNCCession,libelle:'VNC élément cédé '+im.code,debit:vnc,credit:0},
     {compte:im.compte,libelle:'Sortie '+im.code,debit:0,credit:im.valeur},
-    {compte:'521',libelle:'Encaissement cession '+im.code,debit:prix,credit:0},
-    {compte:'775',libelle:'Produit cession '+im.code,debit:0,credit:prix}
+    {compte:p.cptBanque,libelle:'Encaissement cession '+im.code,debit:prix,credit:0},
+    {compte:p.cptProduitCession,libelle:'Produit cession '+im.code,debit:0,credit:prix}
   ];
   await put('ecritures',{id:'e_ces_'+im.id,date:today(),journal:'OD',piece:'CES-'+im.code,libelle:'Cession '+im.libelle,exId:ST.exId,lignes});
   for(const[n,l,t,cl] of [['6813','VNC éléments cédés','C','6'],['775','Produits de cession','R','7'],['521','Banque','A','5'],[cpt28,'Amortissements','P','2']])
@@ -4070,13 +4155,14 @@ async function cederImmo(id){const im=ST.immos.find(x=>x.id===id);
   const pv=prix-vnc;toast('Cession comptabilisée. '+(pv>=0?'Plus-value ':'Moins-value ')+F(Math.abs(pv)));
 }
 async function genDotations(){
+  const p=await paramCpt();
   const y=+curEx().debut.slice(0,4);let n=0;
   for(const im of ST.immos){if(im.statut==='cede')continue;const dot=dotationExercice(im);if(dot<=0)continue;
     const cpt28=im.compte[0]+'8'+im.compte.slice(2);const key='e_dot_'+im.id+'_'+y;
     await put('ecritures',{id:key,date:curEx().debut.slice(0,4)+'-12-31',journal:'OD',piece:'DOT-'+y,libelle:'Dotation amort. '+im.libelle,exId:ST.exId,
-      lignes:[{compte:'6813',libelle:'Dotation '+im.code,debit:dot,credit:0},{compte:cpt28,libelle:'Amort. '+im.code,debit:0,credit:dot}]});
+      lignes:[{compte:p.cptDotation,libelle:'Dotation '+im.code,debit:dot,credit:0},{compte:cpt28,libelle:'Amort. '+im.code,debit:0,credit:dot}]});
     // s'assurer que les comptes existent
-    if(!ST.comptes.some(c=>c.numero==='6813'))await put('comptes',{id:'c_6813',numero:'6813',libelle:'Dotations aux amortissements',type:'C',classe:'6'});
+    if(!ST.comptes.some(c=>c.numero===p.cptDotation))await put('comptes',{id:'c_'+p.cptDotation,numero:p.cptDotation,libelle:'Dotations aux amortissements',type:'C',classe:p.cptDotation[0]});
     if(!ST.comptes.some(c=>c.numero===cpt28))await put('comptes',{id:'c_'+cpt28,numero:cpt28,libelle:'Amortissements '+im.categorie,type:'P',classe:'2'});
     n++;}
   await loadAll();RENDER.immo();toast(n+' dotation(s) comptabilisée(s) au 31/12.');
@@ -4124,10 +4210,9 @@ function importERP(src,nom,file){if(!file)return;const rd=new FileReader();rd.on
 
 /* ---- Import staging : Fiches chantier + Brouillard de caisse (SANIX/Beda) ---- */
 window._stgPage=1;window._stgSel=new Set();window._stgFiltre={kind:'',q:'',statut:'en_attente'};
-function stgCompteCaisse(){return'571';}
-function stgCompteAttente(){if(!ST.comptes.some(c=>c.numero==='4712'))return null;return'4712';}
 async function stgEnsureCompteAttente(){
-  if(!ST.comptes.some(c=>c.numero==='4712'))await put('comptes',{id:'c_4712',numero:'4712',libelle:'Compte d\'attente — import brouillard caisse à ventiler',type:'A',classe:'4'});
+  const p=await paramCpt();
+  if(!ST.comptes.some(c=>c.numero===p.cptAttente))await put('comptes',{id:'c_'+p.cptAttente,numero:p.cptAttente,libelle:'Compte d\'attente — import brouillard caisse à ventiler',type:'A',classe:p.cptAttente[0]});
 }
 async function stgEnsureFournisseur(nom){
   nom=(nom||'').trim()||'(non renseigné)';
@@ -4409,6 +4494,7 @@ RENDER.staging=()=>{
       <button class="btn sm" style="background:var(--green);color:#fff;font-weight:700" onclick="stgValiderTout()">✓✓ Valider TOUT (selon filtre)</button>
       <button class="btn sm gh" onclick="stgRejeterSelection()">✕ Rejeter la sélection</button>
       <button class="btn sm gh" style="color:var(--red)" onclick="stgRejeterTout()">✕✕ Rejeter TOUT (filtré)</button>
+      <button class="btn sm gh" onclick="stgNettoyerLignesVides()">🧹 Nettoyer les lignes vides (E:0 S:0)</button>
     </div>
   </div>
   ${can('admin')?`<div class="card" style="margin-bottom:14px;border:1px solid #f0c4c4">
@@ -4465,37 +4551,37 @@ function stgToggle(id,checked){if(checked)window._stgSel.add(id);else window._st
 function stgToggleAllVisible(checked){
   document.querySelectorAll('[data-stg]').forEach(cb=>{cb.checked=checked;stgToggle(cb.dataset.stg,checked);});
 }
-async function stgValiderUneLigneBuild(s,mapClient){
+async function stgValiderUneLigneBuild(s,mapClient,p){
   const items=[];
   if(s.kind==='achat_chantier'){
-    const p=s.payload;const dateP=p.date||today();
+    const p_=s.payload;const dateP=p_.date||today();
     const exId=await findOrCreateExercicePourDate(dateP);
     const exObj=ST.exercices.find(x=>x.id===exId);
     if(exObj&&exObj.statut==='clôturé')return{status:'skip',items:[]};
-    const fo=await stgEnsureFournisseur(p.fournisseur);
+    const fo=await stgEnsureFournisseur(p_.fournisseur);
     let clientId=null,clientNom=null;
-    const nomClient=mapClient[p.chantier];
+    const nomClient=mapClient[p_.chantier];
     if(nomClient){const cl=await stgEnsureClient(nomClient);clientId=cl.id;clientNom=cl.nom;}
-    const lignes=(p.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:'604',ht:Math.round(l.montant||0),tva:0}));
+    const lignes=(p_.lignes||[]).map(l=>({des:(l.designation||'').slice(0,120),compte:p.cptChantierDefaut,ht:Math.round(l.montant||0),tva:0}));
     const ht=lignes.reduce((a,l)=>a+l.ht,0);
     const numero=await nextAchatNumFast(exId);
-    const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p.chantier.slice(0,20),
-      date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p.chantier,clientId,clientNom};
+    const ach={id:uid('a'),exId,numero,fournId:fo.id,fournNom:fo.nom,piece:'STG-'+p_.chantier.slice(0,20),
+      date:dateP,echeance:'',nature:'bien',lignes,ht,tva:0,ttc:ht,regle:(p_.statut_paiement||'').toUpperCase().includes('PAYE'),reglements:[],created:Date.now(),source:'staging_chantier',chantier:p_.chantier,clientId,clientNom};
     items.push({store:'achats',record:ach});
     const cptFourn=fo.compte;
     const eLignes=lignes.map(l=>({compte:l.compte,libelle:l.des,debit:l.ht,credit:0,lettre:''}));
     eLignes.push({compte:cptFourn,tiers:fo.id,libelle:'Fournisseur '+fo.nom,debit:0,credit:ht,lettre:''});
     items.push({store:'ecritures',record:{id:'e_ach_'+ach.id,exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:dateP,piece:numero,libelle:'Achat '+numero+' — '+fo.nom,lignes:eLignes,created:Date.now()}});
   }else{
-    const p=s.payload;const dateP=(p.date||today());
+    const p_=s.payload;const dateP=(p_.date||today());
     const exId=await findOrCreateExercicePourDate(dateP);
     const exObj=ST.exercices.find(x=>x.id===exId);
     if(exObj&&exObj.statut==='clôturé')return{status:'skip',items:[]};
     const lignes=[];
-    if(p.entree>0)lignes.push({compte:'571',libelle:p.libelle,debit:Math.round(p.entree),credit:0},{compte:'4712',libelle:'À ventiler — '+p.libelle,debit:0,credit:Math.round(p.entree)});
-    if(p.sortie>0)lignes.push({compte:'4712',libelle:'À ventiler — '+p.libelle,debit:Math.round(p.sortie),credit:0},{compte:'571',libelle:p.libelle,debit:0,credit:Math.round(p.sortie)});
-    if(!lignes.length)return{status:'vide',items:[]};
-    items.push({store:'ecritures',record:{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p.piece||''),libelle:p.libelle+' ['+p.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'}});
+    if(p_.entree>0)lignes.push({compte:p.cptCaisse,libelle:p_.libelle,debit:Math.round(p_.entree),credit:0},{compte:p.cptAttente,libelle:'À ventiler — '+p_.libelle,debit:0,credit:Math.round(p_.entree)});
+    if(p_.sortie>0)lignes.push({compte:p.cptAttente,libelle:'À ventiler — '+p_.libelle,debit:Math.round(p_.sortie),credit:0},{compte:p.cptCaisse,libelle:p_.libelle,debit:0,credit:Math.round(p_.sortie)});
+    if(!lignes.length)return{status:'vide',items:[{store:'staging',record:{...s,status:'rejete',valDate:today(),rejetRaison:'Entrée et sortie nulles dans le fichier source'}}]};
+    items.push({store:'ecritures',record:{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p_.piece||''),libelle:p_.libelle+' ['+p_.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'}});
   }
   items.push({store:'staging',record:{...s,status:'valide',valDate:today()}});
   return{status:'ok',items};
@@ -4505,6 +4591,7 @@ async function stgValiderSelection(){
   if(!confirm(window._stgSel.size+' ligne(s) à comptabiliser — chaque écriture sera routée vers l\'exercice correspondant à sa date (créé automatiquement si absent). Confirmer ?'))return;
   await stgEnsureCompteAttente();
   const mapClient=await mappingChantierClient();
+  const paramC=await paramCpt();
   const prog=progressStart('Validation de la sélection…');
   nextAchatNumFastInit();
   let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
@@ -4513,9 +4600,10 @@ async function stgValiderSelection(){
   for(let i=0;i<ids.length;i++){
     const s=ST.staging.find(x=>x.id===ids[i]);if(!s||s.status!=='en_attente')continue;
     try{
-      const r=await stgValiderUneLigneBuild(s,mapClient);
+      const r=await stgValiderUneLigneBuild(s,mapClient,paramC);
       if(r.status==='ok'){ok++;buffer.push(...r.items);}
-      else if(r.status==='skip')skip++;else if(r.status==='vide')vide++;
+      else if(r.status==='skip')skip++;
+      else if(r.status==='vide'){vide++;buffer.push(...r.items);}
     }catch(err){erreurs++;prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);}
     if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
     if(i%20===0){prog.update(i+1,ids.length,'');await progressYield();}
@@ -4532,6 +4620,7 @@ async function stgValiderTout(){
   if(!cibles.length){toast('Rien à valider pour ce filtre.');return;}
   if(!confirm('⚠ VALIDATION EN MASSE\n\n'+cibles.length+' ligne(s) "en attente" (selon le filtre Type/Recherche actuel) vont être comptabilisées d\'un coup.\n\nChaque écriture sera routée vers son exercice réel selon sa date. Les exercices manquants seront créés automatiquement.\n\nConfirmer ?'))return;
   await stgEnsureCompteAttente();
+  const paramC=await paramCpt();
   const prog=progressStart('🚀 Validation en masse — '+cibles.length+' ligne(s)');
   nextAchatNumFastInit();
   let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
@@ -4539,9 +4628,10 @@ async function stgValiderTout(){
   for(let i=0;i<cibles.length;i++){
     const s=cibles[i];
     try{
-      const r=await stgValiderUneLigneBuild(s,mapClient);
+      const r=await stgValiderUneLigneBuild(s,mapClient,paramC);
       if(r.status==='ok'){ok++;buffer.push(...r.items);}
-      else if(r.status==='skip')skip++;else if(r.status==='vide')vide++;
+      else if(r.status==='skip')skip++;
+      else if(r.status==='vide'){vide++;buffer.push(...r.items);}
     }catch(err){
       erreurs++;
       if(erreurs<=30)prog.error((s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle)+' : '+err.message);
@@ -4568,6 +4658,17 @@ async function stgRejeterSelection(){
     toast(items.length+' ligne(s) rejetée(s).');
   }
   window._stgSel.clear();await loadAll();RENDER.staging();
+}
+async function stgNettoyerLignesVides(){
+  const cibles=ST.staging.filter(s=>s.status==='en_attente'&&s.kind==='caisse'&&!(+s.payload.entree||0)&&!(+s.payload.sortie||0));
+  if(!cibles.length){toast('Aucune ligne vide (E:0 S:0) trouvée en attente.');return;}
+  if(!confirm(cibles.length+' ligne(s) caisse "en attente" avec entrée ET sortie à 0 dans le fichier source. Elles ne peuvent jamais être comptabilisées (rien à passer en écriture) et resteraient bloquées indéfiniment.\n\nLes marquer comme rejetées (avec motif) ?'))return;
+  const prog=cibles.length>100?progressStart('Nettoyage des lignes vides…'):null;
+  const items=cibles.map(s=>({store:'staging',record:{...s,status:'rejete',valDate:today(),rejetRaison:'Entrée et sortie nulles dans le fichier source'}}));
+  await putManyMixed(items,prog?((d,t)=>prog.update(d,t,'')):undefined);
+  await loadAll();RENDER.staging();
+  const msg=cibles.length+' ligne(s) vide(s) rejetée(s).';
+  if(prog)prog.done('✅ '+msg);else toast(msg);
 }
 async function stgRejeterTout(){
   const cibles=stgFiltered().filter(s=>s.status==='en_attente');
@@ -4910,12 +5011,13 @@ async function caisseProchainNumero(caisseId,type){const key='caisseSeq_'+caisse
 /* ---- Pont staging↔ventilation : reclasse les écritures 4712 issues de l'import historique (staging_caisse) ---- */
 window._histVentFiltre={q:'',exId:'tous'};window._histVentPage=1;
 async function histAVentilerListe(){
+  const p=await paramCpt();
   const toutes=await all('ecritures');
   const cibles=[];
   toutes.forEach(e=>{
     if(e.source!=='staging_caisse')return;
     e.lignes.forEach((l,li)=>{
-      if(l.compte!=='4712')return;
+      if(l.compte!==p.cptAttente)return;
       cibles.push({eid:e.id,li,date:e.date,libelle:e.libelle,piece:e.piece,montant:l.debit||l.credit,sens:l.debit?'debit':'credit',exId:e.exId});
     });
   });
@@ -5375,12 +5477,13 @@ async function caisseGenererReglesHistoriqueAppliquer(){
   toast('✅ '+n+' règle(s) ajoutée(s).');closeModal();RENDER.caisse();
 }
 function caisseConfigModal(caisseId){
+  populateDlComptes();
   const c=caisseId?ST.caisses.find(x=>x.id===caisseId):null;
   const opts=ST.users.map(u=>`<option value="${u.id}" ${c&&c.caissiereIds&&c.caissiereIds.includes(u.id)?'selected':''}>${u.nom||u.login} (${u.role})${u.caissePinHash?' · PIN configuré':' · sans PIN'}</option>`).join('');
   openModal(`<div class="mh"><h3>${c?'Configurer':'Nouvelle'} caisse</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
     <div class="frow c2"><div><label>Nom</label><input id="cc-nom" value="${c?c.nom:''}" placeholder="Ex : Caisse principale"></div>
-    <div><label>Compte trésorerie</label><input id="cc-compte" value="${c?(c.compte||'571'):'571'}"></div></div>
+    <div><label>Compte trésorerie</label><input id="cc-compte" list="dl-comptes" autocomplete="off" value="${c?(c.compte||'571'):'571'}"></div></div>
     <div class="frow"><div><label>Caissier(s) autorisé(s) — laisser vide = accessible à tous les utilisateurs</label>
     <select id="cc-caissiers" multiple size="5">${opts}</select></div></div>
     <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-top:8px">Le code PIN est personnel — configurez-le sur la fiche de chaque utilisateur (Utilisateurs &amp; rôles), pas ici.</div>
