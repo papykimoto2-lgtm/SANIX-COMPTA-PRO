@@ -5673,8 +5673,11 @@ RENDER.workflow=()=>{
   const f=window._wfFilter||'brouillard';
   document.getElementById('pgActions').innerHTML='';
   const cnt=st=>ST.ecritures.filter(e=>(e.statut||'brouillard')===st).length;
-  const tab=(k,l)=>`<button class="btn sm ${f===k?'':'gh'}" onclick="window._wfFilter='${k}';RENDER.workflow()">${l} (${cnt(k)})</button>`;
-  const list=ST.ecritures.filter(e=>(e.statut||'brouillard')===f).sort((a,b)=>a.date<b.date?1:-1);
+  const tab=(k,l)=>`<button class="btn sm ${f===k?'':'gh'}" onclick="window._wfFilter='${k}';window._wfPage=1;RENDER.workflow()">${l} (${cnt(k)})</button>`;
+  const complet=ST.ecritures.filter(e=>(e.statut||'brouillard')===f).sort((a,b)=>a.date<b.date?1:-1);
+  const pageSize=100,pages=Math.max(1,Math.ceil(complet.length/pageSize));
+  if(!window._wfPage||window._wfPage>pages)window._wfPage=1;
+  const list=complet.slice((window._wfPage-1)*pageSize,window._wfPage*pageSize);
   const badge={brouillard:'b-gray',valide:'b-green',rejete:'b-red'};
   const rows=list.map(e=>{const tot=e.lignes.reduce((s,l)=>s+(+l.debit||0),0);
     return`<tr><td class="mono">${dfr(e.date)}</td><td>${jLib(e.journal)}</td><td>${e.piece||''}</td><td>${e.libelle}</td><td class="ta-r mono">${F0(tot)}</td>
@@ -5683,13 +5686,50 @@ RENDER.workflow=()=>{
       `<span class="badge b-green">visé ${e.visePar||''}</span>`}</td></tr>`;}).join('');
   document.getElementById('p-workflow').innerHTML=`
   <div class="toolbar">${tab('brouillard','Brouillard')}${tab('valide','Validées')}${tab('rejete','Rejetées')}
-    ${cnt('brouillard')?`<button class="btn sm" style="margin-left:auto;background:var(--green)" onclick="visaAll()">✓ Tout valider</button>`:''}</div>
+    ${cnt('brouillard')?`<button class="btn sm" style="margin-left:auto;background:var(--green)" onclick="visaAll()">✓ Tout valider</button> <button class="btn sm gh" style="color:var(--red)" onclick="visaRejeterTout()">✕ Tout rejeter</button>`:''}</div>
   <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Journal</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Montant</th><th></th></tr></thead>
   <tbody>${rows||'<tr><td colspan=6 class="empty">Aucune écriture</td></tr>'}</tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._wfPage=Math.max(1,window._wfPage-1);RENDER.workflow()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._wfPage}/${pages} — ${complet.length} écriture(s)</span>
+    <button class="btn sm gh" onclick="window._wfPage=Math.min(${pages},window._wfPage+1);RENDER.workflow()">Suiv. ›</button>
+  </div>
   <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Circuit.</b> Saisie → brouillard → visa → validé. Seules les écritures validées alimentent les états définitifs (option).</div>`;
 };
 async function visaEcriture(id,statut){const e=ST.ecritures.find(x=>x.id===id);e.statut=statut;e.visePar=statut==='valide'?ST.user.login:'';e.viseDate=statut==='valide'?today():'';await put('ecritures',e);await loadAll();RENDER.workflow();toast(statut==='valide'?'Écriture validée.':statut==='rejete'?'Écriture rejetée.':'Réouverte.');}
-async function visaAll(){const list=ST.ecritures.filter(e=>(e.statut||'brouillard')==='brouillard');for(const e of list){e.statut='valide';e.visePar=ST.user.login;e.viseDate=today();await put('ecritures',e);}await loadAll();RENDER.workflow();toast(list.length+' écriture(s) validée(s).');}
+async function visaAll(){
+  const list=ST.ecritures.filter(e=>(e.statut||'brouillard')==='brouillard');
+  if(!list.length){toast('Rien à valider.');return;}
+  if(!confirm(list.length+' écriture(s) en brouillard à valider. Confirmer ?'))return;
+  const prog=list.length>100?progressStart('✓ Validation en masse — '+list.length+' écriture(s)'):null;
+  let buffer=[];
+  for(let i=0;i<list.length;i++){
+    const e=list[i];
+    buffer.push({store:'ecritures',record:{...e,statut:'valide',visePar:ST.user.login,viseDate:today()}});
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(prog&&i%40===0){prog.update(i+1,list.length,e.piece||e.libelle||'');await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  await loadAll();RENDER.workflow();
+  const msg=list.length+' écriture(s) validée(s).';
+  if(prog)prog.done('✅ '+msg);else toast(msg);
+}
+async function visaRejeterTout(){
+  const list=ST.ecritures.filter(e=>(e.statut||'brouillard')==='brouillard');
+  if(!list.length){toast('Rien à rejeter.');return;}
+  if(!confirm('Rejeter les '+list.length+' écriture(s) en brouillard ? Confirmer ?'))return;
+  const prog=list.length>100?progressStart('✕ Rejet en masse — '+list.length+' écriture(s)'):null;
+  let buffer=[];
+  for(let i=0;i<list.length;i++){
+    buffer.push({store:'ecritures',record:{...list[i],statut:'rejete',visePar:'',viseDate:''}});
+    if(buffer.length>=400){await putManyMixed(buffer);buffer=[];}
+    if(prog&&i%40===0){prog.update(i+1,list.length,'');await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  await loadAll();RENDER.workflow();
+  const msg=list.length+' écriture(s) rejetée(s).';
+  if(prog)prog.done('✅ '+msg);else toast(msg);
+}
 
 /* ---- Multi-devises ---- */
 const DEV_DEF=[{code:'EUR',lb:'Euro',taux:655.957},{code:'USD',lb:'Dollar US',taux:600},{code:'GHS',lb:'Cedi ghanéen',taux:40},{code:'NGN',lb:'Naira',taux:0.40}];
