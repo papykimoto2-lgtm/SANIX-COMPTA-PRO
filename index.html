@@ -1925,19 +1925,44 @@ async function genLiquidationTVA(ym){
 }
 
 /* ---- Lettrage ---- */
+function letNonLettresParTiers(){
+  const idx=mouvementsIndex();
+  const tiersCptes=ST.comptes.filter(c=>c.aux);
+  return tiersCptes.map(c=>{
+    const mvts=idx[c.numero]||[];
+    const nonLettres=mvts.filter(m=>!m.lettre);
+    if(!nonLettres.length)return null;
+    const solde=nonLettres.reduce((s,m)=>s+m.debit-m.credit,0);
+    const dernier=nonLettres.slice().sort((a,b)=>b.date.localeCompare(a.date))[0];
+    return{compte:c.numero,libelle:c.libelle,nb:nonLettres.length,solde,dernierDate:dernier?dernier.date:''};
+  }).filter(Boolean).sort((a,b)=>b.nb-a.nb);
+}
 RENDER.lettrage=()=>{
   const sel=window._letCpt||(ST.tiers[0]&&ST.tiers[0].compte)||'';
   const tiersCptes=ST.comptes.filter(c=>c.aux).map(c=>c.numero);
+  const recap=letNonLettresParTiers();
+  const totMvt=recap.reduce((s,r)=>s+r.nb,0);
   document.getElementById('p-lettrage').innerHTML=`
+  <div class="card" style="margin-bottom:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3 style="margin:0">⚠ Mouvements de tiers non lettrés</h3>
+      <span class="badge ${totMvt?'b-cuivre':'b-green'}">${totMvt} mouvement(s) sur ${recap.length} compte(s)</span>
+    </div>
+    ${recap.length?`<div class="tbl-wrap"><table><thead><tr><th>Compte</th><th>Tiers</th><th class="ta-r">Non lettrés</th><th class="ta-r">Solde non lettré</th><th>Dernier mouvement</th><th></th></tr></thead>
+    <tbody>${recap.map(r=>`<tr><td class="mono">${esc(r.compte)}</td><td>${esc(r.libelle)}</td><td class="ta-r mono">${r.nb}</td>
+      <td class="ta-r mono">${F0(r.solde)}</td><td class="mono">${dfr(r.dernierDate)}</td>
+      <td><button class="btn sm gh" onclick="window._letCpt='${r.compte}';RENDER.lettrage()">Traiter</button></td></tr>`).join('')}</tbody></table></div>`
+    :`<div class="empty" style="padding:16px 0">🎉 Tous les mouvements tiers sont lettrés.</div>`}
+  </div>
   <div class="toolbar"><select id="letSel" onchange="window._letCpt=this.value;RENDER.lettrage()">
     ${tiersCptes.map(n=>`<option value="${n}" ${n===sel?'selected':''}>${n} · ${cptLib(n)}</option>`).join('')}
   </select><button class="btn sm" onclick="doLettrage()">Lettrer la sélection</button><button class="btn sm gh" onclick="clearLettrage()">Délettrer</button></div>
   <div class="tbl-wrap"><table><thead><tr><th style="width:34px"></th><th>Date</th><th>Pièce</th><th>Libellé</th><th class="ta-r">Débit</th><th class="ta-r">Crédit</th><th class="ta-c">Lettre</th></tr></thead><tbody id="letBody"></tbody></table></div>
   <p style="margin-top:8px;color:var(--mut);font-size:12.5px">Cochez des lignes dont débit = crédit, puis « Lettrer ». Le lettrage rapproche factures et règlements.</p>`;
-  const rows=mouvements((e,l)=>l.compte===sel);
+  const rows=mouvementsDuCompte(sel);
   document.getElementById('letBody').innerHTML=rows.map(r=>`<tr>
     <td class="ta-c"><input type="checkbox" data-eid="${r.eid}" data-li="${r.li}" ${r.lettre?'disabled':''}></td>
-    <td class="mono">${dfr(r.date)}</td><td>${r.piece}</td><td>${r.libelle}</td>
+    <td class="mono">${dfr(r.date)}</td><td>${esc(r.piece)}</td><td>${esc(r.libelle)}</td>
     <td class="ta-r mono">${r.debit?F0(r.debit):''}</td><td class="ta-r mono">${r.credit?F0(r.credit):''}</td>
     <td class="ta-c">${r.lettre?`<span class="badge b-green">${r.lettre}</span>`:'—'}</td></tr>`).join('')||'<tr><td colspan=7 class="empty">Aucun mouvement</td></tr>';
 };
