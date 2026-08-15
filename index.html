@@ -260,6 +260,7 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="rappro"><span class="ic">≈</span>Rapprochement bancaire</a>
       <a data-p="anomalies"><span class="ic">⚠</span>IA — Anomalies</a>
       <a data-p="tierscompta"><span class="ic">◫</span>Comptabilité tiers</a>
+      <a data-p="rentabilite"><span class="ic">🏗</span>Rentabilité chantiers</a>
       <a data-p="analytique"><span class="ic">◈</span>Comptabilité analytique</a>
       <a data-p="immo"><span class="ic">▦</span>Immobilisations</a>
       <a data-p="devises"><span class="ic">$</span>Multi-devises</a>
@@ -333,6 +334,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-achats"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
+      <div class="page" id="p-rentabilite"></div>
       <div class="page" id="p-lettrage"></div>
       <div class="page" id="p-balageee"></div>
       <div class="page" id="p-rappro"></div>
@@ -370,11 +372,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=12;
+const DB_BASE='sanix_comptapro', DB_VER=13;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -604,7 +606,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -726,6 +728,8 @@ async function loadAll(){
   ST.releve_bancaire=await all('releve_bancaire');
   ST.msg_conv=await all('msg_conv');
   ST.msg_msg=await all('msg_msg');
+  ST.chantier_offres=await all('chantier_offres');
+  ST.chantier_encaissements=await all('chantier_encaissements');
   const cur=await getOne('meta','exCourant');
   ST.exId=cur?cur.value:(ST.exercices[0]&&ST.exercices[0].id);
   ST.ecritures=(await allByIndex('ecritures','exId',ST.exId)).sort((a,b)=>(a.date+a.id).localeCompare(b.date+b.id));
@@ -840,7 +844,7 @@ async function boot(){
 }
 
 /* ============ NAV ============ */
-const TITLES={messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+const TITLES={rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
@@ -877,6 +881,7 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  rentabilite:"Un client verse un acompte/solde sur un chantier (recette) ; les fournisseurs de ce chantier sont réglés total ou partiel (dépense déjà suivie dans Achats). Cette page croise les deux pour calculer la marge réelle par chantier.",
   messagerie:"Communication interne entre utilisateurs du logiciel (admin, comptable, caissier…) — conversations directes ou groupes, pièces jointes. Séparé des échanges avec les clients/fournisseurs (WhatsApp/Email restent dans Facturation/Achats).",
   balageee:"Créances clients et dettes fournisseurs ventilées par ancienneté (0-30 / 31-60 / 61-90 / +90 jours) — outil standard de révision des comptes, base pour décider des provisions pour créances douteuses.",
   cockpit:"Écran d'accueil : liste ce qu'il y a à traiter aujourd'hui (brouillard, staging, caisse, échéances), pas des chiffres à contempler. Se re-scanne à chaque ouverture.",
@@ -4700,6 +4705,151 @@ async function stgRejeterTout(){
   await putManyMixed(items,(d,t)=>prog.update(d,t,''));
   window._stgSel.clear();await loadAll();RENDER.staging();
   prog.done(items.length+' ligne(s) rejetée(s).');
+}
+
+/* ============ RENTABILITÉ CHANTIERS — encaissements client vs coûts fournisseurs ============ */
+window._rentaExpanded={};window._rentaFiltreEx='tous';window._rentaSearch='';
+async function rentaListeChantiers(){
+  const achatsSource=window._rentaFiltreEx==='tous'?await all('achats'):(window._rentaFiltreEx===ST.exId?ST.achats:(await all('achats')).filter(a=>a.exId===window._rentaFiltreEx));
+  const encSource=window._rentaFiltreEx==='tous'?ST.chantier_encaissements:ST.chantier_encaissements.filter(e=>e.exId===window._rentaFiltreEx);
+  const parChantier={};
+  achatsSource.filter(a=>a.chantier).forEach(a=>{
+    const k=a.chantier;
+    (parChantier[k]=parChantier[k]||{chantier:k,clientNom:a.clientNom||'',clientId:a.clientId||null,achats:[],encaissements:[]}).achats.push(a);
+    if(a.clientNom&&!parChantier[k].clientNom)parChantier[k].clientNom=a.clientNom;
+  });
+  encSource.forEach(e=>{
+    const k=e.chantier;
+    (parChantier[k]=parChantier[k]||{chantier:k,clientNom:e.clientNom||'',clientId:e.clientId||null,achats:[],encaissements:[]}).encaissements.push(e);
+    if(e.clientNom&&!parChantier[k].clientNom)parChantier[k].clientNom=e.clientNom;
+  });
+  const offresById={};ST.chantier_offres.forEach(o=>offresById[o.chantier]=o);
+  return Object.values(parChantier).map(c=>{
+    const coutHT=c.achats.reduce((s,a)=>s+a.ht,0);
+    const coutTTC=c.achats.reduce((s,a)=>s+a.ttc,0);
+    const regleFourn=c.achats.reduce((s,a)=>s+achatMontantRegle(a),0);
+    const resteFourn=c.achats.reduce((s,a)=>s+achatSolde(a),0);
+    const encaisse=c.encaissements.reduce((s,e)=>s+e.montant,0);
+    const offre=offresById[c.chantier];
+    const montantOffre=offre?offre.montantOffre:0;
+    const resteEncaisser=montantOffre?Math.max(0,montantOffre-encaisse):null;
+    const marge=encaisse-coutHT;
+    const margePct=encaisse>0?Math.round(marge/encaisse*100):null;
+    return{...c,coutHT,coutTTC,regleFourn,resteFourn,encaisse,montantOffre,resteEncaisser,marge,margePct};
+  }).sort((a,b)=>b.encaisse-a.encaisse||b.coutTTC-a.coutTTC);
+}
+RENDER.rentabilite=async()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-rentabilite','Rentabilité chantiers')">⎙ Imprimer</button> <button class="btn sm gh" onclick="rentaExportCSV()">⭳ CSV</button>`;
+  const liste=(await rentaListeChantiers()).filter(c=>!window._rentaSearch||c.chantier.toLowerCase().includes(window._rentaSearch.toLowerCase())||c.clientNom.toLowerCase().includes(window._rentaSearch.toLowerCase()));
+  window._rentaListe=liste;
+  const totEncaisse=liste.reduce((s,c)=>s+c.encaisse,0);
+  const totCout=liste.reduce((s,c)=>s+c.coutHT,0);
+  const totMarge=totEncaisse-totCout;
+  const totResteFourn=liste.reduce((s,c)=>s+c.resteFourn,0);
+  const selecteurEx=`<div style="margin-bottom:12px"><label style="font-size:12px;margin-right:8px">Exercice</label><select onchange="window._rentaFiltreEx=this.value;RENDER.rentabilite()" style="max-width:260px">
+    <option value="${ST.exId}" ${window._rentaFiltreEx===ST.exId?'selected':''}>Exercice courant (${curEx().libelle||''})</option>
+    <option value="tous" ${window._rentaFiltreEx==='tous'?'selected':''}>Tous les exercices (cumulé)</option>
+    ${ST.exercices.filter(e=>e.id!==ST.exId).sort((a,b)=>b.debut.localeCompare(a.debut)).map(e=>`<option value="${e.id}" ${window._rentaFiltreEx===e.id?'selected':''}>${e.libelle}</option>`).join('')}
+  </select></div>`;
+  document.getElementById('p-rentabilite').innerHTML=`
+  ${selecteurEx}
+  <div class="grid kpis" style="margin-bottom:14px">
+    <div class="card kpi g"><div class="lb">Total encaissé clients</div><div class="v mono">${F0(totEncaisse)}</div></div>
+    <div class="card kpi o"><div class="lb">Total coût fournisseurs (HT)</div><div class="v mono">${F0(totCout)}</div></div>
+    <div class="card kpi ${totMarge>=0?'g':'r'}"><div class="lb">Marge globale</div><div class="v mono">${F0(totMarge)}</div></div>
+    <div class="card kpi ${totResteFourn>0.5?'r':'g'}"><div class="lb">Reste à payer fournisseurs</div><div class="v mono">${F0(totResteFourn)}</div></div>
+  </div>
+  <div class="toolbar"><input class="search" placeholder="Rechercher un chantier ou client…" value="${esc(window._rentaSearch)}" oninput="window._rentaSearch=this.value;debounce('rentaSearch',()=>RENDER.rentabilite())"></div>
+  ${liste.map((c,i)=>{
+    const ouvert=!!window._rentaExpanded[c.chantier];
+    const detailAchats=c.achats.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(a=>{
+      const solde=achatSolde(a),regle=achatMontantRegle(a);const statut=reglementBadge(solde,regle,['Réglé','Partiel','À payer']);
+      return`<tr><td class="mono">${esc(a.numero)}</td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}</td><td class="ta-r mono">${F0(a.ttc)}</td><td class="ta-c">${statut}</td></tr>`;
+    }).join('');
+    const detailEnc=c.encaissements.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>
+      `<tr><td class="mono">${dfr(e.date)}</td><td>${e.type==='acompte'?'Acompte':e.type==='solde'?'Solde':'Autre'}</td><td>${esc(e.mode||'')}</td><td class="ta-r mono">${F0(e.montant)}</td>
+      <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="rentaSupprimerEncaissement('${e.id}')">✕</button></td></tr>`).join('');
+    return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="padding:12px 16px;background:${c.marge>=0?'var(--noir)':'#7a2e2e'};color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div style="cursor:pointer;flex:1" onclick="window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}']=!window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}'];RENDER.rentabilite()">
+          <b>${ouvert?'▾':'▸'} ${esc(c.chantier)}</b> <span style="font-size:11px;opacity:.85">— ${esc(c.clientNom||'(client non identifié)')}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaEncaissementModal('${c.chantier.replace(/'/g,"\\'")}','${(c.clientNom||'').replace(/'/g,"\\'")}','${c.clientId||''}')">+ Encaissement</button>
+          <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaOffreModal('${c.chantier.replace(/'/g,"\\'")}',${c.montantOffre||0})">💰 Offre</button>
+          <div style="text-align:right"><b>${F0(c.marge)} FCFA</b><div style="font-size:10.5px;opacity:.8">marge${c.margePct!==null?' '+c.margePct+'%':''}</div></div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0;border-bottom:1px solid var(--line);font-size:11.5px">
+        <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Offre</div><div class="mono" style="font-weight:700">${c.montantOffre?F0(c.montantOffre):'—'}</div></div>
+        <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Encaissé</div><div class="mono" style="font-weight:700;color:var(--green)">${F0(c.encaisse)}</div></div>
+        <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Reste à encaisser</div><div class="mono" style="font-weight:700">${c.resteEncaisser!==null?F0(c.resteEncaisser):'—'}</div></div>
+        <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Coût fournisseurs</div><div class="mono" style="font-weight:700;color:var(--red)">${F0(c.coutHT)}</div></div>
+        <div style="padding:8px 12px"><div style="color:var(--mut)">Reste à payer</div><div class="mono" style="font-weight:700">${c.resteFourn>0.5?F0(c.resteFourn):'—'}</div></div>
+      </div>
+      ${ouvert?`
+      <div style="padding:12px 16px">
+        <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Encaissements client</div>
+        <table style="width:100%;font-size:12px;margin-bottom:14px"><thead><tr><th>Date</th><th>Type</th><th>Mode</th><th class="ta-r">Montant</th><th></th></tr></thead>
+        <tbody>${detailEnc||'<tr><td colspan=5 class="empty">Aucun encaissement enregistré.</td></tr>'}</tbody></table>
+        <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Achats fournisseurs</div>
+        <table style="width:100%;font-size:12px"><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th></tr></thead>
+        <tbody>${detailAchats||'<tr><td colspan=5 class="empty">Aucun achat.</td></tr>'}</tbody></table>
+      </div>`:''}
+    </div>`;
+  }).join('')||'<div class="empty">Aucun chantier trouvé.</div>'}`;
+};
+function rentaEncaissementModal(chantier,clientNom,clientId){
+  openModal(`<div class="mh"><h3>+ Encaissement — ${esc(chantier)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow c2"><div><label>Client</label><input value="${esc(clientNom)||'(non identifié)'}" disabled style="background:#f4f2ec"></div>
+    <div><label>Type</label><select id="renc-type"><option value="acompte">Acompte</option><option value="solde">Solde</option><option value="autre">Autre</option></select></div></div>
+    ${formModeCompte(today(),0)}
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="rentaSaveEncaissement('${chantier.replace(/'/g,"\\'")}','${clientNom.replace(/'/g,"\\'")}','${clientId}')">Enregistrer</button></div>`,true);
+}
+async function rentaSaveEncaissement(chantier,clientNom,clientId){
+  const montant=+document.getElementById('rgMontant').value||0;
+  if(montant<=0){toast('Montant invalide.');return;}
+  const type=document.getElementById('renc-type').value;
+  const date=document.getElementById('rgDate').value||today();
+  const mode=document.getElementById('rgMode').value;
+  const compte=document.getElementById('rgCompte').value;
+  const ref=document.getElementById('rgRef').value.trim();
+  const p=await paramCpt();
+  const cl=clientId?ST.tiers.find(t=>t.id===clientId):null;
+  const cptClient=cl?cl.compte:p.cptClientDefaut;
+  const enc={id:uid('renc'),chantier,clientId:clientId||null,clientNom,type,date,montant:Math.round(montant),mode,compte,ref,exId:ST.exId,createdAt:Date.now()};
+  await put('chantier_encaissements',enc);
+  await put('ecritures',{id:'e_renc_'+enc.id,exId:ST.exId,journal:compte.startsWith('57')?'CA':'BQ',date,piece:'ENC-'+chantier.slice(0,15),
+    libelle:(type==='acompte'?'Acompte':type==='solde'?'Solde':'Encaissement')+' — '+chantier+(clientNom?' — '+clientNom:''),
+    lignes:[{compte,libelle:'Encaissement '+chantier,debit:Math.round(montant),credit:0},{compte:cptClient,tiers:clientId,libelle:'Client '+clientNom,debit:0,credit:Math.round(montant)}],created:Date.now()});
+  await loadAll();closeModal();RENDER.rentabilite();toast('Encaissement de '+F0(montant)+' FCFA enregistré.');
+}
+async function rentaSupprimerEncaissement(id){
+  if(!confirm('Supprimer cet encaissement ? (annule aussi l\'écriture liée)'))return;
+  await del('chantier_encaissements',id);await del('ecritures','e_renc_'+id);
+  await loadAll();RENDER.rentabilite();toast('Encaissement supprimé.');
+}
+function rentaOffreModal(chantier,montantActuel){
+  openModal(`<div class="mh"><h3>💰 Montant de l'offre — ${esc(chantier)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px">Montant du devis/offre accepté par le client pour ce chantier — permet de calculer le reste à encaisser.</div>
+    <div class="frow"><label>Montant de l'offre (FCFA)</label><input type="number" id="roffre-montant" value="${montantActuel||0}"></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="rentaSaveOffre('${chantier.replace(/'/g,"\\'")}')">Enregistrer</button></div>`,true);
+}
+async function rentaSaveOffre(chantier){
+  const montant=+document.getElementById('roffre-montant').value||0;
+  const existant=ST.chantier_offres.find(o=>o.chantier===chantier);
+  await put('chantier_offres',{id:existant?existant.id:uid('roffre'),chantier,montantOffre:Math.round(montant),updatedAt:Date.now()});
+  await loadAll();closeModal();RENDER.rentabilite();toast('Montant de l\'offre enregistré.');
+}
+function rentaExportCSV(){
+  const liste=window._rentaListe||[];
+  let c='Chantier;Client;Offre;Encaissé;Reste à encaisser;Coût fournisseurs HT;Réglé fournisseurs;Reste à payer;Marge;Marge %\n';
+  liste.forEach(x=>{c+=`"${x.chantier.replace(/"/g,"'")}";"${(x.clientNom||'').replace(/"/g,"'")}";${x.montantOffre||''};${x.encaisse};${x.resteEncaisser!==null?x.resteEncaisser:''};${x.coutHT};${x.regleFourn};${x.resteFourn};${x.marge};${x.margePct!==null?x.margePct:''}\n`;});
+  dl('rentabilite_chantiers.csv',c);
 }
 
 /* ============ MESSAGERIE INTERNE (style ImmoSuite) ============ */
