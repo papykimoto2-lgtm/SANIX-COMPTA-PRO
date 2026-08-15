@@ -2356,6 +2356,14 @@ async function saveCompte(num){
 async function delCompte(num){
   if(mouvements((e,l)=>l.compte===num).length){toast('Impossible : compte mouvementé.');return;}
   if(!confirm('Supprimer le compte '+num+' ?'))return;await del('comptes','c_'+num);await loadAll();RENDER.plan();toast('Compte supprimé.');}
+function telechargerModeleFacturesClients(){
+  const modele=[
+    {numero:'FAC-2024-0001',date:'2024-03-15',clientNom:'M. KOUAME JEAN',clientNcc:'',libelle:'Travaux menuiserie aluminium',ht:850000,tva:153000,ttc:1003000,statutPaiement:'PAYE',montantRegle:1003000,chantier:''},
+    {numero:'',date:'2024-06-02',clientNom:'Mme TRAORE FATIM',clientNcc:'CI-1234567-A',libelle:'Fourniture et pose vitrage',ht:1200000,tva:216000,ttc:1416000,statutPaiement:'PARTIEL',montantRegle:800000,chantier:'CHANTIER Mme TRAORE'}
+  ];
+  const blob=new Blob([JSON.stringify(modele,null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='modele_factures_clients.json';a.click();
+}
 function telechargerModelePlan(){
   const csv='numero;libelle;type\n601;Achats de matières premières;C\n701;Ventes de produits finis;R\n411001;Client — Exemple;A\n401001;Fournisseur — Exemple;P\n';
   const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='modele_plan_comptable.csv';a.click();
@@ -3274,24 +3282,31 @@ RENDER.achats=async()=>{
       <option value="tous" ${window._achFiltreEx==='tous'?'selected':''}>Tous les exercices (cumulé)</option>
       ${ST.exercices.filter(e=>e.id!==ST.exId).sort((a,b)=>b.debut.localeCompare(a.debut)).map(e=>`<option value="${e.id}" ${window._achFiltreEx===e.id?'selected':''}>${e.libelle}</option>`).join('')}
     </select></div>`;
-    let achatsSource;
-    if(window._achFiltreEx===ST.exId)achatsSource=ST.achats;
-    else if(window._achFiltreEx==='tous')achatsSource=await all('achats');
-    else achatsSource=(await all('achats')).filter(a=>a.exId===window._achFiltreEx);
+    let achatsSource,facturesSource;
+    if(window._achFiltreEx===ST.exId){achatsSource=ST.achats;facturesSource=ST.factures;}
+    else if(window._achFiltreEx==='tous'){achatsSource=await all('achats');facturesSource=await all('factures');}
+    else{achatsSource=(await all('achats')).filter(a=>a.exId===window._achFiltreEx);facturesSource=(await all('factures')).filter(f=>f.exId===window._achFiltreEx);}
     const parClient={};
-    achatsSource.forEach(a=>{const c=a.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[]}).achats.push(a);});
-    Object.values(parClient).forEach(v=>{v.nb=v.achats.length;v.ht=v.achats.reduce((s,a)=>s+a.ht,0);v.tva=v.achats.reduce((s,a)=>s+a.tva,0);v.ttc=v.achats.reduce((s,a)=>s+a.ttc,0);v.solde=v.achats.reduce((s,a)=>s+achatSolde(a),0);});
+    achatsSource.forEach(a=>{const c=a.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[],factures:[]}).achats.push(a);});
+    facturesSource.filter(f=>f.type!=='avoir').forEach(f=>{const c=f.clientNom||'(sans client)';(parClient[c]=parClient[c]||{nb:0,ht:0,tva:0,ttc:0,solde:0,achats:[],factures:[]}).factures.push(f);});
+    Object.values(parClient).forEach(v=>{
+      v.nb=v.achats.length;v.ht=v.achats.reduce((s,a)=>s+a.ht,0);v.tva=v.achats.reduce((s,a)=>s+a.tva,0);v.ttc=v.achats.reduce((s,a)=>s+a.ttc,0);v.solde=v.achats.reduce((s,a)=>s+achatSolde(a),0);
+      v.factHT=v.factures.reduce((s,f)=>s+f.ht,0);v.factTTC=v.factures.reduce((s,f)=>s+f.ttc,0);v.factReste=v.factures.reduce((s,f)=>s+soldeTTC(f),0);
+      v.marge=v.factHT-v.ht;v.margePct=v.factHT>0?Math.round(v.marge/v.factHT*100):null;
+    });
     window._achParClient=parClient;
     const clientsFiltres=Object.entries(parClient).filter(([c])=>!q||c.toLowerCase().includes(q)).sort((a,b)=>b[1].ttc-a[1].ttc);
     const totTTC=clientsFiltres.reduce((s,[,v])=>s+v.ttc,0);
     const totHT=clientsFiltres.reduce((s,[,v])=>s+v.ht,0);
     const totSolde=clientsFiltres.reduce((s,[,v])=>s+v.solde,0);
+    const totFactHT=clientsFiltres.reduce((s,[,v])=>s+v.factHT,0);
+    const totMarge=totFactHT-totHT;
     document.getElementById('p-achats').innerHTML=`
     ${selecteurEx}
     <div class="grid kpis"><div class="card kpi o"><div class="lb">Clients avec achats liés</div><div class="v mono">${clientsFiltres.filter(([c])=>c!=='(sans client)').length}</div></div>
-    <div class="card kpi b"><div class="lb">Total HT</div><div class="v mono">${F0(totHT)}</div></div>
-    <div class="card kpi g"><div class="lb">Total TTC</div><div class="v mono">${F0(totTTC)}</div></div>
-    <div class="card kpi ${totSolde>0.5?'r':'g'}"><div class="lb">Reste à payer (fournisseurs)</div><div class="v mono">${F0(totSolde)}</div></div></div>
+    <div class="card kpi b"><div class="lb">Total facturé (HT)</div><div class="v mono">${F0(totFactHT)}</div></div>
+    <div class="card kpi r"><div class="lb">Total dépensé chantier (HT)</div><div class="v mono">${F0(totHT)}</div></div>
+    <div class="card kpi ${totMarge>=0?'g':'r'}"><div class="lb">Marge (facturé − dépensé)</div><div class="v mono">${F0(totMarge)}</div></div></div>
     <div class="toolbar"><input class="search" placeholder="Rechercher un client…" value="${window._achq||''}" oninput="window._achq=this.value;debounce('achSearch',()=>RENDER.achats())"></div>
     ${clientsFiltres.map(([c,v])=>{
       const ouvert=!!window._achClientExpanded[c];
@@ -3309,24 +3324,44 @@ RENDER.achats=async()=>{
           <button class="linkbtn" style="color:var(--red)" title="Supprimer" onclick="delAchat('${a.id}')">✕</button>
         </td></tr>`;
       }).join('');
+      const detailFactures=v.factures.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(f=>{
+        const solde=soldeTTC(f),regle=sommeReglements(f);
+        const statut=reglementBadge(solde,regle,['Payée','Partielle','Impayée']);
+        return`<tr><td class="mono">${esc(f.numero)}</td><td class="mono">${dfr(f.date)}</td><td><span class="badge ${f.type==='simple'?'b-gray':'b-green'}">${f.type==='simple'?'Simple':'FNE'}</span></td>
+        <td class="ta-r mono">${F0(f.ht)}</td><td class="ta-r mono">${F0(f.tva)}</td><td class="ta-r mono">${F0(f.ttc)}</td><td class="ta-c">${statut}</td>
+        <td class="ta-c"><button class="linkbtn" title="Règlements" onclick="reglerFacture('${f.id}')">💵</button> <button class="linkbtn" title="Modifier" onclick="editFacture('${f.id}')">✎</button></td></tr>`;
+      }).join('');
       return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
-        <div style="padding:12px 16px;background:${c==='(sans client)'?'#8a8a8a':'var(--noir)'};color:#fff;display:flex;justify-content:space-between;align-items:center">
+        <div style="padding:12px 16px;background:${c==='(sans client)'?'#8a8a8a':v.marge>=0?'var(--noir)':'#7a2e2e'};color:#fff;display:flex;justify-content:space-between;align-items:center">
           <div style="cursor:pointer;flex:1" onclick="window._achClientExpanded['${c.replace(/'/g,"\\'")}']=!window._achClientExpanded['${c.replace(/'/g,"\\'")}'];RENDER.achats()">
-            <b>${ouvert?'▾':'▸'} ${esc(c)}</b> <span style="font-size:11px;opacity:.8">— ${v.nb} facture(s)</span>
+            <b>${ouvert?'▾':'▸'} ${esc(c)}</b> <span style="font-size:11px;opacity:.8">— ${v.achats.length} achat(s) · ${v.factures.length} facture(s)</span>
           </div>
           <div style="text-align:right;display:flex;align-items:center;gap:8px">
             ${c!=='(sans client)'?`<button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" title="Aperçu avant impression" onclick="event.stopPropagation();clientEtatApercuFor('${c.replace(/'/g,"\\'")}')">🖨</button>
             <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" title="Envoyer par WhatsApp" onclick="event.stopPropagation();clientEtatWhatsappFor('${c.replace(/'/g,"\\'")}')">💬</button>
             <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" title="Envoyer par Email" onclick="event.stopPropagation();clientEtatEmailFor('${c.replace(/'/g,"\\'")}')">✉</button>`:''}
-            <div><b>${F0(v.ttc)} FCFA</b>${v.solde>0.5?`<div style="font-size:10.5px;color:#ffb4a8">reste ${F0(v.solde)}</div>`:''}</div>
+            <div><b>${F0(v.marge)} FCFA</b><div style="font-size:10.5px;opacity:.8">marge${v.margePct!==null?' '+v.margePct+'%':''}</div></div>
           </div>
         </div>
-        ${ouvert?`<table><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Chantier${window._achFiltreEx==='tous'?' / Exercice':''}</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th><th class="ta-c">Actions</th></tr></thead>
-        <tbody>${detailRows}</tbody>
-        <tfoot><tr class="foot-tr"><td colspan=4>Total ${esc(c)}</td><td class="ta-r mono">${F0(v.ht)}</td><td class="ta-r mono">${F0(v.tva)}</td><td class="ta-r mono">${F0(v.ttc)}</td><td colspan=2></td></tr></tfoot></table>`:''}
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--line);font-size:11.5px">
+          <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Facturé HT</div><div class="mono" style="font-weight:700;color:var(--green)">${F0(v.factHT)}</div></div>
+          <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Reste à encaisser</div><div class="mono" style="font-weight:700">${v.factReste>0.5?F0(v.factReste):'—'}</div></div>
+          <div style="padding:8px 12px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Dépensé chantier HT</div><div class="mono" style="font-weight:700;color:var(--red)">${F0(v.ht)}</div></div>
+          <div style="padding:8px 12px"><div style="color:var(--mut)">Reste à payer fournisseurs</div><div class="mono" style="font-weight:700">${v.solde>0.5?F0(v.solde):'—'}</div></div>
+        </div>
+        ${ouvert?`
+        <div style="padding:12px 16px">
+          <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Factures émises au client</div>
+          <table style="width:100%;font-size:12px;margin-bottom:14px"><thead><tr><th>N°</th><th>Date</th><th>Type</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th><th></th></tr></thead>
+          <tbody>${detailFactures||'<tr><td colspan=8 class="empty">Aucune facture émise à ce client.</td></tr>'}</tbody></table>
+          <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Achats fournisseurs (dépenses chantier)</div>
+          <table style="width:100%;font-size:12px"><thead><tr><th>N°</th><th>Date</th><th>Fournisseur</th><th>Chantier${window._achFiltreEx==='tous'?' / Exercice':''}</th><th class="ta-r">HT</th><th class="ta-r">TVA</th><th class="ta-r">TTC</th><th class="ta-c">Statut</th><th class="ta-c">Actions</th></tr></thead>
+          <tbody>${detailRows||'<tr><td colspan=9 class="empty">Aucun achat.</td></tr>'}</tbody>
+          <tfoot><tr class="foot-tr"><td colspan=4>Total achats</td><td class="ta-r mono">${F0(v.ht)}</td><td class="ta-r mono">${F0(v.tva)}</td><td class="ta-r mono">${F0(v.ttc)}</td><td colspan=2></td></tr></tfoot></table>
+        </div>`:''}
       </div>`;
     }).join('')||'<div class="empty">Aucune donnée.</div>'}
-    <p style="margin-top:10px;color:var(--mut);font-size:12px">"(sans client)" = achats non liés (saisie manuelle ou mapping absent à l'import). Cliquez un client pour déplier le détail des factures.</p>`;
+    <p style="margin-top:10px;color:var(--mut);font-size:12px">"(sans client)" = achats non liés (saisie manuelle ou mapping absent à l'import). La marge compare le HT facturé (module Facturation) au HT dépensé sur les chantiers de ce client (module Achats).</p>`;
     return;
   }
   const filtres=ST.achats.filter(a=>!q||((a.numero||'')+(a.fournNom||'')+(a.piece||'')+(a.clientNom||'')).toLowerCase().includes(q));
@@ -3489,6 +3524,25 @@ async function genAchatEcriture(a){
   lignes.push({compte:cptFourn,tiers:a.fournId,libelle:'Fournisseur '+a.fournNom,debit:0,credit:Math.round(a.ttc),lettre:''});
   const e={id:'e_ach_'+a.id,exId:a.exId||ST.exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:a.date,piece:a.numero,libelle:'Achat '+a.numero+' — '+a.fournNom,lignes,created:Date.now()};
   await put('ecritures',e);
+}
+window._facSeqCache=null;
+function nextFacNumFastInit(){window._facSeqCache={};}
+async function nextFacNumFast(exId,type){
+  if(!window._facSeqCache)window._facSeqCache={};
+  if(window._facSeqCache[exId]===undefined){
+    const m=await getOne('meta','facSeq_'+exId);
+    window._facSeqCache[exId]=m?m.value:0;
+  }
+  window._facSeqCache[exId]++;
+  const ex=ST.exercices.find(e=>e.id===exId);
+  const pre=type==='fne'?'FNE':type==='avoir'?'AV':'FAC';
+  return `${pre}-${(ex&&ex.debut||today()).slice(0,4)}-${String(window._facSeqCache[exId]).padStart(4,'0')}`;
+}
+async function flushFacSeqCache(){
+  if(!window._facSeqCache)return;
+  const items=Object.keys(window._facSeqCache).map(exId=>({store:'meta',record:{id:'facSeq_'+exId,value:window._facSeqCache[exId]}}));
+  if(items.length)await putManyMixed(items);
+  window._facSeqCache=null;
 }
 async function nextFacNum(type){
   const key='facSeq_'+curEx().id;const meta=await getOne('meta',key);let seq=meta?meta.value:0;seq++;
@@ -4429,22 +4483,26 @@ function importStagingFile(kind,file){
     let arr;try{arr=JSON.parse(rd.result);}catch(e){alert('⚠ JSON invalide ou fichier corrompu.\n\nErreur : '+e.message+'\n\nRe-téléchargez le fichier et réessayez.');return;}
     if(!Array.isArray(arr)||!arr.length){toast('Fichier vide ou format inattendu.');return;}
     const sample=arr[0];
+    const nomKind={achat_chantier:'JSON Chantiers',caisse:'JSON Caisse',facture_client:'JSON Factures clients'}[kind];
     const shapeOk=kind==='achat_chantier'
       ?('chantier'in sample&&'fournisseur'in sample&&'lignes'in sample)
-      :('mois_feuille'in sample&&('entree'in sample||'sortie'in sample));
+      :kind==='caisse'
+      ?('mois_feuille'in sample&&('entree'in sample||'sortie'in sample))
+      :('clientNom'in sample&&('ht'in sample||'ttc'in sample));
     if(!shapeOk){
-      alert('⚠ Fichier incompatible avec "'+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'"\n\nColonnes attendues :\n'+(kind==='achat_chantier'?'chantier, fournisseur, lignes':'mois_feuille, entree/sortie')+'\n\nColonnes trouvées dans votre fichier :\n'+Object.keys(sample).join(', ')+'\n\nVérifiez que vous n\'avez pas inversé les deux fichiers, ou que le fichier n\'est pas corrompu/tronqué.');
+      const attendu={achat_chantier:'chantier, fournisseur, lignes',caisse:'mois_feuille, entree/sortie',facture_client:'clientNom, ht (ou ttc)'}[kind];
+      alert('⚠ Fichier incompatible avec "'+nomKind+'"\n\nColonnes attendues :\n'+attendu+'\n\nColonnes trouvées dans votre fichier :\n'+Object.keys(sample).join(', ')+'\n\nVérifiez que vous n\'avez pas inversé les fichiers, ou que le fichier n\'est pas corrompu/tronqué.');
       return;
     }
-    const prog=progressStart('Import '+(kind==='achat_chantier'?'JSON Chantiers':'JSON Caisse')+'…');
+    const prog=progressStart('Import '+nomKind+'…');
     let n=0,erreurs=0;
     for(let i=0;i<arr.length;i++){
       const r=arr[i];
-      const st=kind==='achat_chantier'?'en_attente':(r.type==='ouverture'?'ignore':'en_attente');
+      const st=kind==='caisse'?(r.type==='ouverture'?'ignore':'en_attente'):'en_attente';
       try{
         await put('staging',{id:uid('stg'),kind,status:st,payload:r,importedAt:Date.now()});n++;
       }catch(err){erreurs++;prog.error('Ligne '+(i+1)+' : '+err.message);}
-      if(i%50===0){prog.update(i+1,arr.length,r.chantier||r.libelle||'');await progressYield();}
+      if(i%50===0){prog.update(i+1,arr.length,r.chantier||r.libelle||r.clientNom||'');await progressYield();}
     }
     await loadAll();
     prog.done('Terminé — '+n+' ligne(s) chargée(s)'+(erreurs?', '+erreurs+' erreur(s)':'')+'. Total staging en base : '+ST.staging.length+'.');
@@ -4493,7 +4551,7 @@ function stgFiltered(){
     if(f.statut&&s.status!==f.statut)return false;
     if(f.q){
       const q=f.q.toLowerCase();const p=s.payload;
-      const hay=(s.kind==='achat_chantier'?(p.chantier+' '+p.fournisseur):(p.mois_feuille+' '+p.libelle)).toLowerCase();
+      const hay=(s.kind==='achat_chantier'?(p.chantier+' '+p.fournisseur):s.kind==='caisse'?(p.mois_feuille+' '+p.libelle):(p.clientNom+' '+(p.numero||''))).toLowerCase();
       if(!hay.includes(q))return false;
     }
     return true;
@@ -4514,6 +4572,8 @@ RENDER.staging=()=>{
       <label class="btn sm gh" style="cursor:pointer">⭱ Clients<input type="file" accept=".json" style="display:none" onchange="bulkImportTiersFile('client',this.files[0])"></label>
       <label class="btn sm gh" style="cursor:pointer">⭱ Chantiers<input type="file" accept=".json" style="display:none" onchange="importStagingFile('achat_chantier',this.files[0])"></label>
       <label class="btn sm gh" style="cursor:pointer">⭱ Caisse<input type="file" accept=".json" style="display:none" onchange="importStagingFile('caisse',this.files[0])"></label>
+      <label class="btn sm gh" style="cursor:pointer">⭱ Factures clients<input type="file" accept=".json" style="display:none" onchange="importStagingFile('facture_client',this.files[0])"></label>
+      <button class="btn sm gh" onclick="telechargerModeleFacturesClients()">📥 Modèle factures clients</button>
     </div>
   </div>
   <div class="card" style="margin-bottom:14px">
@@ -4551,12 +4611,14 @@ RENDER.staging=()=>{
     const p=s.payload;
     const desc=s.kind==='achat_chantier'
       ?`${esc(p.chantier)} — ${esc(p.fournisseur)} — ${(p.lignes||[]).length} ligne(s) — ${F0(p.total_ttc)} FCFA`
-      :`${esc(p.mois_feuille)} — ${esc(p.libelle)} — E:${F0(p.entree)} S:${F0(p.sortie)}`;
+      :s.kind==='caisse'
+      ?`${esc(p.mois_feuille)} — ${esc(p.libelle)} — E:${F0(p.entree)} S:${F0(p.sortie)}`
+      :`${esc(p.clientNom)} — ${esc(p.numero||'(sans n°)')} — TTC ${F0(p.ttc||((p.ht||0)+(p.tva||0)))} FCFA`;
     const badge=s.status==='valide'?'<span class="badge b-green">validé</span>':s.status==='rejete'?'<span class="badge b-gray">rejeté</span>':s.status==='ignore'?'<span class="badge b-gray">ignoré</span>':'<span class="badge b-cuivre">en attente</span>';
     const raison=s.status==='rejete'&&s.rejetRaison?`<div style="font-size:10.5px;color:var(--red);margin-top:2px">⚠ ${esc(s.rejetRaison)}</div>`:'';
     const actionReouvrir=s.status==='rejete'?`<button class="linkbtn" title="Remettre en attente pour retraiter" onclick="stgReouvrirLigne('${s.id}')">↺</button>`:'';
     return`<tr><td class="ta-c"><input type="checkbox" data-stg="${s.id}" ${window._stgSel.has(s.id)?'checked':''} onchange="stgToggle('${s.id}',this.checked)"></td>
-    <td>${s.kind==='achat_chantier'?'Chantier':'Caisse'}</td><td>${p.date||''}</td><td>${desc}${raison}</td><td class="ta-c">${badge}</td>
+    <td>${s.kind==='achat_chantier'?'Chantier':s.kind==='caisse'?'Caisse':'Facture client'}</td><td>${p.date||''}</td><td>${desc}${raison}</td><td class="ta-c">${badge}</td>
     <td class="ta-c">${actionReouvrir} <button class="linkbtn" title="Voir le détail brut" onclick="stgVoirDetail('${s.id}')">👁</button></td></tr>`;
   }).join('');
   document.getElementById('p-staging').innerHTML=`
@@ -4565,11 +4627,11 @@ RENDER.staging=()=>{
     <div class="card kpi o"><div class="lb">En attente</div><div class="v mono">${nEnAttente}</div></div>
     <div class="card kpi g"><div class="lb">Validées</div><div class="v mono">${nValide}</div></div>
     <div class="card kpi b"><div class="lb">Rejetées</div><div class="v mono">${nRejete}</div></div>
-    <div class="card kpi o"><div class="lb">Total staging</div><div class="v mono">${ST.staging.length}</div><div class="f">${ST.staging.filter(s=>s.kind==='achat_chantier').length} chantiers · ${ST.staging.filter(s=>s.kind==='caisse').length} caisse</div></div>
+    <div class="card kpi o"><div class="lb">Total staging</div><div class="v mono">${ST.staging.length}</div><div class="f">${ST.staging.filter(s=>s.kind==='achat_chantier').length} chantiers · ${ST.staging.filter(s=>s.kind==='caisse').length} caisse · ${ST.staging.filter(s=>s.kind==='facture_client').length} factures</div></div>
   </div>
   <div class="frow c3" style="margin-bottom:10px">
     <div><label>Type</label><select onchange="window._stgFiltre.kind=this.value;window._stgPage=1;RENDER.staging()">
-      <option value="">Tous</option><option value="achat_chantier" ${window._stgFiltre.kind==='achat_chantier'?'selected':''}>Chantiers</option><option value="caisse" ${window._stgFiltre.kind==='caisse'?'selected':''}>Caisse</option></select></div>
+      <option value="">Tous</option><option value="achat_chantier" ${window._stgFiltre.kind==='achat_chantier'?'selected':''}>Chantiers</option><option value="caisse" ${window._stgFiltre.kind==='caisse'?'selected':''}>Caisse</option><option value="facture_client" ${window._stgFiltre.kind==='facture_client'?'selected':''}>Factures clients</option></select></div>
     <div><label>Statut</label><select onchange="window._stgFiltre.statut=this.value;window._stgPage=1;RENDER.staging()">
       <option value="en_attente" ${window._stgFiltre.statut==='en_attente'?'selected':''}>En attente</option><option value="valide" ${window._stgFiltre.statut==='valide'?'selected':''}>Validées</option><option value="rejete" ${window._stgFiltre.statut==='rejete'?'selected':''}>Rejetées</option><option value="">Toutes</option></select></div>
     <div><label>Recherche</label><input value="${window._stgFiltre.q}" oninput="window._stgFiltre.q=this.value;debounce('stgSearch',()=>{window._stgPage=1;RENDER.staging()})" placeholder="Fournisseur, chantier, libellé…"></div>
@@ -4611,7 +4673,7 @@ async function stgValiderUneLigneBuild(s,mapClient,p){
     const eLignes=lignes.map(l=>({compte:l.compte,libelle:l.des,debit:l.ht,credit:0,lettre:''}));
     eLignes.push({compte:cptFourn,tiers:fo.id,libelle:'Fournisseur '+fo.nom,debit:0,credit:ht,lettre:''});
     items.push({store:'ecritures',record:{id:'e_ach_'+ach.id,exId,journal:ST.journaux.find(j=>j.code==='AC')?'AC':'OD',date:dateP,piece:numero,libelle:'Achat '+numero+' — '+fo.nom,lignes:eLignes,created:Date.now()}});
-  }else{
+  }else if(s.kind==='caisse'){
     const p_=s.payload;const dateP=(p_.date||today());
     const exId=await findOrCreateExercicePourDate(dateP);
     const exObj=ST.exercices.find(x=>x.id===exId);
@@ -4621,6 +4683,34 @@ async function stgValiderUneLigneBuild(s,mapClient,p){
     if(p_.sortie>0)lignes.push({compte:p.cptAttente,libelle:'À ventiler — '+p_.libelle,debit:Math.round(p_.sortie),credit:0},{compte:p.cptCaisse,libelle:p_.libelle,debit:0,credit:Math.round(p_.sortie)});
     if(!lignes.length)return{status:'vide',items:[{store:'staging',record:{...s,status:'rejete',valDate:today(),rejetRaison:'Entrée et sortie nulles dans le fichier source'}}]};
     items.push({store:'ecritures',record:{id:'e_stg_'+s.id,exId,journal:'CA',date:dateP,piece:'STG-'+(p_.piece||''),libelle:p_.libelle+' ['+p_.mois_feuille+']',lignes,created:Date.now(),source:'staging_caisse'}});
+  }else if(s.kind==='facture_client'){
+    const p_=s.payload;const dateP=p_.date||today();
+    const exId=await findOrCreateExercicePourDate(dateP);
+    const exObj=ST.exercices.find(x=>x.id===exId);
+    if(exObj&&exObj.statut==='clôturé')return{status:'skip',items:[]};
+    if(!p_.clientNom)return{status:'vide',items:[{store:'staging',record:{...s,status:'rejete',valDate:today(),rejetRaison:'Nom client manquant'}}]};
+    const cl=await stgEnsureClient(p_.clientNom);
+    const ht=+p_.ht||0;
+    const tva=p_.tva!==undefined?+p_.tva:0;
+    const ttc=p_.ttc!==undefined?+p_.ttc:(ht+tva);
+    if(ht<=0&&ttc<=0)return{status:'vide',items:[{store:'staging',record:{...s,status:'rejete',valDate:today(),rejetRaison:'Montant HT et TTC nuls'}}]};
+    const numero=p_.numero&&String(p_.numero).trim()?String(p_.numero).trim():await nextFacNumFast(exId,'simple');
+    const montantRegle=p_.montantRegle!==undefined?Math.round(+p_.montantRegle||0):(String(p_.statutPaiement||'').toUpperCase().includes('PAYE')?Math.round(ttc):0);
+    const reglements=montantRegle>0?[{id:uid('r'),date:dateP,montant:Math.min(montantRegle,Math.round(ttc)),mode:'Import',compte:p.cptCaisse,ref:'Solde repris à l\'import'}]:[];
+    const fac={id:uid('f'),exId,numero,type:'simple',date:dateP,clientId:cl.id,clientNom:cl.nom,ncc:p_.clientNcc||'',aib:0,aibV:0,
+      lignes:[{des:p_.libelle||'Facture reprise (import)',qte:1,pu:ht,tva:ht>0?Math.round(tva/ht*10000)/100:0}],
+      ht:Math.round(ht),tva:Math.round(tva),ttc:Math.round(ttc),reglements,fneRef:'',fneToken:'',fneCertified:false,
+      created:Date.now(),source:'staging_facture',chantier:p_.chantier||null};
+    items.push({store:'factures',record:fac});
+    const eLignes=[{compte:cl.compte,tiers:cl.id,libelle:'Client '+cl.nom,debit:Math.round(ttc),credit:0,lettre:''},
+      {compte:p.cptVente,libelle:'Ventes (reprise import)',debit:0,credit:Math.round(ht),lettre:''}];
+    if(tva>0)eLignes.push({compte:p.cptTvaColl,libelle:'TVA collectée',debit:0,credit:Math.round(tva),lettre:''});
+    items.push({store:'ecritures',record:{id:'e_fac_'+fac.id,exId,journal:'VT',date:dateP,piece:numero,libelle:'Facture '+numero+' — '+cl.nom+' (reprise import)',lignes:eLignes,created:Date.now()}});
+    if(reglements.length){
+      const reg=reglements[0];
+      items.push({store:'ecritures',record:{id:'e_freg_'+fac.id+'_'+reg.id,exId,journal:'OD',date:reg.date,piece:numero+'-R',libelle:'Règlement '+numero+' — '+cl.nom+' (repris à l\'import)',
+        lignes:[{compte:reg.compte,libelle:'Règlement import — '+cl.nom,debit:reg.montant,credit:0,lettre:''},{compte:cl.compte,tiers:cl.id,libelle:'Règlement facture '+numero,debit:0,credit:reg.montant,lettre:''}],created:Date.now()}});
+    }
   }
   items.push({store:'staging',record:{...s,status:'valide',valDate:today()}});
   return{status:'ok',items};
@@ -4632,7 +4722,7 @@ async function stgValiderSelection(){
   const mapClient=await mappingChantierClient();
   const paramC=await paramCpt();
   const prog=progressStart('Validation de la sélection…');
-  nextAchatNumFastInit();
+  nextAchatNumFastInit();nextFacNumFastInit();
   let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
   const ids=Array.from(window._stgSel);
   const nbExAvant=ST.exercices.length;
@@ -4648,7 +4738,7 @@ async function stgValiderSelection(){
     if(i%20===0){prog.update(i+1,ids.length,'');await progressYield();}
   }
   if(buffer.length)await putManyMixed(buffer);
-  await flushAchSeqCache();
+  await flushAchSeqCache();await flushFacSeqCache();
   const exCreated=ST.exercices.length-nbExAvant;
   window._stgSel.clear();await loadAll();populateExSelect();RENDER.staging();
   prog.done(ok+' ligne(s) comptabilisée(s)'+(exCreated?', '+exCreated+' exercice(s) créé(s) automatiquement':'')+(skip?', '+skip+' ignorée(s) (exercice clôturé)':'')+(erreurs?', ⚠ '+erreurs+' erreur(s)':'')+'.');
@@ -4661,7 +4751,7 @@ async function stgValiderTout(){
   await stgEnsureCompteAttente();
   const paramC=await paramCpt();
   const prog=progressStart('🚀 Validation en masse — '+cibles.length+' ligne(s)');
-  nextAchatNumFastInit();
+  nextAchatNumFastInit();nextFacNumFastInit();
   let ok=0,skip=0,vide=0,erreurs=0,buffer=[];
   const nbExAvant=ST.exercices.length;
   for(let i=0;i<cibles.length;i++){
@@ -4679,7 +4769,7 @@ async function stgValiderTout(){
     if(i%50===0){prog.update(i+1,cibles.length,s.kind==='achat_chantier'?s.payload.chantier:s.payload.libelle);await progressYield();}
   }
   if(buffer.length)await putManyMixed(buffer);
-  await flushAchSeqCache();
+  await flushAchSeqCache();await flushFacSeqCache();
   const exCreated=ST.exercices.length-nbExAvant;
   await loadAll();populateExSelect();RENDER.staging();
   prog.done('✅ '+ok+' ligne(s) comptabilisée(s)'+(exCreated?' · '+exCreated+' exercice(s) créé(s)':'')+(skip?' · '+skip+' ignorée(s) (exercice clôturé)':'')+(vide?' · '+vide+' vide(s)':'')+(erreurs?' · ⚠ '+erreurs+' erreur(s)':' · 0 erreur'));
