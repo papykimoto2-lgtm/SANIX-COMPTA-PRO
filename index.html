@@ -247,6 +247,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp-items">
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
+      <a data-p="prixArticles"><span class="ic">📦</span>Prix articles/fournisseurs</a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
@@ -314,6 +315,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-workflow"></div>
       <div class="page" id="p-facturation"></div>
       <div class="page" id="p-achats"></div>
+      <div class="page" id="p-prixArticles"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-rentabilite"></div>
@@ -848,6 +850,7 @@ const TITLES={
   balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
+prixArticles:['Prix articles/fournisseurs','Comparatif des prix d\'achat par désignation et par fournisseur'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
 tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
@@ -900,6 +903,7 @@ const MODULE_NOTES={
   plan:"Plan comptable SYSCOHADA en arborescence — comptes de regroupement dépliables, comptes de détail imputables directement sur les écritures.",
   facturation:"Facturation client — factures simples ou normalisées FNE (transmises en temps réel à la DGI). Une facture simple peut être déclarée au FNE a posteriori.",
   achats:"Factures fournisseurs : saisie, échéance, règlements. Génère automatiquement l'écriture d'achat (journal AC) à l'enregistrement.",
+  prixArticles:"Liste des articles/désignations saisis sur les factures d'achats, avec le prix pratiqué par chaque fournisseur (dernier prix, moyen, min, max) — déduite automatiquement de la base Achats, sans catalogue séparé.",
   caisse:"Caisse physique : sessions ouverture/clôture avec PIN, bons d'entrée/sortie, écart de comptage, ventilation comptable des mouvements vers les comptes de charges/produits.",
   ecritures:"Saisie manuelle d'écritures en partie double, par journal. Toute écriture doit être équilibrée (total débit = total crédit) avant enregistrement.",
   staging:"Import en masse de données externes (Excel chantiers, brouillard de caisse) en zone tampon — à valider ou rejeter avant toute comptabilisation définitive.",
@@ -3410,6 +3414,71 @@ RENDER.achats=async()=>{
     <button class="btn sm gh" onclick="window._achPage=Math.min(${pages},window._achPage+1);RENDER.achats()">Suiv. ›</button>
   </div>`;
 };
+/* ============ PRIX ARTICLES / FOURNISSEURS (déduit des achats) ============ */
+async function paData(){
+  const q=(window._paQ||'').trim().toLowerCase();
+  const src=window._paTous?await all('achats'):ST.achats;
+  const map={};
+  src.forEach(a=>{
+    const fourn=a.fournNom||'(sans fournisseur)';
+    (a.lignes||[]).forEach(l=>{
+      const des=(l.des||'').trim();
+      if(!des||!l.ht)return;
+      const key=des.toLowerCase();
+      map[key]=map[key]||{des,fourns:{}};
+      const fo=map[key].fourns[fourn]=map[key].fourns[fourn]||{nb:0,sum:0,min:Infinity,max:-Infinity,last:0,lastDate:''};
+      fo.nb++;fo.sum+=l.ht;
+      if(l.ht<fo.min)fo.min=l.ht;
+      if(l.ht>fo.max)fo.max=l.ht;
+      if(!fo.lastDate||a.date>fo.lastDate){fo.lastDate=a.date;fo.last=l.ht;}
+    });
+  });
+  let arts=Object.values(map).sort((x,y)=>x.des.localeCompare(y.des,'fr'));
+  if(q)arts=arts.filter(x=>x.des.toLowerCase().includes(q));
+  return arts;
+}
+RENDER.prixArticles=async()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-prixArticles',&quot;Prix d'achat par article et fournisseur&quot;)">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportPrixArticlesCSV()">⭳ CSV</button>`;
+  const arts=await paData();
+  let rows='';
+  arts.forEach(art=>{
+    const fournEntries=Object.entries(art.fourns).sort((a,b)=>a[1].last-b[1].last);
+    const minLast=Math.min(...fournEntries.map(([,v])=>v.last));
+    fournEntries.forEach(([fn,v],i)=>{
+      const moy=v.sum/v.nb;
+      const isBest=fournEntries.length>1&&v.last===minLast;
+      rows+=`<tr>
+        ${i===0?`<td rowspan="${fournEntries.length}" style="font-weight:700;vertical-align:top;border-right:1px solid var(--line)">${esc(art.des)}</td>`:''}
+        <td>${esc(fn)}${isBest?' <span class="badge" style="background:#e2f4ec;color:var(--green)">moins cher</span>':''}</td>
+        <td class="ta-r mono">${F0(v.last)}</td>
+        <td class="ta-r mono">${F0(Math.round(moy))}</td>
+        <td class="ta-r mono">${F0(v.min)}</td>
+        <td class="ta-r mono">${F0(v.max)}</td>
+        <td class="ta-c">${v.nb}</td>
+        <td class="ta-c">${dfr(v.lastDate)}</td>
+      </tr>`;
+    });
+  });
+  document.getElementById('p-prixArticles').innerHTML=`
+  <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input id="paSearch" placeholder="🔍 Filtrer par désignation…" value="${esc(window._paQ||'')}" oninput="window._paQ=this.value;RENDER.prixArticles()" style="flex:1;min-width:220px;padding:8px 10px;border:1.5px solid var(--line);border-radius:8px">
+    <label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" ${window._paTous?'checked':''} onchange="window._paTous=this.checked;RENDER.prixArticles()"> Tous exercices</label>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th>Fournisseur</th><th class="ta-r">Dernier prix HT</th><th class="ta-r">Prix moyen HT</th><th class="ta-r">Min</th><th class="ta-r">Max</th><th class="ta-c">Nb achats</th><th class="ta-c">Dernier achat</th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">📦</div>Aucune ligne d\'achat trouvée.</td></tr>'}</tbody></table></div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:10px"><b style="color:var(--cuivre-d)">Source.</b> Prix déduits des lignes de désignation saisies sur les factures d'achats fournisseurs (module Achats). Regroupement par libellé de désignation identique — pas de catalogue articles séparé.</div>`;
+};
+async function exportPrixArticlesCSV(){
+  const arts=await paData();
+  let c='designation,fournisseur,dernier_prix_ht,prix_moyen_ht,min_ht,max_ht,nb_achats,derniere_date\n';
+  arts.forEach(art=>{
+    Object.entries(art.fourns).forEach(([fn,v])=>{
+      c+=`"${art.des.replace(/"/g,'""')}","${fn.replace(/"/g,'""')}",${Math.round(v.last)},${Math.round(v.sum/v.nb)},${Math.round(v.min)},${Math.round(v.max)},${v.nb},${v.lastDate}\n`;
+    });
+  });
+  dl('prix_articles_fournisseurs.csv',c);
+}
+/* ---- Prix articles/fournisseurs fin ---- */
 async function achatHTML(id){
   const a=ST.achats.find(x=>x.id===id)||(await all('achats')).find(x=>x.id===id);
   if(!a)return'<p>Facture introuvable.</p>';
@@ -3464,6 +3533,8 @@ async function editAchat(id){
   window._editingAchat=a;
   AL=a?JSON.parse(JSON.stringify(a.lignes)):[{des:'',compte:'601',ht:0,tva:18}];
   const fourns=ST.tiers.filter(t=>t.type==='fournisseur');
+  const clientsCA=ST.tiers.filter(t=>t.type==='client');
+  const chantiersConnus=[...new Set(ST.achats.map(x=>x.chantier).filter(Boolean))].sort();
   const cptCharge=ST.comptes.filter(c=>c.numero[0]==='6').sort((x,y)=>x.numero.localeCompare(y.numero));
   window._cptCharge=cptCharge;
   openModal(`
@@ -3476,6 +3547,14 @@ async function editAchat(id){
       </div>
       <div class="frow c3"><div><label>Date</label><input type="date" id="aDate" value="${a?a.date:today()}"></div><div><label>Échéance</label><input type="date" id="aEch" value="${a?(a.echeance||''):''}"></div><div><label>Nature (TVA)</label><select id="aNat"><option value="bien" ${!a||a.nature==='bien'?'selected':''}>Bien / marchandise → 4452</option><option value="service" ${a&&a.nature==='service'?'selected':''}>Service → 4453 (exig. paiement)</option><option value="immo" ${a&&a.nature==='immo'?'selected':''}>Immobilisation → 4451</option></select></div></div>
       <div class="frow c2"><div><label>Retenue à la source</label><select id="aRas"><option value="0">Aucune</option><option value="7.5" ${a&&a.rasRate==7.5?'selected':''}>BNC / prestation 7,5%</option><option value="12" ${a&&a.rasRate==12?'selected':''}>Loyer (IRF) 12%</option><option value="10" ${a&&a.rasRate==10?'selected':''}>Autre 10%</option></select></div><div><label>Base retenue</label><select id="aRasB"><option value="ht" ${!a||a.rasBase!=='ttc'?'selected':''}>HT</option><option value="ttc" ${a&&a.rasBase==='ttc'?'selected':''}>TTC</option></select></div></div>
+      <div class="card" style="background:#fbf3ea;border:1px solid var(--cuivre-l);padding:10px 12px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:8px">🔗 Lier à un client / chantier (optionnel — pour la rentabilité)</div>
+        <div class="frow c3">
+          <div><label>Client</label><select id="aClient" onchange="achClientPick()"><option value="">— Aucun —</option>${clientsCA.map(c=>`<option value="${c.id}" ${a&&a.clientId===c.id?'selected':''}>${esc(c.nom)}</option>`).join('')}</select></div>
+          <div><label>Nom client (si libre)</label><input id="aClientNom" value="${a?(a.clientNom||''):''}" placeholder="Raison sociale du client"></div>
+          <div><label>Chantier</label><input id="aChantier" list="aChantierList" value="${a?(a.chantier||''):''}" placeholder="Nom / repère du chantier"><datalist id="aChantierList">${chantiersConnus.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+        </div>
+      </div>
       <div class="tbl-wrap"><table class="lines"><thead><tr><th>Désignation</th><th style="width:150px">Compte charge</th><th style="width:130px">Montant HT</th><th style="width:70px">TVA%</th><th style="width:34px"></th></tr></thead><tbody id="alBody"></tbody></table></div>
       <div style="margin-top:8px"><button class="btn sm gh" onclick="addALine()">+ Ligne</button></div>
       <div class="balbar" style="flex-direction:column;align-items:flex-end;gap:4px">
@@ -3488,6 +3567,7 @@ async function editAchat(id){
   renderALines();
 }
 function achFournPick(){const id=document.getElementById('aFourn').value;const f=ST.tiers.find(t=>t.id===id);if(f)document.getElementById('aNom').value=f.nom;}
+function achClientPick(){const id=document.getElementById('aClient').value;const c=ST.tiers.find(t=>t.id===id);document.getElementById('aClientNom').value=c?c.nom:'';}
 function renderALines(){
   const opts=l=>(window._cptCharge||[]).map(c=>`<option value="${c.numero}" ${l.compte===c.numero?'selected':''}>${c.numero} ${c.libelle}</option>`).join('');
   document.getElementById('alBody').innerHTML=AL.map((l,i)=>`<tr>
@@ -3511,9 +3591,14 @@ async function saveAchat(id){
   const old=id?(window._editingAchat&&window._editingAchat.id===id?window._editingAchat:ST.achats.find(a=>a.id===id)):null;
   const exIdCible=old?old.exId:ST.exId;
   const numero=id?old.numero:await nextAchatNum(exIdCible);
+  const clientId=document.getElementById('aClient').value||null;
+  const clientNomEl=document.getElementById('aClientNom').value.trim();
+  const clientTiers=clientId?ST.tiers.find(t=>t.id===clientId):null;
+  const clientNom=clientTiers?clientTiers.nom:(clientNomEl||null);
+  const chantier=document.getElementById('aChantier').value.trim()||null;
   const ach={id:id||uid('a'),exId:exIdCible,numero,fournId,fournNom:nom,piece:document.getElementById('aPiece').value.trim(),
     date:document.getElementById('aDate').value,echeance:document.getElementById('aEch').value,nature:document.getElementById('aNat').value,lignes:AL,ht,tva,ttc:ht+tva,
-    regle:old?old.regle:false,reglements:old?(old.reglements||[]):[],clientId:old?old.clientId:null,clientNom:old?old.clientNom:null,chantier:old?old.chantier:null,source:old?old.source:null,created:old?old.created:Date.now()};
+    regle:old?old.regle:false,reglements:old?(old.reglements||[]):[],clientId,clientNom,chantier,source:old?old.source:null,created:old?old.created:Date.now()};
   await put('achats',ach);await genAchatEcriture(ach);
   window._editingAchat=null;
   await loadAll();closeModal();RENDER.achats();toast('Facture d\'achat '+numero+' enregistrée.');
