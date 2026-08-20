@@ -914,7 +914,7 @@ const MODULE_NOTES={
   achats:"Factures fournisseurs : saisie, échéance, règlements. Génère automatiquement l'écriture d'achat (journal AC) à l'enregistrement.",
   prixArticles:"Liste des articles/désignations saisis sur les factures d'achats, avec le prix pratiqué par chaque fournisseur (dernier prix, moyen, min, max) — déduite automatiquement de la base Achats, sans catalogue séparé.",
   catalogue:"Catalogue persistant des articles achetés (désignation, catégorie, unité, prix de référence, fournisseurs associés). Aucun article n'est codé en dur dans l'application : ce module se remplit uniquement par import d'un fichier JSON Achats/Chantiers, par génération depuis les achats déjà enregistrés, ou par saisie manuelle. Voir aussi Configuration › Paramétrage › Import.",
-  stock:"Stock en quantités et en valeur (CMUP), par article et par dépôt — calculé à partir de l'historique des mouvements (entrées, sorties, transferts, inventaires), jamais stocké en dur. Les ventes (Facturation) déclenchent automatiquement une sortie de stock quand la désignation correspond à un article du Catalogue avec « gestion de stock » activée ; un avoir déclenche l'entrée inverse. Les achats n'ont pas de quantité en ligne (montant HT global) : la réception en stock se fait manuellement, avec référence à la pièce d'achat pour la traçabilité.",
+  stock:"Stock en quantités et en valeur (CMUP), par article et par dépôt — calculé à partir de l'historique des mouvements (jamais stocké en dur). Entrée : réception d'un achat fournisseur (bouton 📦 dans Achats — quantité/P.U. à ajuster car l'achat ne porte qu'un montant HT global par ligne). Sortie : mise à disposition pour travaux sur un chantier client (bouton 🏗 Sortie chantier), avec chantier et client obligatoires pour la traçabilité et le suivi rentabilité.",
   caisse:"Caisse physique : sessions ouverture/clôture avec PIN, bons d'entrée/sortie, écart de comptage, ventilation comptable des mouvements vers les comptes de charges/produits.",
   ecritures:"Saisie manuelle d'écritures en partie double, par journal. Toute écriture doit être équilibrée (total débit = total crédit) avant enregistrement.",
   staging:"Import en masse de données externes (Excel chantiers, brouillard de caisse) en zone tampon — à valider ou rejeter avant toute comptabilisation définitive.",
@@ -3350,6 +3350,7 @@ RENDER.achats=async()=>{
           <button class="linkbtn" title="Aperçu" onclick="viewAchat('${a.id}')">👁</button>
           <button class="linkbtn" title="Imprimer" onclick="printAchat('${a.id}')">⎙</button>
           <button class="linkbtn" title="Règlements" onclick="reglerAchat('${a.id}')">💵</button>
+          <button class="linkbtn" title="Réceptionner en stock" onclick="openReceptionAchat('${a.id}')">📦</button>
           <button class="linkbtn" title="Modifier" onclick="editAchat('${a.id}')">✎</button>
           <button class="linkbtn" style="color:var(--red)" title="Supprimer" onclick="delAchat('${a.id}')">✕</button>
         </td></tr>`;
@@ -3406,7 +3407,7 @@ RENDER.achats=async()=>{
     <td class="mono"><b>${a.numero}</b></td><td class="mono">${dfr(a.date)}</td><td>${esc(a.fournNom)}<div style="font-size:11px;color:var(--mut)">Pièce ${esc(a.piece||'—')} · ${a.nature==='immo'?'Immobilisation':a.nature==='service'?'Service':'Bien'}${a.clientNom?' · Client : <b>'+esc(a.clientNom)+'</b>':''}</div></td>
     <td class="ta-r mono">${F0(a.ht)}</td><td class="ta-r mono">${F0(a.tva)}</td><td class="ta-r mono"><b>${F0(a.ttc)}</b></td>
     <td class="ta-c">${statut}${reste}</td>
-    <td class="ta-c"><button class="linkbtn" title="Règlements" onclick="reglerAchat('${a.id}')">💵</button> <button class="linkbtn" onclick="editAchat('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delAchat('${a.id}')">✕</button></td></tr>`;}).join('');
+    <td class="ta-c"><button class="linkbtn" title="Règlements" onclick="reglerAchat('${a.id}')">💵</button> <button class="linkbtn" title="Réceptionner en stock" onclick="openReceptionAchat('${a.id}')">📦</button> <button class="linkbtn" onclick="editAchat('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delAchat('${a.id}')">✕</button></td></tr>`;}).join('');
   const tHT=ST.achats.reduce((s,a)=>s+a.ht,0),tTVA=ST.achats.reduce((s,a)=>s+a.tva,0),tTTC=ST.achats.reduce((s,a)=>s+a.ttc,0);
   const tSolde=ST.achats.reduce((s,a)=>s+achatSolde(a),0);
   document.getElementById('p-achats').innerHTML=`
@@ -3966,29 +3967,62 @@ function stockUpdateBadge(){
   ST.catalogue.forEach(a=>{if(a.gererStock===false)return;const s=st[a.id];const qte=s?s.qte:0;if((a.stockMin||0)>0&&qte<a.stockMin)n++;});
   if(n>0){el.style.display='inline-block';el.textContent=n;}else el.style.display='none';
 }
-/* ---- Ventes → sortie stock automatique (par correspondance de désignation avec le Catalogue) ---- */
-async function genFactureSortieStock(fac){
-  try{
-    const existants=ST.stock_mvt.filter(m=>m.refType==='facture'&&m.refId===fac.id);
-    for(const m of existants)await del('stock_mvt',m.id);
-    ST.stock_mvt=ST.stock_mvt.filter(m=>!(m.refType==='facture'&&m.refId===fac.id));
-    if(!fac.lignes||!fac.lignes.length)return;
-    const depotBase=stockDepotDefaut();if(!depotBase)return;
-    for(const l of fac.lignes){
-      if(!l.qte||!l.des)continue;
-      const art=stockArticleParDesignation(l.des);
-      if(!art)continue;
-      const depotId=art.depotDefaut||depotBase.id;
-      if(fac.type==='avoir'){
-        const s=stockSolde(art.id,depotId);
-        await mvtCreate('entree',{articleId:art.id,depotId,qte:l.qte,pu:s.cmup||l.pu||0,date:fac.date,piece:fac.numero,motif:'Retour sur avoir '+fac.numero,refType:'facture',refId:fac.id});
-      }else{
-        const s=stockSolde(art.id,depotId);
-        const insuffisant=l.qte>s.qte;
-        await mvtCreate('sortie',{articleId:art.id,depotId,qte:l.qte,pu:s.cmup,date:fac.date,piece:fac.numero,motif:'Vente '+fac.numero+(insuffisant?' (⚠ stock déjà insuffisant à la vente)':''),refType:'facture',refId:fac.id});
-      }
-    }
-  }catch(e){/* la facturation ne doit jamais être bloquée par le stock */}
+/* ---- Entrée stock : réception d'achat fournisseur ---- */
+function chantiersConnusStock(){
+  return[...new Set([...ST.achats.map(x=>x.chantier),...ST.stock_mvt.map(x=>x.chantier)].filter(Boolean))].sort();
+}
+function clientsConnusStock(){
+  return[...new Set([...ST.achats.map(x=>x.clientNom),...ST.tiers.filter(t=>t.type==='client').map(t=>t.nom)].filter(Boolean))].sort();
+}
+async function openReceptionAchat(achatId){
+  const a=ST.achats.find(x=>x.id===achatId)||(await all('achats')).find(x=>x.id===achatId);
+  if(!a){toast('Facture d\'achat introuvable.');return;}
+  if(!ST.depots.length)await ensureDepotDefaut();
+  const deja=ST.stock_mvt.filter(m=>m.refType==='achat'&&m.refId===achatId).length;
+  const lignesHTML=(a.lignes||[]).map((l,i)=>{
+    const art=stockArticleParDesignation(l.des);
+    if(!art)return`<tr><td>${esc(l.des)}<div style="font-size:10.5px;color:var(--mut)">Non catalogué / stock non géré — <button class="linkbtn" onclick="closeModal();editArticle(null);document.getElementById('artDes').value='${esc(l.des).replace(/'/g,"\\'")}'">créer l'article</button></div></td><td class="ta-r mono">—</td><td class="ta-r mono">—</td></tr>`;
+    return`<tr data-line="${i}" data-art="${art.id}">
+      <td><b>${esc(art.designation)}</b></td>
+      <td class="ta-r"><input type="number" class="amt" style="width:80px" id="recQte_${i}" value="1"></td>
+      <td class="ta-r"><input type="number" class="amt" style="width:100px" id="recPu_${i}" value="${Math.round(l.ht||0)}"></td>
+    </tr>`;
+  }).join('');
+  openModal(`<div class="mh"><h3>Réception en stock — ${esc(a.numero)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    ${deja?`<div class="hl" style="background:#fdeeec;border-left:3px solid var(--red);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:10px">⚠ ${deja} mouvement(s) d'entrée déjà générés depuis cette facture. Valider à nouveau créera un doublon — vérifiez le stock avant de continuer.</div>`:''}
+    <div class="frow"><div><label>Dépôt de réception</label><select id="recDepot">${stockDepotOptions(stockDepotDefaut()?stockDepotDefaut().id:'')}</select></div></div>
+    <div style="font-size:11px;color:var(--mut);margin:8px 0">Quantité et prix unitaire proposés à titre indicatif (l'achat ne porte qu'un montant HT global par ligne) — à ajuster avant validation. Seules les lignes correspondant à un article du Catalogue avec « Gérer le stock » activé sont réceptionnables.</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th class="ta-r">Qté reçue</th><th class="ta-r">P.U. (FCFA)</th></tr></thead><tbody>${lignesHTML||'<tr><td colspan=3 class="empty">Aucune ligne.</td></tr>'}</tbody></table></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="validerReceptionAchat('${achatId}')">✓ Réceptionner en stock</button></div>`,true);
+}
+async function validerReceptionAchat(achatId){
+  const a=ST.achats.find(x=>x.id===achatId);if(!a){toast('Facture introuvable.');return;}
+  const depotId=document.getElementById('recDepot').value;
+  if(!depotId){toast('Dépôt requis.');return;}
+  let n=0;
+  const trs=Array.from(document.querySelectorAll('[data-line]'));
+  for(const tr of trs){
+    const i=tr.dataset.line,artId=tr.dataset.art;
+    const qteEl=document.getElementById('recQte_'+i),puEl=document.getElementById('recPu_'+i);
+    if(!qteEl||!puEl)continue;
+    const qte=+qteEl.value||0,pu=+puEl.value||0;
+    if(qte<=0)continue;
+    await mvtCreate('entree',{articleId:artId,depotId,qte,pu,date:a.date,piece:a.numero,motif:'Réception achat '+a.numero+' — '+a.fournNom,refType:'achat',refId:a.id});
+    n++;
+  }
+  await loadAll();closeModal();
+  if(window._curPage==='stock')RENDER.stock();else RENDER.achats();
+  toast(n?n+' ligne(s) réceptionnée(s) en stock.':'Aucune ligne réceptionnée — quantité nulle ou article non catalogué.');
+}
+/* ---- Sortie stock : mise à disposition pour travaux sur chantier client ---- */
+async function stockSortieChantier(articleId,depotId,qte,chantier,opts={}){
+  const s=stockSolde(articleId,depotId);
+  if(qte>s.qte&&!opts.force)throw new Error('STOCK_INSUFFISANT');
+  return mvtCreate('sortie',{articleId,depotId,qte:+qte,pu:s.cmup,date:opts.date,piece:opts.piece||'',
+    motif:'Mise à disposition chantier'+(chantier?' — '+chantier:'')+(opts.motif?' · '+opts.motif:''),
+    chantier:chantier||'',clientNom:opts.clientNom||'',refType:'chantier',refId:null});
 }
 /* ---- Dépôts CRUD ---- */
 function editDepot(id){
@@ -4024,24 +4058,31 @@ function stockDepotOptions(sel){return ST.depots.map(d=>`<option value="${d.id}"
 function openMvtModal(type){
   if(!ST.depots.length){toast('Créez d\'abord un dépôt (onglet Dépôts).');return;}
   if(!stockArticlesGeres().length){toast('Aucun article géré en stock — activez « Gérer le stock » sur un article du Catalogue.');return;}
-  const titles={entree:'Entrée de stock',sortie:'Sortie de stock',transfert:'Transfert inter-dépôts',inventaire:'Comptage / ajustement d\'inventaire'};
+  const titles={entree:'Entrée de stock (ajustement manuel)',sortie:'Sortie chantier — mise à disposition',transfert:'Transfert inter-dépôts',inventaire:'Comptage / ajustement d\'inventaire'};
   const depotDefaut=stockDepotDefaut();
   const puField=type==='entree'?`<div><label>Prix unitaire d'entrée (FCFA)</label><input type="number" id="mvtPu" value="0"></div>`:'';
   const qteLabel=type==='inventaire'?'Quantité comptée physiquement':'Quantité';
   const depotDestField=type==='transfert'?`<div><label>Dépôt destination</label><select id="mvtDepotDest">${stockDepotOptions('')}</select></div>`:'';
+  const chantierField=type==='sortie'?`<div class="frow c2">
+      <div><label>Chantier / client *</label><input id="mvtChantier" list="dl-mvtChantier" placeholder="Nom / repère du chantier"><datalist id="dl-mvtChantier">${chantiersConnusStock().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div><label>Client</label><input id="mvtClient" list="dl-mvtClient" placeholder="Optionnel"><datalist id="dl-mvtClient">${clientsConnusStock().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+    </div>`:'';
+  const entreeNote=type==='entree'?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:10px">ℹ Le flux normal d'entrée est la réception d'un achat (bouton 📦 dans le module Achats). Utilisez ce formulaire uniquement pour un stock initial ou une correction ponctuelle.</div>`:'';
   openModal(`<div class="mh"><h3>${titles[type]}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
+    ${entreeNote}
     <div class="frow"><div><label>Article *</label><select id="mvtArticle" onchange="stockMvtArticleChange()">${stockArticleOptions('')}</select></div></div>
     <div class="frow c2">
       <div><label>Dépôt ${type==='transfert'?'source':''} *</label><select id="mvtDepot" onchange="stockMvtArticleChange()">${stockDepotOptions(depotDefaut?depotDefaut.id:'')}</select></div>
       ${depotDestField}
     </div>
+    ${chantierField}
     <div class="frow c3">
       <div><label>${qteLabel} *</label><input type="number" id="mvtQte" value="0"></div>
       ${puField}
       <div><label>Date</label><input type="date" id="mvtDate" value="${new Date().toISOString().slice(0,10)}"></div>
     </div>
-    <div class="frow c2"><div><label>Pièce / référence</label><input id="mvtPiece" placeholder="N° BL, facture d'achat…"></div><div><label>Motif</label><input id="mvtMotif" placeholder="Optionnel"></div></div>
+    <div class="frow c2"><div><label>Pièce / référence</label><input id="mvtPiece" placeholder="N° BL, bon de sortie…"></div><div><label>Motif</label><input id="mvtMotif" placeholder="Optionnel"></div></div>
     <div id="mvtSoldeInfo" style="font-size:11.5px;color:var(--mut);margin-top:6px"></div>
   </div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveMvtModal('${type}')">Valider</button></div>`);
@@ -4068,7 +4109,10 @@ async function saveMvtModal(type){
       const pu=+document.getElementById('mvtPu').value||0;
       await stockEntree(articleId,depotId,qte,pu,{date,piece,motif});
     }else if(type==='sortie'){
-      await stockSortie(articleId,depotId,qte,{date,piece,motif});
+      const chantier=document.getElementById('mvtChantier').value.trim();
+      const clientNom=document.getElementById('mvtClient').value.trim();
+      if(!chantier){toast('Chantier obligatoire pour une sortie.');return;}
+      await stockSortieChantier(articleId,depotId,qte,chantier,{date,piece,motif,clientNom});
     }else if(type==='transfert'){
       const depotDestId=document.getElementById('mvtDepotDest').value;
       if(depotDestId===depotId){toast('Le dépôt destination doit être différent du dépôt source.');return;}
@@ -4122,7 +4166,7 @@ window._stockFiltreEtat={q:'',categorie:'',statut:''};
 function stockSetTab(t){window._stockTab=t;RENDER.stock();}
 RENDER.stock=async()=>{
   await ensureDepotDefaut();
-  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-stock','Gestion de stock')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportStockCSV()">⭳ CSV</button> <button class="btn sm" onclick="openMvtModal('entree')">+ Entrée</button> <button class="btn sm gh" onclick="openMvtModal('sortie')">− Sortie</button> <button class="btn sm gh" onclick="openMvtModal('transfert')">⇄ Transfert</button>`;
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-stock','Gestion de stock')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportStockCSV()">⭳ CSV</button> <button class="btn sm" onclick="openMvtModal('sortie')">🏗 Sortie chantier</button> <button class="btn sm gh" onclick="openMvtModal('entree')">+ Entrée manuelle</button> <button class="btn sm gh" onclick="openMvtModal('transfert')">⇄ Transfert</button>`;
   const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
     <button class="btn sm ${window._stockTab==='vue'?'':'gh'}" onclick="stockSetTab('vue')">▚ Vue d'ensemble</button>
     <button class="btn sm ${window._stockTab==='mvt'?'':'gh'}" onclick="stockSetTab('mvt')">↕ Mouvements</button>
@@ -4154,6 +4198,10 @@ function stockRenderVue(){
   const mvtJour=ST.stock_mvt.filter(m=>(m.date||'').slice(0,10)===today).length;
   const topCatVal=Object.entries(parCat).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxCatVal=topCatVal.length?topCatVal[0][1]:1;
+  const parChantier={};
+  ST.stock_mvt.filter(m=>m.type==='sortie'&&m.chantier).forEach(m=>{parChantier[m.chantier]=(parChantier[m.chantier]||0)+m.qte*(m.pu||0);});
+  const topChantiers=Object.entries(parChantier).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxChantier=topChantiers.length?topChantiers[0][1]:1;
   const dashboard=`
   <div class="grid kpis" style="margin-bottom:12px">
     <div class="card kpi o"><div class="lb">Valeur totale du stock (CMUP)</div><div class="v mono">${F0(valeurTotale)}</div></div>
@@ -4163,7 +4211,10 @@ function stockRenderVue(){
     <div class="card kpi"><div class="lb">Dépôts</div><div class="v mono">${ST.depots.length}</div></div>
     <div class="card kpi"><div class="lb">Mouvements aujourd'hui</div><div class="v mono">${mvtJour}</div></div>
   </div>
-  ${topCatVal.length?`<div class="card" style="margin-bottom:14px"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Valeur du stock par catégorie</div>${topCatVal.map(([lb,v])=>catBarRow(lb,Math.round(v),Math.round(maxCatVal),'var(--cuivre)')).join('')}</div>`:''}`;
+  <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    ${topCatVal.length?`<div class="card"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Valeur du stock par catégorie</div>${topCatVal.map(([lb,v])=>catBarRow(lb,Math.round(v),Math.round(maxCatVal),'var(--cuivre)')).join('')}</div>`:'<div></div>'}
+    ${topChantiers.length?`<div class="card"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Valeur mise à disposition par chantier</div>${topChantiers.map(([lb,v])=>catBarRow(lb,Math.round(v),Math.round(maxChantier),'var(--blue)')).join('')}</div>`:'<div></div>'}
+  </div>`;
   const f=window._stockFiltreEtat;
   const cats=[...new Set(articles.map(a=>a.categorie).filter(Boolean))].sort();
   let list=articles.map(a=>({a,s:st[a.id]||{qte:0,valeur:0,cmup:0}}));
@@ -4202,7 +4253,7 @@ function stockRenderMouvements(){
   if(f.depot)list=list.filter(m=>m.depotId===f.depot||m.depotDestId===f.depot);
   if(f.from)list=list.filter(m=>(m.date||'')>=f.from);
   if(f.to)list=list.filter(m=>(m.date||'')<=f.to);
-  if(f.q){const q=f.q.toLowerCase();list=list.filter(m=>{const a=ST.catalogue.find(x=>x.id===m.articleId);return(a&&a.designation.toLowerCase().includes(q))||(m.piece||'').toLowerCase().includes(q)||(m.motif||'').toLowerCase().includes(q);});}
+  if(f.q){const q=f.q.toLowerCase();list=list.filter(m=>{const a=ST.catalogue.find(x=>x.id===m.articleId);return(a&&a.designation.toLowerCase().includes(q))||(m.piece||'').toLowerCase().includes(q)||(m.motif||'').toLowerCase().includes(q)||(m.chantier||'').toLowerCase().includes(q)||(m.clientNom||'').toLowerCase().includes(q);});}
   list.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||0)-(a.createdAt||0));
   const depotNom=id=>{const d=ST.depots.find(x=>x.id===id);return d?d.nom:'—';};
   const typeLbl={entree:'Entrée',sortie:'Sortie',transfert:'Transfert',inventaire:'Inventaire',initial:'Stock initial'};
@@ -4213,7 +4264,7 @@ function stockRenderMouvements(){
       <td class="mono">${dfr(m.date)}</td>
       <td><span class="badge ${typeBadge[m.type]||'b-gray'}">${typeLbl[m.type]||m.type}</span></td>
       <td>${a?esc(a.designation):'<span style="color:var(--mut)">Article supprimé</span>'}</td>
-      <td>${m.type==='transfert'?depotNom(m.depotId)+' → '+depotNom(m.depotDestId):depotNom(m.depotId)}</td>
+      <td>${m.type==='transfert'?depotNom(m.depotId)+' → '+depotNom(m.depotDestId):depotNom(m.depotId)}${m.chantier?`<div style="font-size:10.5px;color:var(--mut)">🏗 ${esc(m.chantier)}${m.clientNom?' · '+esc(m.clientNom):''}</div>`:''}</td>
       <td class="ta-r mono ${m.type==='sortie'?'neg':m.type==='entree'?'pos':''}">${m.qte}</td>
       <td class="ta-r mono">${m.pu?F0(m.pu):'—'}</td>
       <td>${esc(m.piece||'—')}</td>
@@ -4554,7 +4605,6 @@ async function saveFacture(id,type){
   } else msg='Facture '+numero+' enregistrée.';
   await put('factures',fac);
   await genFactureEcriture(fac);
-  await genFactureSortieStock(fac);
   window._editingFacture=null;
   await loadAll();closeModal();RENDER.facturation();toast(msg);
 }
@@ -4581,7 +4631,6 @@ async function delFacture(id){
   if(exF&&exF.statut==='clôturé'){toast('Exercice '+exF.libelle+' clôturé — suppression impossible.');return;}
   if(!confirm('Supprimer '+f.numero+' ? (annule aussi l\'écriture et ses règlements)'))return;
   await del('factures',id);await del('ecritures','e_fac_'+id);
-  for(const m of ST.stock_mvt.filter(x=>x.refType==='facture'&&x.refId===id))await del('stock_mvt',m.id);
   for(const r of (f.reglements||[]))await del('ecritures','e_freg_'+id+'_'+r.id);
   await loadAll();RENDER.facturation();toast('Facture supprimée.');
 }
