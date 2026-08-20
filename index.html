@@ -248,6 +248,7 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="facturation"><span class="ic">🧾</span>Facturation (FNE)</a>
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
       <a data-p="prixArticles"><span class="ic">📦</span>Prix articles/fournisseurs</a>
+      <a data-p="catalogue"><span class="ic">🗂</span>Catalogue articles</a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
@@ -316,6 +317,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-facturation"></div>
       <div class="page" id="p-achats"></div>
       <div class="page" id="p-prixArticles"></div>
+      <div class="page" id="p-catalogue"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-rentabilite"></div>
@@ -356,11 +358,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=13;
+const DB_BASE='sanix_comptapro', DB_VER=14;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements','catalogue'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -590,7 +592,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],catalogue:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -706,6 +708,7 @@ async function loadAll(){
   ST.pieces=await all('pieces');
   ST.audit=await all('audit');
   ST.staging=await all('staging');
+  ST.catalogue=await all('catalogue');
   ST.caisses=await all('caisses');
   ST.caisse_sessions=await all('caisse_sessions');
   ST.caisse_mouvements=await all('caisse_mouvements');
@@ -851,6 +854,7 @@ const TITLES={
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 prixArticles:['Prix articles/fournisseurs','Comparatif des prix d\'achat par désignation et par fournisseur'],
+catalogue:['Catalogue articles','Base articles, prix & fournisseurs — alimentée par import ou saisie, jamais codée en dur'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
 tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
@@ -904,6 +908,7 @@ const MODULE_NOTES={
   facturation:"Facturation client — factures simples ou normalisées FNE (transmises en temps réel à la DGI). Une facture simple peut être déclarée au FNE a posteriori.",
   achats:"Factures fournisseurs : saisie, échéance, règlements. Génère automatiquement l'écriture d'achat (journal AC) à l'enregistrement.",
   prixArticles:"Liste des articles/désignations saisis sur les factures d'achats, avec le prix pratiqué par chaque fournisseur (dernier prix, moyen, min, max) — déduite automatiquement de la base Achats, sans catalogue séparé.",
+  catalogue:"Catalogue persistant des articles achetés (désignation, catégorie, unité, prix de référence, fournisseurs associés). Aucun article n'est codé en dur dans l'application : ce module se remplit uniquement par import d'un fichier JSON Achats/Chantiers, par génération depuis les achats déjà enregistrés, ou par saisie manuelle. Voir aussi Configuration › Paramétrage › Import.",
   caisse:"Caisse physique : sessions ouverture/clôture avec PIN, bons d'entrée/sortie, écart de comptage, ventilation comptable des mouvements vers les comptes de charges/produits.",
   ecritures:"Saisie manuelle d'écritures en partie double, par journal. Toute écriture doit être équilibrée (total débit = total crédit) avant enregistrement.",
   staging:"Import en masse de données externes (Excel chantiers, brouillard de caisse) en zone tampon — à valider ou rejeter avant toute comptabilisation définitive.",
@@ -3479,6 +3484,307 @@ async function exportPrixArticlesCSV(){
   dl('prix_articles_fournisseurs.csv',c);
 }
 /* ---- Prix articles/fournisseurs fin ---- */
+
+/* ============================================================
+   CATALOGUE ARTICLES — base articles / prix / fournisseurs
+   Store IndexedDB dédié ('catalogue'). AUCUN article n'est codé
+   en dur : ce module se remplit uniquement par import JSON
+   (format Achats/Chantiers), par génération depuis les achats
+   déjà enregistrés, ou par saisie manuelle (bouton "+ Article").
+   Accessible depuis le menu (2 · Saisie) et depuis
+   Configuration › Paramétrage › Import.
+============================================================ */
+const catNormDes=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+const catNormFourn=s=>{s=String(s||'').trim();return s||'(non renseigné)';};
+/* Filtre de bruit : certains exports terrain glissent le statut de règlement
+   ou une date dans la colonne désignation (ex : "PAYE EN ESPECE"). On les
+   exclut du catalogue pour ne pas polluer la base articles. */
+function catIsBruit(des){
+  const d=String(des||'').trim();
+  if(d.length<2)return true;
+  const D=d.toUpperCase();
+  if(/PAY[EÉ]|PAYER/.test(D))return true;
+  if(/^\d{4}-\d{1,2}-\d{1,2}/.test(D))return true;
+  if(/^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(D))return true;
+  if(/^[\d\s\/\-\.,]+$/.test(D))return true;
+  return false;
+}
+/* Regroupe une liste plate {designation,fournisseur,pu,date} en map désignation→fournisseurs
+   (même logique que paData(), mais réutilisable pour toute source : JSON importé ou achats). */
+function catBuildMapFromLignes(lignes){
+  const map={};
+  (lignes||[]).forEach(l=>{
+    const des=String(l.designation||'').trim();
+    if(!des||catIsBruit(des))return;
+    const pu=+l.pu||0;if(pu<=0)return;
+    const fourn=catNormFourn(l.fournisseur);
+    const key=catNormDes(des);
+    map[key]=map[key]||{des,fourns:{}};
+    const fo=map[key].fourns[fourn]=map[key].fourns[fourn]||{nb:0,sum:0,min:Infinity,max:-Infinity,last:0,lastDate:''};
+    fo.nb++;fo.sum+=pu;
+    if(pu<fo.min)fo.min=pu;
+    if(pu>fo.max)fo.max=pu;
+    const d=l.date||'';
+    if(!fo.lastDate||d>=fo.lastDate){fo.lastDate=d;fo.last=pu;}
+  });
+  return map;
+}
+/* Détecte et met à plat le format du fichier importé :
+   - forme "achat chantier" (fichier staging JSON) : [{fournisseur,date,lignes:[{designation,qte,pu,montant}],...}]
+   - forme "à plat" : [{designation|article, fournisseur, prix|pu, date}]
+   Retourne {lignes, totalBrut, ignoreesBruit, sansPrix}. */
+function catParseLignesFromJSON(data){
+  let src=[];
+  if(Array.isArray(data))src=data;
+  else if(data&&Array.isArray(data.chantiers))src=data.chantiers;
+  else throw new Error('Format JSON non reconnu (un tableau était attendu).');
+  const lignes=[];let totalBrut=0,ignoreesBruit=0,sansPrix=0;
+  src.forEach(item=>{
+    if(item&&Array.isArray(item.lignes)){
+      const fournisseur=item.fournisseur||'';const date=item.date||'';
+      item.lignes.forEach(l=>{
+        totalBrut++;
+        const des=String(l.designation||'').trim();
+        if(!des||catIsBruit(des)){ignoreesBruit++;return;}
+        let pu=+l.pu||0;
+        if(!pu&&(+l.montant)&&(+l.qte))pu=(+l.montant)/(+l.qte);
+        if(!pu){sansPrix++;return;}
+        lignes.push({designation:des,fournisseur,pu,date});
+      });
+    }else if(item&&(item.designation||item.article)){
+      totalBrut++;
+      const des=String(item.designation||item.article||'').trim();
+      if(!des||catIsBruit(des)){ignoreesBruit++;return;}
+      const pu=+(item.prix??item.pu??0)||0;
+      if(!pu){sansPrix++;return;}
+      lignes.push({designation:des,fournisseur:item.fournisseur||'',pu,date:item.date||''});
+    }
+  });
+  return{lignes,totalBrut,ignoreesBruit,sansPrix};
+}
+/* Fusionne une map désignation→fournisseurs dans le store 'catalogue' (upsert, jamais d'écrasement
+   silencieux : les statistiques par fournisseur sont cumulées avec l'existant). */
+async function catMergeMap(map,sourceLabel,opts){
+  opts=opts||{};
+  const keys=Object.keys(map);
+  if(!keys.length){toast('Rien à importer.');return;}
+  const prog=progressStart('Mise à jour du catalogue…');
+  const existingByKey={};
+  ST.catalogue.forEach(a=>{existingByKey[a.designationNorm]=a;});
+  const fournNoms=new Set();
+  let nouveaux=0,maj=0,buffer=[];
+  for(let i=0;i<keys.length;i++){
+    const key=keys[i],entry=map[key];
+    Object.keys(entry.fourns).forEach(f=>fournNoms.add(f));
+    let art=existingByKey[key];
+    if(!art){art={id:uid('art'),designation:entry.des,designationNorm:key,categorie:'',unite:'',actif:true,notes:'',prixRefMode:'auto',fournisseurs:[],source:sourceLabel,createdAt:Date.now(),updatedAt:Date.now()};nouveaux++;}
+    else maj++;
+    const fMap={};(art.fournisseurs||[]).forEach(f=>fMap[catNormFourn(f.nom).toUpperCase()]=f);
+    Object.entries(entry.fourns).forEach(([fn,v])=>{
+      const k=fn.toUpperCase();let fo=fMap[k];
+      if(!fo){fo={nom:fn,nb:0,sum:0,min:Infinity,max:-Infinity,last:0,lastDate:''};fMap[k]=fo;art.fournisseurs.push(fo);}
+      fo.nb+=v.nb;fo.sum+=v.sum;
+      if(v.min<fo.min)fo.min=v.min;
+      if(v.max>fo.max)fo.max=v.max;
+      if(!fo.lastDate||v.lastDate>=fo.lastDate){fo.lastDate=v.lastDate;fo.last=v.last;}
+    });
+    if(art.prixRefMode!=='manuel'&&art.fournisseurs.length){
+      const best=art.fournisseurs.reduce((a,b)=>b.last<a.last?b:a);
+      art.prixRef=Math.round(best.last);art.fournisseurPrefere=best.nom;
+    }
+    art.updatedAt=Date.now();
+    existingByKey[key]=art;
+    buffer.push({store:'catalogue',record:art});
+    if(buffer.length>=300){await putManyMixed(buffer);buffer=[];}
+    if(i%100===0){prog.update(i+1,keys.length,entry.des);await progressYield();}
+  }
+  if(buffer.length)await putManyMixed(buffer);
+  let foCrees=0;
+  if(opts.createFournisseurs){
+    const noms=[...fournNoms].filter(n=>n&&n.trim().toUpperCase()!=='(NON RENSEIGNÉ)');
+    for(let i=0;i<noms.length;i++){
+      const before=ST.tiers.length;
+      try{await stgEnsureFournisseur(noms[i]);}catch(e){}
+      if(ST.tiers.length>before)foCrees++;
+      if(i%10===0){prog.update(i+1,noms.length,'Fournisseurs — '+noms[i]);await progressYield();}
+    }
+  }
+  await loadAll();
+  prog.done('Catalogue mis à jour — '+nouveaux+' nouvel(aux) article(s), '+maj+' article(s) actualisé(s)'+(opts.createFournisseurs?', '+foCrees+' fournisseur(s) créé(s)':'')+'. Total catalogue : '+ST.catalogue.length+'.');
+  if(document.getElementById('p-catalogue'))RENDER.catalogue();
+}
+/* Import direct d'un fichier JSON (même format que l'Import Chantiers/Caisse) → catalogue. */
+function importCatalogueFile(file){
+  if(!file)return;
+  const cb=document.getElementById('catCreerFourn');
+  const createFourn=cb?cb.checked:true;
+  const rd=new FileReader();
+  rd.onload=async()=>{
+    let data;
+    try{data=JSON.parse(rd.result);}catch(e){alert('⚠ Fichier JSON invalide ou corrompu.\n\n'+e.message);return;}
+    let parsed;
+    try{parsed=catParseLignesFromJSON(data);}catch(e){alert('⚠ '+e.message);return;}
+    if(!parsed.lignes.length){toast('Aucune ligne exploitable trouvée dans ce fichier (désignation/prix manquants).');return;}
+    const map=catBuildMapFromLignes(parsed.lignes);
+    const nbArticles=Object.keys(map).length;
+    const nbFourn=new Set(parsed.lignes.map(l=>catNormFourn(l.fournisseur).toUpperCase())).size;
+    const msg='Fichier analysé :\n'
+      +'• '+parsed.totalBrut+' ligne(s) brute(s) lues\n'
+      +'• '+parsed.ignoreesBruit+' ligne(s) ignorée(s) (mentions de paiement, dates ou lignes vides détectées automatiquement)\n'
+      +(parsed.sansPrix?'• '+parsed.sansPrix+' ligne(s) sans prix exploitable ignorée(s)\n':'')
+      +'• '+parsed.lignes.length+' ligne(s) valide(s) retenue(s)\n'
+      +'• '+nbArticles+' désignation(s) d\'article distincte(s)\n'
+      +'• '+nbFourn+' fournisseur(s) distinct(s)'
+      +(createFourn?'\n\nLes fiches fournisseurs manquantes seront créées automatiquement (hors "(non renseigné)").':'')
+      +'\n\nFusionner ces données dans le Catalogue articles (les articles déjà connus seront mis à jour, aucun n\'est codé en dur) ?';
+    if(!confirm(msg))return;
+    await catMergeMap(map,'import_json',{createFournisseurs:createFourn});
+  };
+  rd.readAsText(file);
+}
+/* Génère/actualise le catalogue à partir des achats déjà enregistrés dans ce logiciel
+   (tous exercices) — "source base achats fournisseurs existante", sans re-import de fichier. */
+async function genererCatalogueDepuisAchats(){
+  const achatsAll=await all('achats');
+  if(!achatsAll.length){toast('Aucun achat enregistré pour le moment. Importez d\'abord vos achats (module Achats, ou Import Chantiers/Caisse).');return;}
+  const lignes=[];
+  achatsAll.forEach(a=>{
+    const fourn=a.fournNom||'';
+    (a.lignes||[]).forEach(l=>{
+      const des=(l.des||'').trim();
+      if(!des||!l.ht)return;
+      lignes.push({designation:des,fournisseur:fourn,pu:l.ht,date:a.date||''});
+    });
+  });
+  const map=catBuildMapFromLignes(lignes);
+  if(!Object.keys(map).length){toast('Aucune ligne d\'achat exploitable trouvée (après filtrage des lignes non-articles).');return;}
+  if(!confirm('Générer/actualiser le catalogue à partir de '+achatsAll.length+' facture(s) d\'achat déjà enregistrée(s) ('+Object.keys(map).length+' désignation(s) distincte(s) détectée(s)) ?'))return;
+  await catMergeMap(map,'achats',{createFournisseurs:false});
+}
+function exportCatalogueCSV(){
+  let c='designation,categorie,unite,prix_reference,meilleur_fournisseur,nb_fournisseurs,actif\n';
+  catFiltered().forEach(a=>{
+    c+=`"${(a.designation||'').replace(/"/g,'""')}","${(a.categorie||'').replace(/"/g,'""')}","${(a.unite||'').replace(/"/g,'""')}",${Math.round(a.prixRef||0)},"${(a.fournisseurPrefere||'').replace(/"/g,'""')}",${(a.fournisseurs||[]).length},${a.actif===false?'non':'oui'}\n`;
+  });
+  dl('catalogue_articles.csv',c);
+}
+/* ---- CRUD manuel ---- */
+function editArticle(id){
+  const art=id?ST.catalogue.find(x=>x.id===id):null;
+  if(id&&!art){toast('Article introuvable.');return;}
+  const cats=[...new Set(ST.catalogue.map(a=>a.categorie).filter(Boolean))].sort();
+  const unitesBase=['unité','pièce','kg','g','l','m','m²','m³','carton','sac','rouleau','paquet','lot'];
+  const uniteOptions=[...new Set([...unitesBase,...ST.catalogue.map(a=>a.unite).filter(Boolean)])];
+  const fournHTML=(art&&art.fournisseurs&&art.fournisseurs.length)
+    ?`<div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:14px 0 6px">Historique fournisseurs</div>
+      <div class="tbl-wrap"><table><thead><tr><th>Fournisseur</th><th class="ta-r">Dernier prix</th><th class="ta-r">Min</th><th class="ta-r">Max</th><th class="ta-c">Nb achats</th><th class="ta-c">Dernier achat</th></tr></thead>
+      <tbody>${art.fournisseurs.slice().sort((a,b)=>a.last-b.last).map(f=>`<tr><td>${esc(f.nom)}</td><td class="ta-r mono">${F0(f.last)}</td><td class="ta-r mono">${F0(f.min)}</td><td class="ta-r mono">${F0(f.max)}</td><td class="ta-c">${f.nb}</td><td class="ta-c">${dfr(f.lastDate)}</td></tr>`).join('')}</tbody></table></div>`
+    :'<div class="empty" style="margin-top:10px">Aucun historique fournisseur — article créé manuellement ou sans import.</div>';
+  openModal(`<div class="mh"><h3>${art?'Modifier':'Nouvel'} article</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><div><label>Désignation *</label><input id="artDes" value="${art?esc(art.designation):''}" placeholder="Ex : PAUMELLE INOX 100MM"></div></div>
+    <div class="frow c3">
+      <div><label>Catégorie</label><input id="artCat" list="dl-artCat" value="${art?esc(art.categorie||''):''}" placeholder="Libre"><datalist id="dl-artCat">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
+      <div><label>Unité</label><input id="artUnite" list="dl-artUnite" value="${art?esc(art.unite||''):''}" placeholder="unité, kg, m…"><datalist id="dl-artUnite">${uniteOptions.map(u=>`<option value="${esc(u)}">`).join('')}</datalist></div>
+      <div><label>Prix de référence (FCFA)</label><input type="number" id="artPrix" value="${art?Math.round(art.prixRef||0):0}"></div>
+    </div>
+    <div class="frow"><div><label>Notes</label><textarea id="artNotes" style="width:100%;min-height:56px;padding:9px;border:1.5px solid var(--line);border-radius:8px">${art?esc(art.notes||''):''}</textarea></div></div>
+    <label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="artActif" ${!art||art.actif!==false?'checked':''}> Article actif</label>
+    ${art?fournHTML:''}
+  </div>
+  <div class="mf">${art?`<button class="btn gh sm" style="color:var(--red)" onclick="delArticle('${id}')">🗑 Supprimer</button>`:''}<button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveArticle('${id||''}')">${art?'Enregistrer':'Créer'}</button></div>`,true);
+}
+async function saveArticle(id){
+  const g=x=>document.getElementById(x).value;
+  const des=g('artDes').trim();
+  if(!des){toast('Désignation requise.');return;}
+  const prix=+g('artPrix')||0;
+  const actif=document.getElementById('artActif').checked;
+  if(id){
+    const art=ST.catalogue.find(x=>x.id===id);if(!art){toast('Article introuvable.');return;}
+    art.designation=des;art.designationNorm=catNormDes(des);
+    art.categorie=g('artCat').trim();art.unite=g('artUnite').trim();
+    art.notes=g('artNotes').trim();art.actif=actif;
+    art.prixRef=prix;art.prixRefMode='manuel';art.updatedAt=Date.now();
+    await put('catalogue',art);
+  }else{
+    await put('catalogue',{id:uid('art'),designation:des,designationNorm:catNormDes(des),categorie:g('artCat').trim(),unite:g('artUnite').trim(),notes:g('artNotes').trim(),actif,prixRef:prix,prixRefMode:'manuel',fournisseurs:[],source:'manuel',createdAt:Date.now(),updatedAt:Date.now()});
+  }
+  await loadAll();closeModal();RENDER.catalogue();toast('Article enregistré.');
+}
+async function delArticle(id){
+  const art=ST.catalogue.find(x=>x.id===id);if(!art)return;
+  if(!confirm('Supprimer l\'article « '+art.designation+' » du catalogue ?\n\n(Les achats déjà enregistrés en comptabilité ne sont pas affectés.)'))return;
+  await del('catalogue',id);
+  await loadAll();closeModal();RENDER.catalogue();toast('Article supprimé.');
+}
+/* ---- Liste / filtres / rendu ---- */
+window._catPage=1;window._catFiltre={q:'',categorie:'',actif:''};
+function catFiltered(){
+  const f=window._catFiltre;
+  let arr=ST.catalogue.slice();
+  if(f.categorie)arr=arr.filter(a=>a.categorie===f.categorie);
+  if(f.actif==='1')arr=arr.filter(a=>a.actif!==false);
+  if(f.actif==='0')arr=arr.filter(a=>a.actif===false);
+  if(f.q){
+    const q=f.q.toLowerCase();
+    arr=arr.filter(a=>a.designation.toLowerCase().includes(q)||(a.fournisseurs||[]).some(x=>x.nom.toLowerCase().includes(q))||(a.categorie||'').toLowerCase().includes(q));
+  }
+  return arr.sort((a,b)=>a.designation.localeCompare(b.designation,'fr'));
+}
+RENDER.catalogue=()=>{
+  const cats=[...new Set(ST.catalogue.map(a=>a.categorie).filter(Boolean))].sort();
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-catalogue','Catalogue articles')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportCatalogueCSV()">⭳ CSV</button> <button class="btn sm" onclick="editArticle(null)">+ Article</button>`;
+  const panneauImport=`
+  <div class="card" style="border:2px solid var(--green);margin-bottom:14px">
+    <div style="font-weight:800;font-size:13px;color:var(--green);margin-bottom:4px">🚀 Alimenter le catalogue</div>
+    <div style="font-size:11.5px;color:var(--mut);margin-bottom:10px">Aucun article n'est codé en dur dans l'application : cette liste se construit uniquement par import, génération depuis les achats, ou saisie manuelle. (Aussi disponible dans Configuration › Paramétrage › Import.)</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <label class="btn sm" style="cursor:pointer;background:var(--green);color:#fff;font-weight:700">⭱ Importer JSON Achats/Chantiers<input type="file" accept=".json" style="display:none" onchange="importCatalogueFile(this.files[0])"></label>
+      <button class="btn sm gh" onclick="genererCatalogueDepuisAchats()">🔄 Générer depuis les achats déjà enregistrés</button>
+      <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="catCreerFourn" checked> Créer les fiches fournisseurs manquantes</label>
+    </div>
+  </div>`;
+  const list=catFiltered();
+  const pageSize=100,pages=Math.max(1,Math.ceil(list.length/pageSize));
+  if(window._catPage>pages)window._catPage=pages;
+  const slice=list.slice((window._catPage-1)*pageSize,window._catPage*pageSize);
+  const rows=slice.map(a=>{
+    const nbF=(a.fournisseurs||[]).length;
+    return`<tr>
+      <td><b>${esc(a.designation)}</b>${a.notes?`<div style="font-size:10.5px;color:var(--mut)">${esc(a.notes)}</div>`:''}</td>
+      <td>${esc(a.categorie||'—')}</td>
+      <td class="ta-c">${esc(a.unite||'—')}</td>
+      <td class="ta-r mono">${a.prixRef?F0(a.prixRef):'—'}</td>
+      <td>${esc(a.fournisseurPrefere||'—')}</td>
+      <td class="ta-c">${nbF}</td>
+      <td class="ta-c">${a.actif===false?'<span class="badge b-gray">inactif</span>':'<span class="badge b-green">actif</span>'}</td>
+      <td class="ta-c"><button class="linkbtn" title="Modifier / voir l'historique" onclick="editArticle('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delArticle('${a.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+  const nbFournTotal=new Set(ST.catalogue.flatMap(a=>(a.fournisseurs||[]).map(f=>f.nom.toUpperCase()))).size;
+  document.getElementById('p-catalogue').innerHTML=`
+  ${panneauImport}
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Articles au catalogue</div><div class="v mono">${ST.catalogue.length}</div></div>
+    <div class="card kpi b"><div class="lb">Fournisseurs distincts</div><div class="v mono">${nbFournTotal}</div></div>
+    <div class="card kpi g"><div class="lb">Actifs</div><div class="v mono">${ST.catalogue.filter(a=>a.actif!==false).length}</div></div>
+  </div>
+  <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input class="search" placeholder="🔍 Désignation, catégorie, fournisseur…" value="${esc(window._catFiltre.q)}" oninput="window._catFiltre.q=this.value;window._catPage=1;debounce('catSearch',()=>RENDER.catalogue())">
+    <select onchange="window._catFiltre.categorie=this.value;window._catPage=1;RENDER.catalogue()"><option value="">Toutes catégories</option>${cats.map(c=>`<option value="${esc(c)}" ${window._catFiltre.categorie===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <select onchange="window._catFiltre.actif=this.value;window._catPage=1;RENDER.catalogue()"><option value="">Actifs & inactifs</option><option value="1" ${window._catFiltre.actif==='1'?'selected':''}>Actifs seulement</option><option value="0" ${window._catFiltre.actif==='0'?'selected':''}>Inactifs seulement</option></select>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th>Catégorie</th><th class="ta-c">Unité</th><th class="ta-r">Prix réf.</th><th>Meilleur fournisseur</th><th class="ta-c">Nb fourn.</th><th class="ta-c">Statut</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🗂</div>Catalogue vide — importez un fichier ou ajoutez un article.</td></tr>'}</tbody></table></div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
+    <button class="btn sm gh" onclick="window._catPage=Math.max(1,window._catPage-1);RENDER.catalogue()">‹ Préc.</button>
+    <span style="font-size:12px">Page ${window._catPage}/${pages} — ${list.length} article(s)</span>
+    <button class="btn sm gh" onclick="window._catPage=Math.min(${pages},window._catPage+1);RENDER.catalogue()">Suiv. ›</button>
+  </div>
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:14px"><b style="color:var(--cuivre-d)">Prix de référence.</b> Automatiquement le moins cher des derniers prix connus par fournisseur (recalculé à chaque import/actualisation), sauf si vous le modifiez manuellement dans la fiche article. Cliquez ✎ pour voir l'historique complet par fournisseur.</div>`;
+};
+/* ---- Catalogue articles fin ---- */
 async function achatHTML(id){
   const a=ST.achats.find(x=>x.id===id)||(await all('achats')).find(x=>x.id===id);
   if(!a)return'<p>Facture introuvable.</p>';
@@ -3919,7 +4225,7 @@ RENDER.parametrage=()=>{
   else if(tab==='stockage')body=stockageHTML();
   else if(tab==='import')body=importHTML();
   document.getElementById('p-parametrage').innerHTML=`
-  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('comptable','Paramètres comptables')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}<button class="btn sm" style="background:var(--cuivre)" onclick="go('staging')">⇵ Import Chantiers/Caisse</button></div>
+  <div class="toolbar" style="flex-wrap:wrap">${tb('societe','Société')}${tb('comptable','Paramètres comptables')}${tb('users','Utilisateurs & rôles')}${tb('stockage','Stockage & sync')}${tb('import','Import CSV')}<button class="btn sm" style="background:var(--cuivre)" onclick="go('staging')">⇵ Import Chantiers/Caisse</button><button class="btn sm" style="background:var(--cuivre-d)" onclick="go('catalogue')">📦 Catalogue articles</button></div>
   ${body}`;
   if(tab==='societe')societeForm();
   if(tab==='comptable')comptableForm();
@@ -4239,6 +4545,15 @@ function importHTML(){
     <div class="frow"><div><label>Coller le CSV (1ère ligne = entêtes) ou charger un fichier</label><textarea id="impTxt" style="width:100%;min-height:130px;padding:9px;border:1.5px solid var(--line);border-radius:8px;font-family:monospace;font-size:12px"></textarea></div></div>
     <div style="display:flex;gap:8px"><label class="btn sm gh" style="cursor:pointer">Charger fichier<input type="file" accept=".csv" style="display:none" onchange="loadCSVFile(this.files[0])"></label>
     <button class="btn sm" onclick="runImport()">Importer</button></div>
+  </div>
+  <div class="card" style="margin-top:14px;border:2px solid var(--cuivre)">
+    <h3>Catalogue articles — import article / prix / fournisseur</h3>
+    <div style="font-size:12px;color:var(--mut);margin:6px 0 10px">Alimente le module <b>Catalogue articles</b> (menu 2 · Saisie) à partir d'un fichier JSON au format Achats/Chantiers (mêmes fichiers que l'Import Chantiers/Caisse), ou en régénérant depuis les achats déjà enregistrés dans ce logiciel. Aucun article n'est codé en dur dans l'application — tout vient de vos imports ou saisies.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <label class="btn sm" style="cursor:pointer;background:var(--cuivre)">⭱ Importer JSON Achats/Chantiers<input type="file" accept=".json" style="display:none" onchange="importCatalogueFile(this.files[0])"></label>
+      <button class="btn sm gh" onclick="genererCatalogueDepuisAchats()">🔄 Générer depuis les achats déjà enregistrés</button>
+      <button class="btn sm gh" onclick="go('catalogue')">📦 Ouvrir le Catalogue articles</button>
+    </div>
   </div>`;
 }
 function loadCSVFile(f){if(!f)return;const rd=new FileReader();rd.onload=()=>{document.getElementById('impTxt').value=rd.result;toast('Fichier chargé.');};rd.readAsText(f);}
@@ -6209,7 +6524,7 @@ RENDER.anomalies=async()=>{
 };
 
 /* ---- Journal d'audit ---- */
-const AUDIT_STORES=['ecritures','tiers','factures','comptes','immos','centres','budgets','exercices','users','pieces'];
+const AUDIT_STORES=['ecritures','tiers','factures','comptes','immos','centres','budgets','exercices','users','pieces','catalogue'];
 async function logAudit(action,store,ref){
   try{
     const db=await idb();
