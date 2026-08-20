@@ -249,6 +249,7 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="achats"><span class="ic">🛒</span>Achats fournisseurs</a>
       <a data-p="prixArticles"><span class="ic">📦</span>Prix articles/fournisseurs</a>
       <a data-p="catalogue"><span class="ic">🗂</span>Catalogue articles</a>
+      <a data-p="stock"><span class="ic">🏬</span>Gestion de stock<span id="stockNavBadge" class="badge b-red" style="display:none;margin-left:6px"></span></a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
       <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
@@ -318,6 +319,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-achats"></div>
       <div class="page" id="p-prixArticles"></div>
       <div class="page" id="p-catalogue"></div>
+      <div class="page" id="p-stock"></div>
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-rentabilite"></div>
@@ -358,11 +360,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=14;
+const DB_BASE='sanix_comptapro', DB_VER=15;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements','catalogue'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements','catalogue','depots','stock_mvt'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -592,7 +594,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],catalogue:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],catalogue:[],depots:[],stock_mvt:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -709,6 +711,8 @@ async function loadAll(){
   ST.audit=await all('audit');
   ST.staging=await all('staging');
   ST.catalogue=await all('catalogue');
+  ST.depots=await all('depots');
+  ST.stock_mvt=await all('stock_mvt');
   ST.caisses=await all('caisses');
   ST.caisse_sessions=await all('caisse_sessions');
   ST.caisse_mouvements=await all('caisse_mouvements');
@@ -828,7 +832,7 @@ async function boot(){
       if(window._pendingN>0){e.preventDefault();e.returnValue='';return '';} // des changements ne sont pas encore synchronisés vers Supabase
     });
   }
-  bindNav();go('cockpit');
+  bindNav();go('cockpit');stockUpdateBadge();
 }
 
 /* ============ NAV ============ */
@@ -855,6 +859,7 @@ facturation:['Facturation','Facture normalisée électronique (FNE) & facture si
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 prixArticles:['Prix articles/fournisseurs','Comparatif des prix d\'achat par désignation et par fournisseur'],
 catalogue:['Catalogue articles','Base articles, prix & fournisseurs — alimentée par import ou saisie, jamais codée en dur'],
+stock:['Gestion de stock','Dépôts · mouvements · valorisation CMUP · inventaire · alertes de seuil'],
 tiers:['Clients & Fournisseurs','Comptes auxiliaires'],
 tierscompta:['Comptabilité tiers','Balance auxiliaire · balance âgée · échéances'],lettrage:['Lettrage','Rapprochement des comptes de tiers'],
 rappro:['Rapprochement bancaire','Pointage des mouvements'],grandlivre:['Grand livre','Détail des mouvements par compte'],
@@ -909,6 +914,7 @@ const MODULE_NOTES={
   achats:"Factures fournisseurs : saisie, échéance, règlements. Génère automatiquement l'écriture d'achat (journal AC) à l'enregistrement.",
   prixArticles:"Liste des articles/désignations saisis sur les factures d'achats, avec le prix pratiqué par chaque fournisseur (dernier prix, moyen, min, max) — déduite automatiquement de la base Achats, sans catalogue séparé.",
   catalogue:"Catalogue persistant des articles achetés (désignation, catégorie, unité, prix de référence, fournisseurs associés). Aucun article n'est codé en dur dans l'application : ce module se remplit uniquement par import d'un fichier JSON Achats/Chantiers, par génération depuis les achats déjà enregistrés, ou par saisie manuelle. Voir aussi Configuration › Paramétrage › Import.",
+  stock:"Stock en quantités et en valeur (CMUP), par article et par dépôt — calculé à partir de l'historique des mouvements (entrées, sorties, transferts, inventaires), jamais stocké en dur. Les ventes (Facturation) déclenchent automatiquement une sortie de stock quand la désignation correspond à un article du Catalogue avec « gestion de stock » activée ; un avoir déclenche l'entrée inverse. Les achats n'ont pas de quantité en ligne (montant HT global) : la réception en stock se fait manuellement, avec référence à la pièce d'achat pour la traçabilité.",
   caisse:"Caisse physique : sessions ouverture/clôture avec PIN, bons d'entrée/sortie, écart de comptage, ventilation comptable des mouvements vers les comptes de charges/produits.",
   ecritures:"Saisie manuelle d'écritures en partie double, par journal. Toute écriture doit être équilibrée (total débit = total crédit) avant enregistrement.",
   staging:"Import en masse de données externes (Excel chantiers, brouillard de caisse) en zone tampon — à valider ou rejeter avant toute comptabilisation définitive.",
@@ -960,7 +966,7 @@ function go(p){
   }else{subTabsEl.style.display='none';subTabsEl.innerHTML='';}
   if(realP==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);msgUpdateBadge();return;}
   RENDER[realP]&&RENDER[realP]();
-  msgUpdateBadge();
+  msgUpdateBadge();stockUpdateBadge();
 }
 
 /* ============ MODAL ============ */
@@ -3690,6 +3696,11 @@ function editArticle(id){
     </div>
     <div class="frow"><div><label>Notes</label><textarea id="artNotes" style="width:100%;min-height:56px;padding:9px;border:1.5px solid var(--line);border-radius:8px">${art?esc(art.notes||''):''}</textarea></div></div>
     <label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="artActif" ${!art||art.actif!==false?'checked':''}> Article actif</label>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:14px 0 6px">Stock</div>
+    <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;margin-bottom:8px"><input type="checkbox" id="artGererStock" ${!art||art.gererStock!==false?'checked':''}> Gérer le stock de cet article (quantités, CMUP, alertes)</label>
+    <div class="frow c2"><div><label>Seuil d'alerte (stock min)</label><input type="number" id="artStockMin" value="${art?(art.stockMin||0):0}"></div>
+      <div><label>Dépôt par défaut</label><select id="artDepotDefaut"><option value="">— Aucun —</option>${ST.depots.map(d=>`<option value="${d.id}" ${art&&art.depotDefaut===d.id?'selected':''}>${esc(d.nom)}</option>`).join('')}</select></div></div>
+    ${art?(()=>{const s=stockSolde(art.id);return`<div style="font-size:11.5px;margin-top:6px;color:var(--mut)">Stock actuel : <b class="mono" style="color:var(--txt)">${s.qte} ${esc(art.unite||'')}</b> — valeur CMUP <b class="mono" style="color:var(--txt)">${F0(s.valeur)}</b> FCFA <button class="linkbtn" onclick="closeModal();go('stock');setTimeout(()=>catFicheArticle('${art.id}'),50)">Voir la fiche stock →</button></div>`;})():''}
     ${art?fournHTML:''}
   </div>
   <div class="mf">${art?`<button class="btn gh sm" style="color:var(--red)" onclick="delArticle('${id}')">🗑 Supprimer</button>`:''}<button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveArticle('${id||''}')">${art?'Enregistrer':'Créer'}</button></div>`,true);
@@ -3700,15 +3711,19 @@ async function saveArticle(id){
   if(!des){toast('Désignation requise.');return;}
   const prix=+g('artPrix')||0;
   const actif=document.getElementById('artActif').checked;
+  const gererStock=document.getElementById('artGererStock').checked;
+  const stockMin=+g('artStockMin')||0;
+  const depotDefaut=g('artDepotDefaut')||null;
   if(id){
     const art=ST.catalogue.find(x=>x.id===id);if(!art){toast('Article introuvable.');return;}
     art.designation=des;art.designationNorm=catNormDes(des);
     art.categorie=g('artCat').trim();art.unite=g('artUnite').trim();
     art.notes=g('artNotes').trim();art.actif=actif;
     art.prixRef=prix;art.prixRefMode='manuel';art.updatedAt=Date.now();
+    art.gererStock=gererStock;art.stockMin=stockMin;art.depotDefaut=depotDefaut;
     await put('catalogue',art);
   }else{
-    await put('catalogue',{id:uid('art'),designation:des,designationNorm:catNormDes(des),categorie:g('artCat').trim(),unite:g('artUnite').trim(),notes:g('artNotes').trim(),actif,prixRef:prix,prixRefMode:'manuel',fournisseurs:[],source:'manuel',createdAt:Date.now(),updatedAt:Date.now()});
+    await put('catalogue',{id:uid('art'),designation:des,designationNorm:catNormDes(des),categorie:g('artCat').trim(),unite:g('artUnite').trim(),notes:g('artNotes').trim(),actif,prixRef:prix,prixRefMode:'manuel',fournisseurs:[],source:'manuel',gererStock,stockMin,depotDefaut,createdAt:Date.now(),updatedAt:Date.now()});
   }
   await loadAll();closeModal();RENDER.catalogue();toast('Article enregistré.');
 }
@@ -3855,6 +3870,429 @@ RENDER.catalogue=()=>{
   <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:10px 13px;border-radius:0 8px 8px 0;font-size:12.5px;margin-top:14px"><b style="color:var(--cuivre-d)">Prix de référence.</b> Automatiquement le moins cher des derniers prix connus par fournisseur (recalculé à chaque import/actualisation), sauf si vous le modifiez manuellement dans la fiche article. Cliquez ✎ pour voir l'historique complet par fournisseur.</div>`;
 };
 /* ---- Catalogue articles fin ---- */
+/* ============================================================
+   GESTION DE STOCK — dépôts multiples, CMUP, mouvements, inventaire
+   Aucun solde stocké en dur : tout est recalculé depuis stock_mvt
+   (même logique que Caisse : le solde est une somme de mouvements).
+============================================================ */
+function stockDepotDefaut(){return ST.depots.find(d=>d.actif!==false)||ST.depots[0]||null;}
+async function ensureDepotDefaut(){
+  if(ST.depots.length)return;
+  await put('depots',{id:uid('dep'),nom:'Dépôt principal',adresse:'',actif:true,createdAt:Date.now()});
+  ST.depots=await all('depots');
+}
+function stockArticlesGeres(){return ST.catalogue.filter(a=>a.gererStock!==false);}
+function stockArticleParDesignation(des){
+  const norm=catNormDes(des);
+  return ST.catalogue.find(a=>a.designationNorm===norm&&a.gererStock!==false)||null;
+}
+/* Calcule qté/valeur/CMUP par article (et par dépôt) à partir de l'historique chronologique. */
+function calcStockState(){
+  const st={};
+  const ensure=(aid,did)=>{
+    if(!st[aid])st[aid]={qte:0,valeur:0,parDepot:{}};
+    if(did&&!st[aid].parDepot[did])st[aid].parDepot[did]={qte:0,valeur:0};
+  };
+  const mvts=ST.stock_mvt.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.createdAt||0)-(b.createdAt||0));
+  mvts.forEach(m=>{
+    if(!m.articleId)return;
+    ensure(m.articleId,m.depotId);
+    const a=st[m.articleId],d=m.depotId?a.parDepot[m.depotId]:null;
+    if(m.type==='entree'||m.type==='initial'){
+      const val=m.qte*(m.pu||0);
+      a.qte+=m.qte;a.valeur+=val;
+      if(d){d.qte+=m.qte;d.valeur+=val;}
+    }else if(m.type==='sortie'){
+      const cmupAv=a.qte>0?a.valeur/a.qte:0;
+      a.qte-=m.qte;a.valeur=Math.max(0,a.valeur-m.qte*cmupAv);
+      if(d){const cmupD=d.qte>0?d.valeur/d.qte:cmupAv;d.qte-=m.qte;d.valeur=Math.max(0,d.valeur-m.qte*cmupD);}
+    }else if(m.type==='transfert'){
+      const cmupAv=a.qte>0?a.valeur/a.qte:0;
+      if(d){const cmupD=d.qte>0?d.valeur/d.qte:cmupAv;d.qte-=m.qte;d.valeur=Math.max(0,d.valeur-m.qte*cmupD);}
+      if(m.depotDestId){ensure(m.articleId,m.depotDestId);const dd=a.parDepot[m.depotDestId];dd.qte+=m.qte;dd.valeur+=m.qte*cmupAv;}
+      // total article inchangé (transfert = simple répartition entre dépôts)
+    }else if(m.type==='inventaire'){
+      // m.qte = écart signé (compté - théorique), m.pu = CMUP courant au comptage
+      const val=m.qte*(m.pu||0);
+      a.qte+=m.qte;a.valeur=Math.max(0,a.valeur+val);
+      if(d){d.qte+=m.qte;d.valeur=Math.max(0,d.valeur+val);}
+    }
+  });
+  Object.values(st).forEach(a=>{a.cmup=a.qte>0?a.valeur/a.qte:0;
+    Object.values(a.parDepot).forEach(d=>{d.cmup=d.qte>0?d.valeur/d.qte:0;});});
+  return st;
+}
+function stockSolde(articleId,depotId){
+  const st=calcStockState();const a=st[articleId];if(!a)return{qte:0,valeur:0,cmup:0};
+  if(depotId){const d=a.parDepot[depotId];return d?{qte:d.qte,valeur:d.valeur,cmup:d.cmup}:{qte:0,valeur:0,cmup:0};}
+  return{qte:a.qte,valeur:a.valeur,cmup:a.cmup};
+}
+async function mvtCreate(type,data){
+  const rec=Object.assign({id:uid('mvt'),type,createdAt:Date.now()},data);
+  if(!rec.date)rec.date=new Date().toISOString().slice(0,10);
+  if(!rec.exId)rec.exId=ST.exId;
+  await put('stock_mvt',rec);
+  ST.stock_mvt.push(rec); // maj immédiate du cache local — cohérence des calculs enchaînés (ex. plusieurs lignes d'une même facture)
+  return rec;
+}
+async function stockEntree(articleId,depotId,qte,pu,opts={}){
+  if(!articleId||!depotId||!qte)throw new Error('Paramètres manquants.');
+  return mvtCreate('entree',{articleId,depotId,qte:+qte,pu:+pu||0,date:opts.date,piece:opts.piece||'',motif:opts.motif||'',refType:opts.refType||'manuel',refId:opts.refId||null});
+}
+async function stockSortie(articleId,depotId,qte,opts={}){
+  const s=stockSolde(articleId,depotId);
+  if(qte>s.qte&&!opts.force)throw new Error('STOCK_INSUFFISANT');
+  return mvtCreate('sortie',{articleId,depotId,qte:+qte,pu:s.cmup,date:opts.date,piece:opts.piece||'',motif:opts.motif||'',refType:opts.refType||'manuel',refId:opts.refId||null});
+}
+async function stockTransfert(articleId,depotSrcId,depotDestId,qte,opts={}){
+  const s=stockSolde(articleId,depotSrcId);
+  if(qte>s.qte&&!opts.force)throw new Error('STOCK_INSUFFISANT');
+  return mvtCreate('transfert',{articleId,depotId:depotSrcId,depotDestId,qte:+qte,pu:s.cmup,date:opts.date,piece:opts.piece||'',motif:opts.motif||'Transfert inter-dépôts'});
+}
+async function stockInventaire(articleId,depotId,qteComptee,opts={}){
+  const s=stockSolde(articleId,depotId);
+  const ecart=(+qteComptee)-s.qte;
+  if(ecart===0)return null;
+  return mvtCreate('inventaire',{articleId,depotId,qte:ecart,pu:s.cmup,date:opts.date,piece:opts.piece||'',motif:opts.motif||'Comptage physique'});
+}
+async function delMouvement(id){
+  const m=ST.stock_mvt.find(x=>x.id===id);if(!m)return;
+  if(!confirm('Supprimer ce mouvement de stock ? Le solde sera recalculé automatiquement.'))return;
+  await del('stock_mvt',id);await loadAll();RENDER.stock();toast('Mouvement supprimé.');
+}
+function stockUpdateBadge(){
+  const el=document.getElementById('stockNavBadge');if(!el)return;
+  const st=calcStockState();let n=0;
+  ST.catalogue.forEach(a=>{if(a.gererStock===false)return;const s=st[a.id];const qte=s?s.qte:0;if((a.stockMin||0)>0&&qte<a.stockMin)n++;});
+  if(n>0){el.style.display='inline-block';el.textContent=n;}else el.style.display='none';
+}
+/* ---- Ventes → sortie stock automatique (par correspondance de désignation avec le Catalogue) ---- */
+async function genFactureSortieStock(fac){
+  try{
+    const existants=ST.stock_mvt.filter(m=>m.refType==='facture'&&m.refId===fac.id);
+    for(const m of existants)await del('stock_mvt',m.id);
+    ST.stock_mvt=ST.stock_mvt.filter(m=>!(m.refType==='facture'&&m.refId===fac.id));
+    if(!fac.lignes||!fac.lignes.length)return;
+    const depotBase=stockDepotDefaut();if(!depotBase)return;
+    for(const l of fac.lignes){
+      if(!l.qte||!l.des)continue;
+      const art=stockArticleParDesignation(l.des);
+      if(!art)continue;
+      const depotId=art.depotDefaut||depotBase.id;
+      if(fac.type==='avoir'){
+        const s=stockSolde(art.id,depotId);
+        await mvtCreate('entree',{articleId:art.id,depotId,qte:l.qte,pu:s.cmup||l.pu||0,date:fac.date,piece:fac.numero,motif:'Retour sur avoir '+fac.numero,refType:'facture',refId:fac.id});
+      }else{
+        const s=stockSolde(art.id,depotId);
+        const insuffisant=l.qte>s.qte;
+        await mvtCreate('sortie',{articleId:art.id,depotId,qte:l.qte,pu:s.cmup,date:fac.date,piece:fac.numero,motif:'Vente '+fac.numero+(insuffisant?' (⚠ stock déjà insuffisant à la vente)':''),refType:'facture',refId:fac.id});
+      }
+    }
+  }catch(e){/* la facturation ne doit jamais être bloquée par le stock */}
+}
+/* ---- Dépôts CRUD ---- */
+function editDepot(id){
+  const d=id?ST.depots.find(x=>x.id===id):null;
+  openModal(`<div class="mh"><h3>${d?'Modifier':'Nouveau'} dépôt</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><div><label>Nom *</label><input id="depNom" value="${d?esc(d.nom):''}" placeholder="Ex : Dépôt principal, Chantier Cocody…"></div></div>
+    <div class="frow"><div><label>Adresse</label><input id="depAdresse" value="${d?esc(d.adresse||''):''}"></div></div>
+    <label style="font-size:12.5px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="depActif" ${!d||d.actif!==false?'checked':''}> Dépôt actif</label>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveDepot('${id||''}')">${d?'Enregistrer':'Créer'}</button></div>`);
+}
+async function saveDepot(id){
+  const nom=document.getElementById('depNom').value.trim();
+  if(!nom){toast('Nom requis.');return;}
+  const adresse=document.getElementById('depAdresse').value.trim();
+  const actif=document.getElementById('depActif').checked;
+  if(id){const d=ST.depots.find(x=>x.id===id);Object.assign(d,{nom,adresse,actif});await put('depots',d);}
+  else await put('depots',{id:uid('dep'),nom,adresse,actif,createdAt:Date.now()});
+  await loadAll();closeModal();RENDER.stock();toast('Dépôt enregistré.');
+}
+async function delDepot(id){
+  if(ST.stock_mvt.some(m=>m.depotId===id||m.depotDestId===id)){toast('Dépôt utilisé dans des mouvements — désactivez-le plutôt que de le supprimer.');return;}
+  if(!confirm('Supprimer ce dépôt ?'))return;
+  await del('depots',id);await loadAll();RENDER.stock();toast('Dépôt supprimé.');
+}
+/* ---- Modale mouvement unifiée (entrée / sortie / transfert / inventaire) ---- */
+function stockArticleOptions(sel){
+  return stockArticlesGeres().slice().sort((a,b)=>a.designation.localeCompare(b.designation,'fr'))
+    .map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${esc(a.designation)}</option>`).join('');
+}
+function stockDepotOptions(sel){return ST.depots.map(d=>`<option value="${d.id}" ${sel===d.id?'selected':''}>${esc(d.nom)}</option>`).join('');}
+function openMvtModal(type){
+  if(!ST.depots.length){toast('Créez d\'abord un dépôt (onglet Dépôts).');return;}
+  if(!stockArticlesGeres().length){toast('Aucun article géré en stock — activez « Gérer le stock » sur un article du Catalogue.');return;}
+  const titles={entree:'Entrée de stock',sortie:'Sortie de stock',transfert:'Transfert inter-dépôts',inventaire:'Comptage / ajustement d\'inventaire'};
+  const depotDefaut=stockDepotDefaut();
+  const puField=type==='entree'?`<div><label>Prix unitaire d'entrée (FCFA)</label><input type="number" id="mvtPu" value="0"></div>`:'';
+  const qteLabel=type==='inventaire'?'Quantité comptée physiquement':'Quantité';
+  const depotDestField=type==='transfert'?`<div><label>Dépôt destination</label><select id="mvtDepotDest">${stockDepotOptions('')}</select></div>`:'';
+  openModal(`<div class="mh"><h3>${titles[type]}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="frow"><div><label>Article *</label><select id="mvtArticle" onchange="stockMvtArticleChange()">${stockArticleOptions('')}</select></div></div>
+    <div class="frow c2">
+      <div><label>Dépôt ${type==='transfert'?'source':''} *</label><select id="mvtDepot" onchange="stockMvtArticleChange()">${stockDepotOptions(depotDefaut?depotDefaut.id:'')}</select></div>
+      ${depotDestField}
+    </div>
+    <div class="frow c3">
+      <div><label>${qteLabel} *</label><input type="number" id="mvtQte" value="0"></div>
+      ${puField}
+      <div><label>Date</label><input type="date" id="mvtDate" value="${new Date().toISOString().slice(0,10)}"></div>
+    </div>
+    <div class="frow c2"><div><label>Pièce / référence</label><input id="mvtPiece" placeholder="N° BL, facture d'achat…"></div><div><label>Motif</label><input id="mvtMotif" placeholder="Optionnel"></div></div>
+    <div id="mvtSoldeInfo" style="font-size:11.5px;color:var(--mut);margin-top:6px"></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="saveMvtModal('${type}')">Valider</button></div>`);
+  setTimeout(stockMvtArticleChange,30);
+}
+function stockMvtArticleChange(){
+  const artEl=document.getElementById('mvtArticle'),depotEl=document.getElementById('mvtDepot');
+  const info=document.getElementById('mvtSoldeInfo');
+  if(!info||!artEl||!depotEl)return;
+  const s=stockSolde(artEl.value,depotEl.value);
+  info.textContent='Stock actuel dans ce dépôt : '+s.qte+' — CMUP '+F0(s.cmup)+' FCFA';
+}
+async function saveMvtModal(type){
+  const articleId=document.getElementById('mvtArticle').value;
+  const depotId=document.getElementById('mvtDepot').value;
+  const qte=+document.getElementById('mvtQte').value||0;
+  const date=document.getElementById('mvtDate').value;
+  const piece=document.getElementById('mvtPiece').value.trim();
+  const motif=document.getElementById('mvtMotif').value.trim();
+  if(!articleId||!depotId){toast('Article et dépôt obligatoires.');return;}
+  if(qte<=0&&type!=='inventaire'){toast('Quantité invalide.');return;}
+  try{
+    if(type==='entree'){
+      const pu=+document.getElementById('mvtPu').value||0;
+      await stockEntree(articleId,depotId,qte,pu,{date,piece,motif});
+    }else if(type==='sortie'){
+      await stockSortie(articleId,depotId,qte,{date,piece,motif});
+    }else if(type==='transfert'){
+      const depotDestId=document.getElementById('mvtDepotDest').value;
+      if(depotDestId===depotId){toast('Le dépôt destination doit être différent du dépôt source.');return;}
+      await stockTransfert(articleId,depotId,depotDestId,qte,{date,piece,motif});
+    }else if(type==='inventaire'){
+      const r=await stockInventaire(articleId,depotId,qte,{date,piece,motif});
+      if(!r){toast('Aucun écart — rien à enregistrer.');return;}
+    }
+  }catch(e){
+    if(e.message==='STOCK_INSUFFISANT'){toast('Stock insuffisant dans ce dépôt.');return;}
+    toast('Erreur : '+e.message);return;
+  }
+  await loadAll();closeModal();RENDER.stock();toast('Mouvement enregistré.');
+}
+/* ---- Fiche stock d'un article (ouverte depuis le Catalogue ou l'état du stock) ---- */
+function catFicheArticle(articleId){
+  const a=ST.catalogue.find(x=>x.id===articleId);if(!a){toast('Article introuvable.');return;}
+  const s=stockSolde(articleId);
+  const typeLbl={entree:'Entrée',sortie:'Sortie',transfert:'Transfert',inventaire:'Inventaire',initial:'Initial'};
+  const parDepotRows=ST.depots.map(d=>{const ds=stockSolde(articleId,d.id);return ds.qte?`<tr><td>${esc(d.nom)}</td><td class="ta-r mono">${ds.qte}</td><td class="ta-r mono">${F0(ds.cmup)}</td><td class="ta-r mono">${F0(ds.valeur)}</td></tr>`:'';}).join('');
+  const hist=ST.stock_mvt.filter(m=>m.articleId===articleId).sort((x,y)=>(y.date||'').localeCompare(x.date||'')||(y.createdAt||0)-(x.createdAt||0)).slice(0,50);
+  const histRows=hist.map(m=>{const d=ST.depots.find(x=>x.id===m.depotId);return`<tr><td class="mono">${dfr(m.date)}</td><td>${typeLbl[m.type]||m.type}</td><td>${d?esc(d.nom):'—'}</td><td class="ta-r mono">${m.qte}</td><td>${esc(m.piece||'—')}</td></tr>`;}).join('');
+  openModal(`<div class="mh"><h3>Fiche stock — ${esc(a.designation)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb">
+    <div class="grid kpis" style="margin-bottom:12px">
+      <div class="card kpi o"><div class="lb">Stock total</div><div class="v mono">${s.qte} ${esc(a.unite||'')}</div></div>
+      <div class="card kpi b"><div class="lb">CMUP</div><div class="v mono">${F0(s.cmup)}</div></div>
+      <div class="card kpi g"><div class="lb">Valeur</div><div class="v mono">${F0(s.valeur)}</div></div>
+    </div>
+    ${parDepotRows?`<div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Répartition par dépôt</div><div class="tbl-wrap"><table><thead><tr><th>Dépôt</th><th class="ta-r">Qté</th><th class="ta-r">CMUP</th><th class="ta-r">Valeur</th></tr></thead><tbody>${parDepotRows}</tbody></table></div>`:''}
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:14px 0 6px">Historique des mouvements (50 derniers)</div>
+    <div class="tbl-wrap" style="max-height:40vh;overflow:auto"><table><thead><tr><th>Date</th><th>Type</th><th>Dépôt</th><th class="ta-r">Qté</th><th>Pièce</th></tr></thead><tbody>${histRows||'<tr><td colspan=5 class="empty">Aucun mouvement.</td></tr>'}</tbody></table></div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button></div>`,true);
+}
+/* ---- Export CSV état du stock ---- */
+function exportStockCSV(){
+  const st=calcStockState();
+  let c='Article;Catégorie;Unité;Quantité;CMUP;Valeur;Seuil;Statut\n';
+  stockArticlesGeres().forEach(a=>{
+    const s=st[a.id]||{qte:0,valeur:0,cmup:0};
+    const statut=s.qte<=0?'Rupture':((a.stockMin||0)>0&&s.qte<a.stockMin)?'Sous seuil':'OK';
+    c+=[a.designation,a.categorie||'',a.unite||'',s.qte,Math.round(s.cmup),Math.round(s.valeur),a.stockMin||0,statut].join(';')+'\n';
+  });
+  dl('etat_stock.csv',c);
+}
+/* ---- RENDER principal + onglets ---- */
+window._stockTab=window._stockTab||'vue';
+window._stockFiltreMvt={q:'',type:'',depot:'',from:'',to:''};
+window._stockFiltreEtat={q:'',categorie:'',statut:''};
+function stockSetTab(t){window._stockTab=t;RENDER.stock();}
+RENDER.stock=async()=>{
+  await ensureDepotDefaut();
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-stock','Gestion de stock')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportStockCSV()">⭳ CSV</button> <button class="btn sm" onclick="openMvtModal('entree')">+ Entrée</button> <button class="btn sm gh" onclick="openMvtModal('sortie')">− Sortie</button> <button class="btn sm gh" onclick="openMvtModal('transfert')">⇄ Transfert</button>`;
+  const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="btn sm ${window._stockTab==='vue'?'':'gh'}" onclick="stockSetTab('vue')">▚ Vue d'ensemble</button>
+    <button class="btn sm ${window._stockTab==='mvt'?'':'gh'}" onclick="stockSetTab('mvt')">↕ Mouvements</button>
+    <button class="btn sm ${window._stockTab==='inv'?'':'gh'}" onclick="stockSetTab('inv')">🔍 Inventaire</button>
+    <button class="btn sm ${window._stockTab==='dep'?'':'gh'}" onclick="stockSetTab('dep')">🏬 Dépôts</button>
+  </div>`;
+  let body;
+  if(window._stockTab==='mvt')body=stockRenderMouvements();
+  else if(window._stockTab==='inv')body=stockRenderInventaire();
+  else if(window._stockTab==='dep')body=stockRenderDepots();
+  else body=stockRenderVue();
+  document.getElementById('p-stock').innerHTML=tabs+body;
+  stockUpdateBadge();
+};
+function stockRenderVue(){
+  const st=calcStockState();
+  const articles=stockArticlesGeres();
+  let valeurTotale=0,nbArticlesEnStock=0,nbRuptures=0,nbSousSeuil=0;
+  const parCat={};
+  articles.forEach(a=>{
+    const s=st[a.id]||{qte:0,valeur:0,cmup:0};
+    valeurTotale+=s.valeur;
+    if(s.qte>0)nbArticlesEnStock++;
+    if(s.qte<=0)nbRuptures++;
+    else if((a.stockMin||0)>0&&s.qte<a.stockMin)nbSousSeuil++;
+    const c=a.categorie||'Sans catégorie';parCat[c]=(parCat[c]||0)+s.valeur;
+  });
+  const today=new Date().toISOString().slice(0,10);
+  const mvtJour=ST.stock_mvt.filter(m=>(m.date||'').slice(0,10)===today).length;
+  const topCatVal=Object.entries(parCat).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxCatVal=topCatVal.length?topCatVal[0][1]:1;
+  const dashboard=`
+  <div class="grid kpis" style="margin-bottom:12px">
+    <div class="card kpi o"><div class="lb">Valeur totale du stock (CMUP)</div><div class="v mono">${F0(valeurTotale)}</div></div>
+    <div class="card kpi g"><div class="lb">Articles en stock</div><div class="v mono">${nbArticlesEnStock}</div></div>
+    <div class="card kpi r"><div class="lb">Ruptures</div><div class="v mono">${nbRuptures}</div></div>
+    <div class="card kpi b"><div class="lb">Sous le seuil</div><div class="v mono">${nbSousSeuil}</div></div>
+    <div class="card kpi"><div class="lb">Dépôts</div><div class="v mono">${ST.depots.length}</div></div>
+    <div class="card kpi"><div class="lb">Mouvements aujourd'hui</div><div class="v mono">${mvtJour}</div></div>
+  </div>
+  ${topCatVal.length?`<div class="card" style="margin-bottom:14px"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Valeur du stock par catégorie</div>${topCatVal.map(([lb,v])=>catBarRow(lb,Math.round(v),Math.round(maxCatVal),'var(--cuivre)')).join('')}</div>`:''}`;
+  const f=window._stockFiltreEtat;
+  const cats=[...new Set(articles.map(a=>a.categorie).filter(Boolean))].sort();
+  let list=articles.map(a=>({a,s:st[a.id]||{qte:0,valeur:0,cmup:0}}));
+  if(f.categorie)list=list.filter(x=>x.a.categorie===f.categorie);
+  if(f.statut==='rupture')list=list.filter(x=>x.s.qte<=0);
+  if(f.statut==='seuil')list=list.filter(x=>x.s.qte>0&&(x.a.stockMin||0)>0&&x.s.qte<x.a.stockMin);
+  if(f.statut==='ok')list=list.filter(x=>x.s.qte>0&&!((x.a.stockMin||0)>0&&x.s.qte<x.a.stockMin));
+  if(f.q){const q=f.q.toLowerCase();list=list.filter(x=>x.a.designation.toLowerCase().includes(q));}
+  list.sort((x,y)=>x.a.designation.localeCompare(y.a.designation,'fr'));
+  const rows=list.map(({a,s})=>{
+    const rupture=s.qte<=0,sousSeuil=!rupture&&(a.stockMin||0)>0&&s.qte<a.stockMin;
+    const statut=rupture?'<span class="badge b-red">rupture</span>':sousSeuil?'<span class="badge" style="background:#fbeede;color:#c98a10">sous seuil</span>':'<span class="badge b-green">ok</span>';
+    return`<tr>
+      <td><b>${esc(a.designation)}</b>${a.categorie?`<div style="font-size:10.5px;color:var(--mut)">${esc(a.categorie)}</div>`:''}</td>
+      <td class="ta-r mono">${s.qte} ${esc(a.unite||'')}</td>
+      <td class="ta-r mono">${s.qte>0?F0(s.cmup):'—'}</td>
+      <td class="ta-r mono">${F0(s.valeur)}</td>
+      <td class="ta-c">${a.stockMin||'—'}</td>
+      <td class="ta-c">${statut}</td>
+      <td class="ta-c"><button class="linkbtn" onclick="catFicheArticle('${a.id}')">👁 Fiche</button></td>
+    </tr>`;
+  }).join('');
+  return dashboard+`
+  <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input class="search" placeholder="🔍 Article…" value="${esc(f.q)}" oninput="window._stockFiltreEtat.q=this.value;debounce('stEtatQ',()=>RENDER.stock())">
+    <select onchange="window._stockFiltreEtat.categorie=this.value;RENDER.stock()"><option value="">Toutes catégories</option>${cats.map(c=>`<option value="${esc(c)}" ${f.categorie===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <select onchange="window._stockFiltreEtat.statut=this.value;RENDER.stock()"><option value="">Tous statuts</option><option value="rupture" ${f.statut==='rupture'?'selected':''}>Rupture</option><option value="seuil" ${f.statut==='seuil'?'selected':''}>Sous seuil</option><option value="ok" ${f.statut==='ok'?'selected':''}>OK</option></select>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Article</th><th class="ta-r">Qté</th><th class="ta-r">CMUP</th><th class="ta-r">Valeur</th><th class="ta-c">Seuil</th><th class="ta-c">Statut</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=7 class="empty"><div class="ic">🏬</div>Aucun article géré en stock — activez « Gérer le stock » sur les articles du Catalogue.</td></tr>'}</tbody></table></div>`;
+}
+function stockRenderMouvements(){
+  const f=window._stockFiltreMvt;
+  let list=ST.stock_mvt.slice();
+  if(f.type)list=list.filter(m=>m.type===f.type);
+  if(f.depot)list=list.filter(m=>m.depotId===f.depot||m.depotDestId===f.depot);
+  if(f.from)list=list.filter(m=>(m.date||'')>=f.from);
+  if(f.to)list=list.filter(m=>(m.date||'')<=f.to);
+  if(f.q){const q=f.q.toLowerCase();list=list.filter(m=>{const a=ST.catalogue.find(x=>x.id===m.articleId);return(a&&a.designation.toLowerCase().includes(q))||(m.piece||'').toLowerCase().includes(q)||(m.motif||'').toLowerCase().includes(q);});}
+  list.sort((a,b)=>(b.date||'').localeCompare(a.date||'')||(b.createdAt||0)-(a.createdAt||0));
+  const depotNom=id=>{const d=ST.depots.find(x=>x.id===id);return d?d.nom:'—';};
+  const typeLbl={entree:'Entrée',sortie:'Sortie',transfert:'Transfert',inventaire:'Inventaire',initial:'Stock initial'};
+  const typeBadge={entree:'b-green',sortie:'b-red',transfert:'b-blue',inventaire:'b-gray',initial:'b-gray'};
+  const rows=list.slice(0,300).map(m=>{
+    const a=ST.catalogue.find(x=>x.id===m.articleId);
+    return`<tr>
+      <td class="mono">${dfr(m.date)}</td>
+      <td><span class="badge ${typeBadge[m.type]||'b-gray'}">${typeLbl[m.type]||m.type}</span></td>
+      <td>${a?esc(a.designation):'<span style="color:var(--mut)">Article supprimé</span>'}</td>
+      <td>${m.type==='transfert'?depotNom(m.depotId)+' → '+depotNom(m.depotDestId):depotNom(m.depotId)}</td>
+      <td class="ta-r mono ${m.type==='sortie'?'neg':m.type==='entree'?'pos':''}">${m.qte}</td>
+      <td class="ta-r mono">${m.pu?F0(m.pu):'—'}</td>
+      <td>${esc(m.piece||'—')}</td>
+      <td style="font-size:11px;color:var(--mut)">${esc(m.motif||'—')}</td>
+      <td class="ta-c"><button class="linkbtn" style="color:var(--red)" onclick="delMouvement('${m.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+  return`
+  <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <input class="search" placeholder="🔍 Article, pièce, motif…" value="${esc(f.q)}" oninput="window._stockFiltreMvt.q=this.value;debounce('stMvtQ',()=>RENDER.stock())">
+    <select onchange="window._stockFiltreMvt.type=this.value;RENDER.stock()"><option value="">Tous types</option><option value="entree" ${f.type==='entree'?'selected':''}>Entrée</option><option value="sortie" ${f.type==='sortie'?'selected':''}>Sortie</option><option value="transfert" ${f.type==='transfert'?'selected':''}>Transfert</option><option value="inventaire" ${f.type==='inventaire'?'selected':''}>Inventaire</option></select>
+    <select onchange="window._stockFiltreMvt.depot=this.value;RENDER.stock()"><option value="">Tous dépôts</option>${ST.depots.map(d=>`<option value="${d.id}" ${f.depot===d.id?'selected':''}>${esc(d.nom)}</option>`).join('')}</select>
+    <input type="date" value="${f.from}" onchange="window._stockFiltreMvt.from=this.value;RENDER.stock()">
+    <input type="date" value="${f.to}" onchange="window._stockFiltreMvt.to=this.value;RENDER.stock()">
+    <button class="btn sm" onclick="openMvtModal('inventaire')">🔍 Comptage ponctuel</button>
+  </div>
+  <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Article</th><th>Dépôt</th><th class="ta-r">Qté</th><th class="ta-r">P.U.</th><th>Pièce</th><th>Motif</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=9 class="empty"><div class="ic">↕</div>Aucun mouvement.</td></tr>'}</tbody></table></div>
+  ${list.length>300?`<div style="font-size:11px;color:var(--mut);margin-top:6px">300 mouvements les plus récents affichés sur ${list.length} — affinez les filtres.</div>`:''}`;
+}
+function stockRenderInventaire(){
+  const depotId=window._stockInvDepot||(stockDepotDefaut()?stockDepotDefaut().id:'');
+  window._stockInvDepot=depotId;
+  const st=calcStockState();
+  const articles=stockArticlesGeres().slice().sort((a,b)=>a.designation.localeCompare(b.designation,'fr'));
+  const rows=articles.map(a=>{
+    const dd=depotId&&st[a.id]?st[a.id].parDepot[depotId]:null;
+    const qte=dd?dd.qte:0;
+    return`<tr>
+      <td><b>${esc(a.designation)}</b></td>
+      <td class="ta-r mono">${qte} ${esc(a.unite||'')}</td>
+      <td class="ta-r"><input type="number" class="amt" style="width:90px" id="inv_${a.id}" placeholder="${qte}"></td>
+    </tr>`;
+  }).join('');
+  return`
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Feuille de comptage physique</div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <select onchange="window._stockInvDepot=this.value;RENDER.stock()">${ST.depots.map(d=>`<option value="${d.id}" ${depotId===d.id?'selected':''}>${esc(d.nom)}</option>`).join('')}</select>
+      <span style="font-size:11.5px;color:var(--mut)">Laissez vide les articles non comptés — seuls les écarts saisis génèrent un mouvement d'inventaire.</span>
+    </div>
+    <div class="tbl-wrap" style="max-height:60vh;overflow:auto"><table><thead><tr><th>Article</th><th class="ta-r">Stock théorique</th><th class="ta-r">Compté</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class="empty">Aucun article géré en stock.</td></tr>'}</tbody></table></div>
+    <button class="btn sm" style="margin-top:12px" onclick="stockValiderInventaire()">✓ Valider le comptage et générer les écarts</button>
+  </div>`;
+}
+async function stockValiderInventaire(){
+  const depotId=window._stockInvDepot;if(!depotId){toast('Sélectionnez un dépôt.');return;}
+  const articles=stockArticlesGeres();
+  let n=0;
+  for(const a of articles){
+    const el=document.getElementById('inv_'+a.id);
+    if(!el||el.value==='')continue;
+    const compte=+el.value;if(isNaN(compte))continue;
+    const r=await stockInventaire(a.id,depotId,compte,{motif:'Comptage physique du '+new Date().toISOString().slice(0,10)});
+    if(r)n++;
+  }
+  await loadAll();
+  toast(n?n+' écart(s) d\'inventaire enregistré(s).':'Aucun écart détecté.');
+  RENDER.stock();
+}
+function stockRenderDepots(){
+  const st=calcStockState();
+  const rows=ST.depots.map(d=>{
+    let val=0,nbArt=0;
+    Object.values(st).forEach(a=>{const dd=a.parDepot[d.id];if(dd&&dd.qte>0){val+=dd.valeur;nbArt++;}});
+    return`<tr>
+      <td><b>${esc(d.nom)}</b>${d.adresse?`<div style="font-size:10.5px;color:var(--mut)">${esc(d.adresse)}</div>`:''}</td>
+      <td class="ta-c">${nbArt}</td>
+      <td class="ta-r mono">${F0(val)}</td>
+      <td class="ta-c">${d.actif===false?'<span class="badge b-gray">inactif</span>':'<span class="badge b-green">actif</span>'}</td>
+      <td class="ta-c"><button class="linkbtn" onclick="editDepot('${d.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delDepot('${d.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+  return`<div class="card" style="margin-bottom:14px"><button class="btn sm" onclick="editDepot(null)">+ Nouveau dépôt</button></div>
+  <div class="tbl-wrap"><table><thead><tr><th>Dépôt</th><th class="ta-c">Articles en stock</th><th class="ta-r">Valeur (CMUP)</th><th class="ta-c">Statut</th><th></th></tr></thead>
+  <tbody>${rows||'<tr><td colspan=5 class="empty">Aucun dépôt.</td></tr>'}</tbody></table></div>`;
+}
+/* ---- Gestion de stock fin ---- */
+
 async function achatHTML(id){
   const a=ST.achats.find(x=>x.id===id)||(await all('achats')).find(x=>x.id===id);
   if(!a)return'<p>Facture introuvable.</p>';
@@ -4116,6 +4554,7 @@ async function saveFacture(id,type){
   } else msg='Facture '+numero+' enregistrée.';
   await put('factures',fac);
   await genFactureEcriture(fac);
+  await genFactureSortieStock(fac);
   window._editingFacture=null;
   await loadAll();closeModal();RENDER.facturation();toast(msg);
 }
@@ -4142,6 +4581,7 @@ async function delFacture(id){
   if(exF&&exF.statut==='clôturé'){toast('Exercice '+exF.libelle+' clôturé — suppression impossible.');return;}
   if(!confirm('Supprimer '+f.numero+' ? (annule aussi l\'écriture et ses règlements)'))return;
   await del('factures',id);await del('ecritures','e_fac_'+id);
+  for(const m of ST.stock_mvt.filter(x=>x.refType==='facture'&&x.refId===id))await del('stock_mvt',m.id);
   for(const r of (f.reglements||[]))await del('ecritures','e_freg_'+id+'_'+r.id);
   await loadAll();RENDER.facturation();toast('Facture supprimée.');
 }
@@ -4321,6 +4761,10 @@ async function paramCpt(){
     p.value.cptClientDefaut='4111';p.value.cptFournDefaut='4011';p.value.cptChantierDefaut='604';p.value.cptAttente='4712';
     await put('meta',p);
   } // migration douce
+  if(p.value.cptStockMarch===undefined){
+    p.value.cptStockMarch='31';p.value.cptVarStockMarch='6031';p.value.cptStockMat='32';p.value.cptVarStockMat='6032';
+    await put('meta',p);
+  } // migration douce — comptes stock (régularisation d'inventaire intermittent)
   window._paramCptCache=p.value;
   return p.value;}
 async function comptableForm(){const p=await paramCpt();const el=document.getElementById('pgCpt');if(!el)return;
@@ -4348,6 +4792,9 @@ async function comptableForm(){const p=await paramCpt();const el=document.getEle
     <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Comptes par défaut (tiers sans fiche)</div>
     <div class="frow c3">${f('pClientDef','Client sans fiche (4111)',p.cptClientDefaut)}${f('pFournDef','Fournisseur sans fiche (4011)',p.cptFournDefaut)}${f('pChantierDef','Achat chantier — import (604)',p.cptChantierDefaut)}</div>
     <div class="frow"><div><label>Compte d'attente — import caisse à ventiler (4712)</label><input id="pAttente" list="dl-comptes" autocomplete="off" value="${p.cptAttente}"></div></div>
+    <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Stock — régularisation d'inventaire intermittent</div>
+    <div class="frow c2">${f('pStockMarch','Stock marchandises (31)',p.cptStockMarch)}${f('pVarStockMarch','Variation stocks marchandises (6031)',p.cptVarStockMarch)}</div>
+    <div class="frow c2">${f('pStockMat','Stock matières/fournitures (32)',p.cptStockMat)}${f('pVarStockMat','Variation stocks matières (6032)',p.cptVarStockMat)}</div>
     <div class="frow c3"><div><label>Taux TVA (%)</label><input type="number" id="pTvaTx" value="${p.tauxTva}"></div><div><label>Taux AIB (%)</label><input type="number" id="pAibTx" value="${p.tauxAib}"></div><div></div></div>
     <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin:10px 0 6px">Télédéclarations (fiscal &amp; social) — à ajuster selon le régime et la loi de finances en vigueur</div>
     <div class="frow c2">
@@ -4362,7 +4809,8 @@ async function saveParamCpt(){const g=x=>document.getElementById(x).value;
   await put('meta',{id:'paramCpt',value:{cptClient:g('pClient'),cptFourn:g('pFourn'),cptVente:g('pVente'),cptAchat:g('pAchat'),cptTvaColl:g('pTvaC'),cptTvaDed:g('pTvaD'),cptAib:g('pAib'),cptBanque:g('pBanque'),cptCaisse:g('pCaisse'),cptRemise:g('pRemise'),cptFraisBank:g('pFrais'),cptEcartPlus:g('pEcP'),cptEcartMoins:g('pEcM'),cptDotation:g('pDot'),cptResultat:'12',tauxTva:+g('pTvaTx')||18,tauxAib:+g('pAibTx')||1,tauxAcompteBIC:+g('pAcBic')||0.5,pctCnpsPatronale:+g('pCnpsPat')||72,
   cptProvDotationClient:g('pProvDotC'),cptProvDepreciationClient:g('pProvDepC'),cptProvDotationFourn:g('pProvDotF'),cptProvDepreciationFourn:g('pProvDepF'),
   cptTvaDue:g('pTvaDue'),cptTvaCredit:g('pTvaCredit'),cptTvaNonRecup:g('pTvaNonRecup'),cptProduitCession:g('pProduitCession'),cptVNCCession:g('pVNCCession'),
-  cptClientDefaut:g('pClientDef'),cptFournDefaut:g('pFournDef'),cptChantierDefaut:g('pChantierDef'),cptAttente:g('pAttente')}});
+  cptClientDefaut:g('pClientDef'),cptFournDefaut:g('pFournDef'),cptChantierDefaut:g('pChantierDef'),cptAttente:g('pAttente'),
+  cptStockMarch:g('pStockMarch'),cptVarStockMarch:g('pVarStockMarch'),cptStockMat:g('pStockMat'),cptVarStockMat:g('pVarStockMat')}});
   window._paramCptCache=null;
   toast('Paramètres comptables enregistrés.');
 }
@@ -6594,7 +7042,7 @@ RENDER.anomalies=async()=>{
 };
 
 /* ---- Journal d'audit ---- */
-const AUDIT_STORES=['ecritures','tiers','factures','comptes','immos','centres','budgets','exercices','users','pieces','catalogue'];
+const AUDIT_STORES=['ecritures','tiers','factures','comptes','immos','centres','budgets','exercices','users','pieces','catalogue','depots','stock_mvt'];
 async function logAudit(action,store,ref){
   try{
     const db=await idb();
