@@ -238,9 +238,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="grp-section" data-grp="ouverture-etape">
       <div class="grp" onclick="toggleGrp(this)"><span>1 · Ouverture</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="ouverture"><span class="ic">⇱</span>Bilan d'ouverture</a>
       <a data-p="tiers"><span class="ic">◔</span>Clients &amp; Fournisseurs</a>
-      <a data-p="plan"><span class="ic">☰</span>Plan comptable</a>
       </div></div>
       <div class="grp-section" data-grp="saisie">
       <div class="grp" onclick="toggleGrp(this)"><span>2 · Saisie</span><span class="grp-arrow">▾</span></div>
@@ -251,39 +249,20 @@ tbody tr:hover{background:#fbfcfe}
       <a data-p="catalogue"><span class="ic">🗂</span>Catalogue articles</a>
       <a data-p="stock"><span class="ic">🏬</span>Gestion de stock<span id="stockNavBadge" class="badge b-red" style="display:none;margin-left:6px"></span></a>
       <a data-p="caisse"><span class="ic">💵</span>Caisse</a>
-      <a data-p="ecritures"><span class="ic">✎</span>Écritures / Journaux</a>
       <a data-p="ged"><span class="ic">▤</span>Pièces &amp; GED</a>
       </div></div>
-      <div class="grp-section" data-grp="controle">
-      <div class="grp" onclick="toggleGrp(this)"><span>3 · Contrôle</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-section" data-grp="comptabilite">
+      <div class="grp" onclick="toggleGrp(this)"><span>3 · Comptabilité</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
-      <a data-p="controle"><span class="ic">⇄</span>Contrôle &amp; rapprochements</a>
-      <a data-p="tiersrenta"><span class="ic">◫</span>Tiers &amp; rentabilité</a>
+      <a data-p="comptabilite"><span class="ic">📊</span>Comptabilité SYSCOHADA</a>
       </div></div>
-      <div class="grp-section" data-grp="visa">
-      <div class="grp" onclick="toggleGrp(this)"><span>4 · Visa</span><span class="grp-arrow">▾</span></div>
-      <div class="grp-items">
-      <a data-p="workflow"><span class="ic">⇉</span>Validation &amp; visa</a>
-      </div></div>
-      <div class="grp-section" data-grp="etats">
-      <div class="grp" onclick="toggleGrp(this)"><span>5 · États</span><span class="grp-arrow">▾</span></div>
-      <div class="grp-items">
-      <a data-p="etatsfin"><span class="ic">≣</span>États financiers</a>
-      <a data-p="fiscalite"><span class="ic">%</span>Fiscalité</a>
-      </div></div>
-      <div class="grp-section" data-grp="cloture">
-      <div class="grp" onclick="toggleGrp(this)"><span>6 · Clôture</span><span class="grp-arrow">▾</span></div>
-      <div class="grp-items">
-      <a data-p="exercices"><span class="ic">◷</span>Exercices &amp; clôture (+ FEC)</a>
-      </div></div>
-      <div class="grp-section" data-grp="budget">
-      <div class="grp" onclick="toggleGrp(this)"><span>7 · Pilotage &amp; auxiliaire</span><span class="grp-arrow">▾</span></div>
+      <div class="grp-section" data-grp="pilotage-grp">
+      <div class="grp" onclick="toggleGrp(this)"><span>4 · Pilotage</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="pilotage"><span class="ic">▚</span>Pilotage</a>
-      <a data-p="auxiliaire"><span class="ic">▦</span>Comptabilité auxiliaire</a>
       </div></div>
       <div class="grp-section" data-grp="config">
-      <div class="grp" onclick="toggleGrp(this)"><span>8 · Configuration</span><span class="grp-arrow">▾</span></div>
+      <div class="grp" onclick="toggleGrp(this)"><span>5 · Configuration</span><span class="grp-arrow">▾</span></div>
       <div class="grp-items">
       <a data-p="parametrage"><span class="ic">⚙</span>Paramétrage (+ Import Chantiers/Caisse)</a>
       <a data-p="passerelle"><span class="ic">⇄</span>Passerelle ERP</a>
@@ -837,22 +816,26 @@ async function boot(){
 
 /* ============ NAV ============ */
 const GROUPES_TABS={
-  controle:{label:'Contrôle & rapprochements',subs:[['lettrage','⇄'],['rappro','≈'],['anomalies','⚠']]},
-  tiersrenta:{label:'Tiers & rentabilité',subs:[['tierscompta','◫'],['balageee','⏳'],['rentabilite','🏗']]},
-  etatsfin:{label:'États financiers',subs:[['grandlivre','≣'],['periodique','📅'],['balance','⚖'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣']]},
-  fiscalite:{label:'Fiscalité',subs:[['tva','%'],['echeancier','⏰'],['teledec','⇪'],['liasse','▦']]},
-  pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩']]},
-  auxiliaire:{label:'Comptabilité auxiliaire',subs:[['immo','▦'],['analytique','◈'],['devises','$'],['budget','▲']]}
+  comptabilite:{label:'Comptabilité SYSCOHADA',subs:[
+    ['ouverture','⇱'],['plan','☰'],['ecritures','✎'],
+    ['grandlivre','≣'],['balance','⚖'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣'],['periodique','📅'],
+    ['tva','%'],['echeancier','⏰'],['teledec','⇪'],['liasse','▦'],
+    ['tierscompta','◫'],['balageee','⏳'],['lettrage','⇄'],['rappro','≈'],['anomalies','⚠'],
+    ['immo','▦'],['analytique','◈'],['devises','$'],['budget','▲'],
+    ['exercices','◷'],['workflow','⇉']
+  ]},
+  pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩'],['rentabilite','🏗']]}
 };
 const SUB_TO_GROUP={};
 Object.entries(GROUPES_TABS).forEach(([g,def])=>def.subs.forEach(([sub])=>SUB_TO_GROUP[sub]=g));
 window._groupLastSub={};
 const TITLES={
+  comptabilite:['Comptabilité SYSCOHADA','Ouverture · Écritures · États financiers · TVA · Tiers · Immobilisations · Clôture — vue transversale'],
   controle:['Contrôle & rapprochements','Lettrage · Rapprochement bancaire · IA Anomalies'],
   tiersrenta:['Tiers & rentabilité','Comptabilité tiers · Balance âgée · Rentabilité chantiers'],
   etatsfin:['États financiers','Grand livre · Balance · Résultat · Bilan · Flux · Annexes · État périodique'],
   fiscalite:['Fiscalité','TVA · Échéancier · Télédéclarations · Liasse fiscale'],
-  pilotage:['Pilotage','Tableau de bord · Analyse 360° · Consolidation'],
+  pilotage:['Pilotage','Tableau de bord · Analyse 360° · Consolidation · Rentabilité chantiers'],
   auxiliaire:['Comptabilité auxiliaire','Immobilisations · Analytique · Devises · Budget'],
   balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
@@ -894,6 +877,7 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  comptabilite:"Vue transversale de la comptabilité SYSCOHADA : ouverture, plan comptable, écritures, tous les états financiers, TVA, fiscalité, comptes tiers, immobilisations, analytique, budget, clôture et visa — regroupés en un seul module, navigable par onglet.",
   controle:"Trois outils de contrôle regroupés : Lettrage (rapprocher factures/règlements), Rapprochement bancaire (relevé vs comptabilité), IA Anomalies (détection automatique d'incohérences).",
   tiersrenta:"Vue tiers regroupée : solde détaillé par client/fournisseur, créances/dettes par ancienneté, et rentabilité par chantier (encaissé − dépensé).",
   etatsfin:"Tous les états comptables réglementaires et de pilotage en un seul endroit, navigables par onglet.",
