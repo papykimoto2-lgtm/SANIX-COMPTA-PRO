@@ -3701,6 +3701,7 @@ function editArticle(id){
     <label style="font-size:12.5px;display:flex;align-items:center;gap:6px;margin-bottom:8px"><input type="checkbox" id="artGererStock" ${!art||art.gererStock!==false?'checked':''}> Gérer le stock de cet article (quantités, CMUP, alertes)</label>
     <div class="frow c2"><div><label>Seuil d'alerte (stock min)</label><input type="number" id="artStockMin" value="${art?(art.stockMin||0):0}"></div>
       <div><label>Dépôt par défaut</label><select id="artDepotDefaut"><option value="">— Aucun —</option>${ST.depots.map(d=>`<option value="${d.id}" ${art&&art.depotDefaut===d.id?'selected':''}>${esc(d.nom)}</option>`).join('')}</select></div></div>
+    <div class="frow"><div><label>Nature comptable (valorisation SYSCOHADA)</label><select id="artNatureStock"><option value="marchandise" ${!art||art.natureStock!=='matiere'?'selected':''}>Marchandises (31)</option><option value="matiere" ${art&&art.natureStock==='matiere'?'selected':''}>Matières &amp; fournitures (32)</option></select></div></div>
     ${art?(()=>{const s=stockSolde(art.id);return`<div style="font-size:11.5px;margin-top:6px;color:var(--mut)">Stock actuel : <b class="mono" style="color:var(--txt)">${s.qte} ${esc(art.unite||'')}</b> — valeur CMUP <b class="mono" style="color:var(--txt)">${F0(s.valeur)}</b> FCFA <button class="linkbtn" onclick="closeModal();go('stock');setTimeout(()=>catFicheArticle('${art.id}'),50)">Voir la fiche stock →</button></div>`;})():''}
     ${art?fournHTML:''}
   </div>
@@ -3715,16 +3716,17 @@ async function saveArticle(id){
   const gererStock=document.getElementById('artGererStock').checked;
   const stockMin=+g('artStockMin')||0;
   const depotDefaut=g('artDepotDefaut')||null;
+  const natureStock=document.getElementById('artNatureStock').value;
   if(id){
     const art=ST.catalogue.find(x=>x.id===id);if(!art){toast('Article introuvable.');return;}
     art.designation=des;art.designationNorm=catNormDes(des);
     art.categorie=g('artCat').trim();art.unite=g('artUnite').trim();
     art.notes=g('artNotes').trim();art.actif=actif;
     art.prixRef=prix;art.prixRefMode='manuel';art.updatedAt=Date.now();
-    art.gererStock=gererStock;art.stockMin=stockMin;art.depotDefaut=depotDefaut;
+    art.gererStock=gererStock;art.stockMin=stockMin;art.depotDefaut=depotDefaut;art.natureStock=natureStock;
     await put('catalogue',art);
   }else{
-    await put('catalogue',{id:uid('art'),designation:des,designationNorm:catNormDes(des),categorie:g('artCat').trim(),unite:g('artUnite').trim(),notes:g('artNotes').trim(),actif,prixRef:prix,prixRefMode:'manuel',fournisseurs:[],source:'manuel',gererStock,stockMin,depotDefaut,createdAt:Date.now(),updatedAt:Date.now()});
+    await put('catalogue',{id:uid('art'),designation:des,designationNorm:catNormDes(des),categorie:g('artCat').trim(),unite:g('artUnite').trim(),notes:g('artNotes').trim(),actif,prixRef:prix,prixRefMode:'manuel',fournisseurs:[],source:'manuel',gererStock,stockMin,depotDefaut,natureStock,createdAt:Date.now(),updatedAt:Date.now()});
   }
   await loadAll();closeModal();RENDER.catalogue();toast('Article enregistré.');
 }
@@ -3888,13 +3890,15 @@ function stockArticleParDesignation(des){
   return ST.catalogue.find(a=>a.designationNorm===norm&&a.gererStock!==false)||null;
 }
 /* Calcule qté/valeur/CMUP par article (et par dépôt) à partir de l'historique chronologique. */
-function calcStockState(){
+function calcStockState(dateMax){
   const st={};
   const ensure=(aid,did)=>{
     if(!st[aid])st[aid]={qte:0,valeur:0,parDepot:{}};
     if(did&&!st[aid].parDepot[did])st[aid].parDepot[did]={qte:0,valeur:0};
   };
-  const mvts=ST.stock_mvt.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.createdAt||0)-(b.createdAt||0));
+  let mvts=ST.stock_mvt.slice();
+  if(dateMax)mvts=mvts.filter(m=>(m.date||'')<=dateMax);
+  mvts.sort((a,b)=>(a.date||'').localeCompare(b.date||'')||(a.createdAt||0)-(b.createdAt||0));
   mvts.forEach(m=>{
     if(!m.articleId)return;
     ensure(m.articleId,m.depotId);
@@ -3923,10 +3927,49 @@ function calcStockState(){
     Object.values(a.parDepot).forEach(d=>{d.cmup=d.qte>0?d.valeur/d.qte:0;});});
   return st;
 }
-function stockSolde(articleId,depotId){
-  const st=calcStockState();const a=st[articleId];if(!a)return{qte:0,valeur:0,cmup:0};
+function stockSolde(articleId,depotId,dateMax){
+  const st=calcStockState(dateMax);const a=st[articleId];if(!a)return{qte:0,valeur:0,cmup:0};
   if(depotId){const d=a.parDepot[depotId];return d?{qte:d.qte,valeur:d.valeur,cmup:d.cmup}:{qte:0,valeur:0,cmup:0};}
   return{qte:a.qte,valeur:a.valeur,cmup:a.cmup};
+}
+function stockSoldeCompte(prefix){
+  const m=soldesParCompte();let s=0;
+  for(const n in m)if(n.startsWith(prefix))s+=m[n].debit-m[n].credit;
+  return s;
+}
+/* ---- Écriture de régularisation stock (inventaire intermittent SYSCOHADA) ----
+   Compare la valorisation physique (CMUP, calculée depuis stock_mvt) au solde comptable
+   des comptes 31/32, par nature (marchandises / matières), et solde l'écart via 6031/6032. */
+async function genEcritureRegularisationStock(dateCloture){
+  if(exLocked()){toast('Exercice clôturé. Régularisation stock verrouillée.');return null;}
+  const p=await paramCpt();
+  const groups=[
+    {nature:'marchandise',cptStock:p.cptStockMarch,cptVar:p.cptVarStockMarch,lib:'Marchandises'},
+    {nature:'matiere',cptStock:p.cptStockMat,cptVar:p.cptVarStockMat,lib:'Matières & fournitures'}
+  ];
+  const st=calcStockState(dateCloture);
+  const lignes=[];
+  groups.forEach(g=>{
+    const valPhysique=stockArticlesGeres().filter(a=>(a.natureStock||'marchandise')===g.nature)
+      .reduce((s,a)=>s+((st[a.id]||{valeur:0}).valeur),0);
+    const soldeCompte=stockSoldeCompte(g.cptStock);
+    const ecart=Math.round(valPhysique-soldeCompte);
+    if(ecart===0)return;
+    if(ecart>0){
+      lignes.push({compte:g.cptStock,libelle:'Constatation stock '+g.lib+' au '+dfr(dateCloture),debit:ecart,credit:0,lettre:''});
+      lignes.push({compte:g.cptVar,libelle:'Variation stock '+g.lib,debit:0,credit:ecart,lettre:''});
+    }else{
+      lignes.push({compte:g.cptVar,libelle:'Variation stock '+g.lib,debit:-ecart,credit:0,lettre:''});
+      lignes.push({compte:g.cptStock,libelle:'Ajustement stock '+g.lib+' au '+dfr(dateCloture),debit:0,credit:-ecart,lettre:''});
+    }
+  });
+  if(!lignes.length){toast('Aucun écart — les comptes de stock correspondent déjà à la valorisation physique.');return null;}
+  const e={id:'e_stock_'+ST.exId,exId:ST.exId,journal:'OD',date:dateCloture,piece:'STOCK-'+dateCloture,
+    libelle:'Régularisation stock au '+dfr(dateCloture),lignes,created:Date.now()};
+  await put('ecritures',e);
+  await loadAll();
+  toast('Écriture de régularisation stock générée ('+e.id+').');
+  return e;
 }
 async function mvtCreate(type,data){
   const rec=Object.assign({id:uid('mvt'),type,createdAt:Date.now()},data);
@@ -4171,11 +4214,13 @@ RENDER.stock=async()=>{
     <button class="btn sm ${window._stockTab==='vue'?'':'gh'}" onclick="stockSetTab('vue')">▚ Vue d'ensemble</button>
     <button class="btn sm ${window._stockTab==='mvt'?'':'gh'}" onclick="stockSetTab('mvt')">↕ Mouvements</button>
     <button class="btn sm ${window._stockTab==='inv'?'':'gh'}" onclick="stockSetTab('inv')">🔍 Inventaire</button>
+    <button class="btn sm ${window._stockTab==='val'?'':'gh'}" onclick="stockSetTab('val')">💰 Valorisation</button>
     <button class="btn sm ${window._stockTab==='dep'?'':'gh'}" onclick="stockSetTab('dep')">🏬 Dépôts</button>
   </div>`;
   let body;
   if(window._stockTab==='mvt')body=stockRenderMouvements();
   else if(window._stockTab==='inv')body=stockRenderInventaire();
+  else if(window._stockTab==='val')body=await stockRenderValorisation();
   else if(window._stockTab==='dep')body=stockRenderDepots();
   else body=stockRenderVue();
   document.getElementById('p-stock').innerHTML=tabs+body;
@@ -4324,6 +4369,55 @@ async function stockValiderInventaire(){
   await loadAll();
   toast(n?n+' écart(s) d\'inventaire enregistré(s).':'Aucun écart détecté.');
   RENDER.stock();
+}
+async function stockRenderValorisation(){
+  const date=window._stockValDate||curEx().fin||new Date().toISOString().slice(0,10);
+  window._stockValDate=date;
+  const p=await paramCpt();
+  const st=calcStockState(date);
+  const articles=stockArticlesGeres();
+  const groups=[
+    {nature:'marchandise',cptStock:p.cptStockMarch,cptVar:p.cptVarStockMarch,lib:'Marchandises (31)'},
+    {nature:'matiere',cptStock:p.cptStockMat,cptVar:p.cptVarStockMat,lib:'Matières & fournitures (32)'}
+  ];
+  const groupRows=groups.map(g=>{
+    const valPhysique=articles.filter(a=>(a.natureStock||'marchandise')===g.nature).reduce((s,a)=>s+((st[a.id]||{valeur:0}).valeur),0);
+    const soldeCompte=stockSoldeCompte(g.cptStock);
+    const ecart=Math.round(valPhysique-soldeCompte);
+    return{...g,valPhysique,soldeCompte,ecart};
+  });
+  const totalEcart=groupRows.reduce((s,g)=>s+Math.abs(g.ecart),0);
+  const grpCards=groupRows.map(g=>`
+    <div class="card" style="margin-bottom:10px">
+      <div style="font-weight:800;font-size:12.5px;margin-bottom:8px">${esc(g.lib)}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0;font-size:12px">
+        <div style="padding:6px 10px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Valorisation physique (CMUP)</div><div class="mono" style="font-weight:700">${F0(g.valPhysique)}</div></div>
+        <div style="padding:6px 10px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Solde comptable (${esc(g.cptStock)})</div><div class="mono" style="font-weight:700">${F0(g.soldeCompte)}</div></div>
+        <div style="padding:6px 10px"><div style="color:var(--mut)">Écart</div><div class="mono" style="font-weight:700;color:${g.ecart===0?'var(--green)':g.ecart>0?'var(--blue)':'var(--red)'}">${g.ecart>0?'+':''}${F0(g.ecart)}</div></div>
+      </div>
+    </div>`).join('');
+  const cats=[...new Set(articles.map(a=>a.categorie||'Sans catégorie'))].sort();
+  const parCatRows=cats.map(c=>{
+    const arts=articles.filter(a=>(a.categorie||'Sans catégorie')===c);
+    const qte=arts.reduce((s,a)=>s+((st[a.id]||{qte:0}).qte),0);
+    const val=arts.reduce((s,a)=>s+((st[a.id]||{valeur:0}).valeur),0);
+    if(qte===0&&val===0)return'';
+    return`<tr><td><b>${esc(c)}</b></td><td class="ta-c">${arts.length}</td><td class="ta-r mono">${qte}</td><td class="ta-r mono">${F0(val)}</td></tr>`;
+  }).filter(Boolean).join('');
+  const totalValeur=articles.reduce((s,a)=>s+((st[a.id]||{valeur:0}).valeur),0);
+  const exCloture=exLocked();
+  return`
+  <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <label style="font-size:12px">Valorisation à la date du <input type="date" value="${date}" onchange="window._stockValDate=this.value;RENDER.stock()" style="margin-left:6px"></label>
+    <span style="font-size:11.5px;color:var(--mut)">Par défaut : date de clôture de l'exercice courant (${dfr(curEx().fin)}).</span>
+    <button class="btn sm ${exCloture?'gh':''}" style="margin-left:auto" ${exCloture?'disabled title="Exercice clôturé"':''} onclick="genEcritureRegularisationStock('${date}').then(()=>RENDER.stock())">⚖ Générer l'écriture de régularisation</button>
+  </div>
+  ${grpCards}
+  <div class="hl" style="background:#fbf3ea;border-left:3px solid var(--cuivre);padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px"><b style="color:var(--cuivre-d)">Mécanisme.</b> Écart = valorisation physique (CMUP calculé depuis les mouvements) − solde comptable du compte de stock. L'écriture générée solde cet écart via le compte de variation (6031/6032), en inventaire intermittent SYSCOHADA. Un article est classé « Marchandises » ou « Matières » depuis sa fiche Catalogue.</div>
+  <div class="card" style="margin-bottom:14px"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Valorisation par catégorie (au ${dfr(date)})</div>
+  <div class="tbl-wrap"><table><thead><tr><th>Catégorie</th><th class="ta-c">Articles</th><th class="ta-r">Qté totale</th><th class="ta-r">Valeur (CMUP)</th></tr></thead>
+  <tbody>${parCatRows||'<tr><td colspan=4 class="empty">Aucun stock à cette date.</td></tr>'}</tbody>
+  <tfoot><tr class="foot-tr"><td colspan=3>Total général</td><td class="ta-r mono">${F0(totalValeur)}</td></tr></tfoot></table></div></div>`;
 }
 function stockRenderDepots(){
   const st=calcStockState();
@@ -8083,7 +8177,7 @@ async function delCentre(id){const c=ST.centres.find(x=>x.id===id);if(!confirm('
 
 /* ---- Comptabilité analytique fin ---- */
 /* ---- Impression brandée + QR ---- */
-async function printReport(pageId,titre){
+async function buildReportDoc(pageId,titre){
   const s=await societe();
   const inner=document.getElementById(pageId).cloneNode(true);
   // retirer boutons/toolbars du contenu cloné
@@ -8105,10 +8199,26 @@ async function printReport(pageId,titre){
       <div>${qr}</div>
     </div>
   </div>`;
+  return{html,ref,titre,pageId};
+}
+const REPORT_PRINT_CSS=`@page{margin:12mm}body{margin:0}table{width:100%;border-collapse:collapse;font-size:11.5px}th{background:#1C1C2E;color:#fff;text-align:left;padding:7px 9px;font-size:10px}td{padding:6px 9px;border-bottom:1px solid #eef0f5}.ta-r{text-align:right}.ta-c{text-align:center}.mono{font-variant-numeric:tabular-nums}.foot-tr td{background:#1C1C2E;color:#fff}.badge{padding:1px 6px;border-radius:10px;font-size:9px;background:#eee}.card{border:1px solid #e3e6ee;border-radius:8px;padding:10px;margin-bottom:8px}.kpis,.two,.grid{display:block}.kpi{display:inline-block;width:31%;margin:0 1% 6px;vertical-align:top}.pos{color:#1a8a5a}.neg{color:#c0392b}`;
+/* ---- Aperçu avant impression (utilisé par tous les boutons "⎙ Imprimer" du logiciel) ---- */
+async function printReport(pageId,titre){
+  const doc=await buildReportDoc(pageId,titre);
+  window._lastReportDoc=doc;
+  openModal(`<div class="mh"><h3>Aperçu avant impression — ${esc(titre)}</h3><button class="x" onclick="closeModal()">×</button></div>
+  <div class="mb" style="max-height:72vh;overflow:auto;background:#eef0f5;padding:18px">
+    <div style="background:#fff;box-shadow:0 4px 18px rgba(0,0,0,.10);border-radius:4px;max-width:900px;margin:0 auto">${doc.html}</div>
+  </div>
+  <div class="mf"><button class="btn gh sm" onclick="closeModal()">Fermer</button><button class="btn sm" onclick="doPrintLastReport()">🖨 Imprimer</button></div>`,true);
+}
+function doPrintLastReport(){
+  const doc=window._lastReportDoc;
+  if(!doc){toast('Document introuvable — réouvrez l\'aperçu.');return;}
   const w=window.open('','_blank');
-  w.document.write(`<html><head><meta charset="utf-8"><title>${titre} — ${ref}</title>
-  <style>@page{margin:12mm}body{margin:0}table{width:100%;border-collapse:collapse;font-size:11.5px}th{background:#1C1C2E;color:#fff;text-align:left;padding:7px 9px;font-size:10px}td{padding:6px 9px;border-bottom:1px solid #eef0f5}.ta-r{text-align:right}.ta-c{text-align:center}.mono{font-variant-numeric:tabular-nums}.foot-tr td{background:#1C1C2E;color:#fff}.badge{padding:1px 6px;border-radius:10px;font-size:9px;background:#eee}.card{border:1px solid #e3e6ee;border-radius:8px;padding:10px;margin-bottom:8px}.kpis,.two,.grid{display:block}.kpi{display:inline-block;width:31%;margin:0 1% 6px;vertical-align:top}.pos{color:#1a8a5a}.neg{color:#c0392b}</style>
-  </head><body onload="window.print()">${html}</body></html>`);
+  w.document.write(`<html><head><meta charset="utf-8"><title>${doc.titre} — ${doc.ref}</title>
+  <style>${REPORT_PRINT_CSS}</style>
+  </head><body onload="window.print()">${doc.html}</body></html>`);
   w.document.close();
 }
 /* ---- login enter ---- */
