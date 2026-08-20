@@ -46,6 +46,14 @@ input,select,textarea{font-family:inherit;font-size:14px}
 .btn.gh:hover{background:#fbf3ea}
 .btn.sm{padding:7px 12px;font-size:12.5px;border-radius:8px}
 .btn.dark{background:var(--noir-2)}.btn.dark:hover{background:var(--noir-3)}
+.pgphases{display:flex;gap:3px;background:#eef0f5;padding:4px;border-radius:12px;margin-bottom:10px;flex-wrap:wrap}
+.pgphases button{border:none;background:transparent;padding:8px 14px;border-radius:9px;font-size:12px;font-weight:700;color:var(--mut);cursor:pointer;transition:.15s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;font-family:inherit}
+.pgphases button:hover{color:var(--txt)}
+.pgphases button.on{background:#fff;color:var(--cuivre-d);box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.pgsubs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.pgsubs button{border:1.5px solid var(--line);background:var(--card);padding:6px 13px;border-radius:20px;font-size:11.5px;font-weight:600;color:var(--mut);cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:5px;font-family:inherit}
+.pgsubs button:hover{border-color:var(--cuivre-l);color:var(--txt)}
+.pgsubs button.on{background:var(--cuivre);border-color:var(--cuivre);color:#fff;font-weight:700}
 .err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:16px}
 
 /* ---------- LAYOUT ---------- */
@@ -283,7 +291,7 @@ tbody tr:hover{background:#fbfcfe}
     </div>
     <div class="content">
       <div id="pgNote"></div>
-      <div id="pgSubTabs" style="display:none;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div id="pgSubTabs" style="display:none;margin-bottom:2px"></div>
       <div class="page on" id="p-cockpit"></div>
       <div class="page" id="p-messagerie"></div>
       <div class="page" id="p-dash"></div>
@@ -816,28 +824,23 @@ async function boot(){
 
 /* ============ NAV ============ */
 const GROUPES_TABS={
-  comptabilite:{label:'Comptabilité SYSCOHADA',subs:[
-    ['__sep__','① Ouverture'],
-    ['ouverture','⇱'],['plan','☰'],
-    ['__sep__','② Saisie & visa'],
-    ['ecritures','✎'],['workflow','⇉'],
-    ['__sep__','③ Report & contrôle'],
-    ['grandlivre','≣'],['balance','⚖'],['lettrage','⇄'],['rappro','≈'],['anomalies','⚠'],
-    ['__sep__','④ Tiers'],
-    ['tierscompta','◫'],['balageee','⏳'],
-    ['__sep__','⑤ Opérations périodiques'],
-    ['immo','▦'],['analytique','◈'],['budget','▲'],['devises','$'],
-    ['__sep__','⑥ Fiscalité'],
-    ['tva','%'],['echeancier','⏰'],['teledec','⇪'],
-    ['__sep__','⑦ États de synthèse'],
-    ['periodique','📅'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣'],['liasse','▦'],
-    ['__sep__','⑧ Clôture'],
-    ['exercices','◷']
+  comptabilite:{label:'Comptabilité SYSCOHADA',phases:[
+    {id:'ph-ouverture',label:'Ouverture',icon:'⇱',subs:[['ouverture','⇱'],['plan','☰']]},
+    {id:'ph-saisie',label:'Saisie & visa',icon:'✎',subs:[['ecritures','✎'],['workflow','⇉']]},
+    {id:'ph-report',label:'Report & contrôle',icon:'⚖',subs:[['grandlivre','≣'],['balance','⚖'],['lettrage','⇄'],['rappro','≈'],['anomalies','⚠']]},
+    {id:'ph-tiers',label:'Tiers',icon:'◫',subs:[['tierscompta','◫'],['balageee','⏳']]},
+    {id:'ph-periodique',label:'Opérations périodiques',icon:'▦',subs:[['immo','▦'],['analytique','◈'],['budget','▲'],['devises','$']]},
+    {id:'ph-fiscal',label:'Fiscalité',icon:'%',subs:[['tva','%'],['echeancier','⏰'],['teledec','⇪']]},
+    {id:'ph-etats',label:'États de synthèse',icon:'∑',subs:[['periodique','📅'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣'],['liasse','▦']]},
+    {id:'ph-cloture',label:'Clôture',icon:'◷',subs:[['exercices','◷']]}
   ]},
   pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩'],['rentabilite','🏗']]}
 };
 const SUB_TO_GROUP={};
-Object.entries(GROUPES_TABS).forEach(([g,def])=>def.subs.forEach(([sub])=>SUB_TO_GROUP[sub]=g));
+Object.entries(GROUPES_TABS).forEach(([g,def])=>{
+  const allSubs=def.phases?def.phases.flatMap(ph=>ph.subs):def.subs;
+  allSubs.forEach(([sub])=>SUB_TO_GROUP[sub]=g);
+});
 window._groupLastSub={};
 const TITLES={
   comptabilite:['Comptabilité SYSCOHADA','Ouverture · Écritures · États financiers · TVA · Tiers · Immobilisations · Clôture — vue transversale'],
@@ -940,7 +943,7 @@ const MODULE_NOTES={
 };
 function go(p){
   let realP=p,groupId=null;
-  if(GROUPES_TABS[p]){groupId=p;realP=window._groupLastSub[p]||GROUPES_TABS[p].subs.find(s=>s[0]!=='__sep__')[0];}
+  if(GROUPES_TABS[p]){groupId=p;const def=GROUPES_TABS[p];realP=window._groupLastSub[p]||(def.phases?def.phases[0].subs[0][0]:def.subs[0][0]);}
   else if(SUB_TO_GROUP[p]){groupId=SUB_TO_GROUP[p];realP=p;}
   if(groupId)window._groupLastSub[groupId]=realP;
   window._curPage=realP;
@@ -955,15 +958,25 @@ function go(p){
   document.getElementById('pgNote').innerHTML=note?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 14px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:14px">ℹ ${note}</div>`:'';
   const subTabsEl=document.getElementById('pgSubTabs');
   if(groupId){
-    subTabsEl.style.display='flex';
-    subTabsEl.innerHTML=GROUPES_TABS[groupId].subs.map(([sub,ic])=>{
-    if(sub==='__sep__')return `<span style="display:flex;align-items:center;font-size:10px;font-weight:800;color:var(--mut);text-transform:uppercase;letter-spacing:.03em;padding:0 6px;white-space:nowrap;border-left:2px solid var(--line);margin-left:2px">${ic}</span>`;
-    return `<button class="btn sm ${sub===realP?'':'gh'}" onclick="go('${sub}')">${ic} ${TITLES[sub]?TITLES[sub][0]:sub}</button>`;
-  }).join('');
+    subTabsEl.style.display='block';
+    const def=GROUPES_TABS[groupId];
+    if(def.phases){
+      const curPhase=def.phases.find(ph=>ph.subs.some(([s])=>s===realP))||def.phases[0];
+      const phasesRow=`<div class="pgphases">${def.phases.map(ph=>`<button class="${ph.id===curPhase.id?'on':''}" onclick="goPhase('${groupId}','${ph.id}')">${ph.icon} ${ph.label}</button>`).join('')}</div>`;
+      const subsRow=`<div class="pgsubs">${curPhase.subs.map(([sub,ic])=>`<button class="${sub===realP?'on':''}" onclick="go('${sub}')">${ic} ${TITLES[sub]?TITLES[sub][0]:sub}</button>`).join('')}</div>`;
+      subTabsEl.innerHTML=phasesRow+subsRow;
+    }else{
+      subTabsEl.innerHTML=`<div class="pgsubs">${def.subs.map(([sub,ic])=>`<button class="${sub===realP?'on':''}" onclick="go('${sub}')">${ic} ${TITLES[sub]?TITLES[sub][0]:sub}</button>`).join('')}</div>`;
+    }
   }else{subTabsEl.style.display='none';subTabsEl.innerHTML='';}
   if(realP==='ouverture'){ouvrirBilanOuverture(window._ouvExId||ST.exId);msgUpdateBadge();return;}
   RENDER[realP]&&RENDER[realP]();
   msgUpdateBadge();stockUpdateBadge();
+}
+function goPhase(groupId,phaseId){
+  const def=GROUPES_TABS[groupId];if(!def||!def.phases)return;
+  const ph=def.phases.find(p=>p.id===phaseId);if(!ph)return;
+  go(ph.subs[0][0]);
 }
 
 /* ============ MODAL ============ */
