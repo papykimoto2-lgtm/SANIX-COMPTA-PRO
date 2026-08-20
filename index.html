@@ -3719,21 +3719,36 @@ async function delArticle(id){
   await loadAll();closeModal();RENDER.catalogue();toast('Article supprimé.');
 }
 /* ---- Liste / filtres / rendu ---- */
-window._catPage=1;window._catFiltre={q:'',categorie:'',actif:''};
+window._catPage=1;window._catView=window._catView||'table';
+window._catFiltre={q:'',categorie:'',fournisseur:'',actif:'',prixMin:'',prixMax:''};
+function catFournList(){return[...new Set(ST.catalogue.flatMap(a=>(a.fournisseurs||[]).map(f=>f.nom)))].sort((a,b)=>a.localeCompare(b,'fr'));}
 function catFiltered(){
   const f=window._catFiltre;
   let arr=ST.catalogue.slice();
   if(f.categorie)arr=arr.filter(a=>a.categorie===f.categorie);
+  if(f.fournisseur)arr=arr.filter(a=>(a.fournisseurs||[]).some(x=>x.nom===f.fournisseur));
   if(f.actif==='1')arr=arr.filter(a=>a.actif!==false);
   if(f.actif==='0')arr=arr.filter(a=>a.actif===false);
+  if(f.prixMin)arr=arr.filter(a=>(a.prixRef||0)>=+f.prixMin);
+  if(f.prixMax)arr=arr.filter(a=>(a.prixRef||0)<=+f.prixMax);
   if(f.q){
     const q=f.q.toLowerCase();
     arr=arr.filter(a=>a.designation.toLowerCase().includes(q)||(a.fournisseurs||[]).some(x=>x.nom.toLowerCase().includes(q))||(a.categorie||'').toLowerCase().includes(q));
   }
   return arr.sort((a,b)=>a.designation.localeCompare(b.designation,'fr'));
 }
+function catResetFiltres(){window._catFiltre={q:'',categorie:'',fournisseur:'',actif:'',prixMin:'',prixMax:''};window._catPage=1;RENDER.catalogue();}
+function catSetVue(v){window._catView=v;RENDER.catalogue();}
+function catBarRow(lb,val,max,col){const pct=max?Math.round(val/max*100):0;
+  return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <div style="width:110px;font-size:11px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(lb)}">${esc(lb)}</div>
+    <div style="flex:1;background:#eef0f5;border-radius:4px;height:14px;overflow:hidden"><div style="width:${pct}%;background:${col};height:100%"></div></div>
+    <div style="width:34px;text-align:right;font-size:11px" class="mono">${val}</div>
+  </div>`;
+}
 RENDER.catalogue=()=>{
   const cats=[...new Set(ST.catalogue.map(a=>a.categorie).filter(Boolean))].sort();
+  const fourns=catFournList();
   document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-catalogue','Catalogue articles')">⎙ Imprimer</button> <button class="btn sm gh" onclick="exportCatalogueCSV()">⭳ CSV</button> <button class="btn sm" onclick="editArticle(null)">+ Article</button>`;
   const panneauImport=`
   <div class="card" style="border:2px solid var(--green);margin-bottom:14px">
@@ -3745,38 +3760,93 @@ RENDER.catalogue=()=>{
       <label style="font-size:12px;display:flex;align-items:center;gap:6px"><input type="checkbox" id="catCreerFourn" checked> Créer les fiches fournisseurs manquantes</label>
     </div>
   </div>`;
-  const list=catFiltered();
-  const pageSize=100,pages=Math.max(1,Math.ceil(list.length/pageSize));
-  if(window._catPage>pages)window._catPage=pages;
-  const slice=list.slice((window._catPage-1)*pageSize,window._catPage*pageSize);
-  const rows=slice.map(a=>{
-    const nbF=(a.fournisseurs||[]).length;
-    return`<tr>
-      <td><b>${esc(a.designation)}</b>${a.notes?`<div style="font-size:10.5px;color:var(--mut)">${esc(a.notes)}</div>`:''}</td>
-      <td>${esc(a.categorie||'—')}</td>
-      <td class="ta-c">${esc(a.unite||'—')}</td>
-      <td class="ta-r mono">${a.prixRef?F0(a.prixRef):'—'}</td>
-      <td>${esc(a.fournisseurPrefere||'—')}</td>
-      <td class="ta-c">${nbF}</td>
-      <td class="ta-c">${a.actif===false?'<span class="badge b-gray">inactif</span>':'<span class="badge b-green">actif</span>'}</td>
-      <td class="ta-c"><button class="linkbtn" title="Modifier / voir l'historique" onclick="editArticle('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delArticle('${a.id}')">✕</button></td>
-    </tr>`;
-  }).join('');
-  const nbFournTotal=new Set(ST.catalogue.flatMap(a=>(a.fournisseurs||[]).map(f=>f.nom.toUpperCase()))).size;
-  document.getElementById('p-catalogue').innerHTML=`
-  ${panneauImport}
+
+  /* --- Dashboard --- */
+  const actifs=ST.catalogue.filter(a=>a.actif!==false);
+  const nbFournTotal=fourns.length;
+  const prixMoyen=ST.catalogue.length?Math.round(ST.catalogue.reduce((s,a)=>s+(a.prixRef||0),0)/ST.catalogue.length):0;
+  const sansFourn=ST.catalogue.filter(a=>!(a.fournisseurs||[]).length).length;
+  const parCat={};ST.catalogue.forEach(a=>{const c=a.categorie||'Sans catégorie';parCat[c]=(parCat[c]||0)+1;});
+  const topCats=Object.entries(parCat).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxCat=topCats.length?topCats[0][1]:1;
+  const parFourn={};ST.catalogue.forEach(a=>(a.fournisseurs||[]).forEach(f=>{parFourn[f.nom]=(parFourn[f.nom]||0)+1;}));
+  const topFourns=Object.entries(parFourn).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxFourn=topFourns.length?topFourns[0][1]:1;
+  const dashboard=`
   <div class="grid kpis" style="margin-bottom:12px">
     <div class="card kpi o"><div class="lb">Articles au catalogue</div><div class="v mono">${ST.catalogue.length}</div></div>
+    <div class="card kpi g"><div class="lb">Actifs</div><div class="v mono">${actifs.length}</div></div>
     <div class="card kpi b"><div class="lb">Fournisseurs distincts</div><div class="v mono">${nbFournTotal}</div></div>
-    <div class="card kpi g"><div class="lb">Actifs</div><div class="v mono">${ST.catalogue.filter(a=>a.actif!==false).length}</div></div>
+    <div class="card kpi r"><div class="lb">Sans fournisseur</div><div class="v mono">${sansFourn}</div></div>
+    <div class="card kpi"><div class="lb">Prix moyen réf.</div><div class="v mono">${F0(prixMoyen)}</div></div>
+    <div class="card kpi"><div class="lb">Catégories</div><div class="v mono">${cats.length}</div></div>
   </div>
+  <div class="two" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+    <div class="card"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Top catégories</div>${topCats.length?topCats.map(([lb,v])=>catBarRow(lb,v,maxCat,'var(--cuivre)')).join(''):'<div class="empty">Aucune donnée</div>'}</div>
+    <div class="card"><div style="font-weight:800;font-size:12.5px;margin-bottom:8px">Top fournisseurs (nb articles)</div>${topFourns.length?topFourns.map(([lb,v])=>catBarRow(lb,v,maxFourn,'var(--blue)')).join(''):'<div class="empty">Aucune donnée</div>'}</div>
+  </div>`;
+
+  const list=catFiltered();
+  const pageSize=window._catView==='grid'?60:100,pages=Math.max(1,Math.ceil(list.length/pageSize));
+  if(window._catPage>pages)window._catPage=pages;
+  const slice=list.slice((window._catPage-1)*pageSize,window._catPage*pageSize);
+
+  const toolbar=`
   <div class="card toolbar" style="margin-bottom:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <input class="search" placeholder="🔍 Désignation, catégorie, fournisseur…" value="${esc(window._catFiltre.q)}" oninput="window._catFiltre.q=this.value;window._catPage=1;debounce('catSearch',()=>RENDER.catalogue())">
     <select onchange="window._catFiltre.categorie=this.value;window._catPage=1;RENDER.catalogue()"><option value="">Toutes catégories</option>${cats.map(c=>`<option value="${esc(c)}" ${window._catFiltre.categorie===c?'selected':''}>${esc(c)}</option>`).join('')}</select>
+    <select onchange="window._catFiltre.fournisseur=this.value;window._catPage=1;RENDER.catalogue()"><option value="">Tous fournisseurs</option>${fourns.map(f=>`<option value="${esc(f)}" ${window._catFiltre.fournisseur===f?'selected':''}>${esc(f)}</option>`).join('')}</select>
     <select onchange="window._catFiltre.actif=this.value;window._catPage=1;RENDER.catalogue()"><option value="">Actifs & inactifs</option><option value="1" ${window._catFiltre.actif==='1'?'selected':''}>Actifs seulement</option><option value="0" ${window._catFiltre.actif==='0'?'selected':''}>Inactifs seulement</option></select>
-  </div>
-  <div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th>Catégorie</th><th class="ta-c">Unité</th><th class="ta-r">Prix réf.</th><th>Meilleur fournisseur</th><th class="ta-c">Nb fourn.</th><th class="ta-c">Statut</th><th></th></tr></thead>
-  <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🗂</div>Catalogue vide — importez un fichier ou ajoutez un article.</td></tr>'}</tbody></table></div>
+    <input type="number" placeholder="Prix min" style="width:100px" value="${esc(window._catFiltre.prixMin)}" oninput="window._catFiltre.prixMin=this.value;window._catPage=1;debounce('catPMin',()=>RENDER.catalogue())">
+    <input type="number" placeholder="Prix max" style="width:100px" value="${esc(window._catFiltre.prixMax)}" oninput="window._catFiltre.prixMax=this.value;window._catPage=1;debounce('catPMax',()=>RENDER.catalogue())">
+    <button class="btn sm gh" onclick="catResetFiltres()">✕ Réinitialiser</button>
+    <div style="margin-left:auto;display:flex;gap:4px">
+      <button class="btn sm ${window._catView==='table'?'':'gh'}" onclick="catSetVue('table')" title="Vue tableau">☰ Tableau</button>
+      <button class="btn sm ${window._catView==='grid'?'':'gh'}" onclick="catSetVue('grid')" title="Vue grille">▦ Grille</button>
+    </div>
+  </div>`;
+
+  let contentHTML;
+  if(window._catView==='grid'){
+    const cards=slice.map(a=>{
+      const nbF=(a.fournisseurs||[]).length;
+      return`<div class="card" style="cursor:pointer" onclick="editArticle('${a.id}')">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:6px">
+          <b style="font-size:12.5px">${esc(a.designation)}</b>
+          ${a.actif===false?'<span class="badge b-gray">inactif</span>':'<span class="badge b-green">actif</span>'}
+        </div>
+        <div style="font-size:11px;color:var(--mut);margin:6px 0">${esc(a.categorie||'Sans catégorie')} · ${esc(a.unite||'—')}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+          <div class="mono" style="font-weight:800;font-size:14px;color:var(--cuivre-d)">${a.prixRef?F0(a.prixRef):'—'}</div>
+          <div style="font-size:10.5px;color:var(--mut)">${nbF} fourn.</div>
+        </div>
+        ${a.fournisseurPrefere?`<div style="font-size:10.5px;color:var(--mut);margin-top:4px">🏷 ${esc(a.fournisseurPrefere)}</div>`:''}
+      </div>`;
+    }).join('');
+    contentHTML=`<div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${cards||'<div class="empty" style="grid-column:1/-1"><div class="ic">🗂</div>Aucun article — ajustez les filtres ou alimentez le catalogue.</div>'}</div>`;
+  }else{
+    const rows=slice.map(a=>{
+      const nbF=(a.fournisseurs||[]).length;
+      return`<tr>
+        <td><b>${esc(a.designation)}</b>${a.notes?`<div style="font-size:10.5px;color:var(--mut)">${esc(a.notes)}</div>`:''}</td>
+        <td>${esc(a.categorie||'—')}</td>
+        <td class="ta-c">${esc(a.unite||'—')}</td>
+        <td class="ta-r mono">${a.prixRef?F0(a.prixRef):'—'}</td>
+        <td>${esc(a.fournisseurPrefere||'—')}</td>
+        <td class="ta-c">${nbF}</td>
+        <td class="ta-c">${a.actif===false?'<span class="badge b-gray">inactif</span>':'<span class="badge b-green">actif</span>'}</td>
+        <td class="ta-c"><button class="linkbtn" title="Modifier / voir l'historique" onclick="editArticle('${a.id}')">✎</button> <button class="linkbtn" style="color:var(--red)" onclick="delArticle('${a.id}')">✕</button></td>
+      </tr>`;
+    }).join('');
+    contentHTML=`<div class="tbl-wrap"><table><thead><tr><th>Désignation</th><th>Catégorie</th><th class="ta-c">Unité</th><th class="ta-r">Prix réf.</th><th>Meilleur fournisseur</th><th class="ta-c">Nb fourn.</th><th class="ta-c">Statut</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan=8 class="empty"><div class="ic">🗂</div>Catalogue vide — importez un fichier ou ajoutez un article.</td></tr>'}</tbody></table></div>`;
+  }
+
+  document.getElementById('p-catalogue').innerHTML=`
+  ${panneauImport}
+  ${dashboard}
+  ${toolbar}
+  ${contentHTML}
   <div style="display:flex;gap:8px;align-items:center;margin-top:10px">
     <button class="btn sm gh" onclick="window._catPage=Math.max(1,window._catPage-1);RENDER.catalogue()">‹ Préc.</button>
     <span style="font-size:12px">Page ${window._catPage}/${pages} — ${list.length} article(s)</span>
