@@ -310,6 +310,7 @@ tbody tr:hover{background:#fbfcfe}
       <div class="page" id="p-tiers"></div>
       <div class="page" id="p-tierscompta"></div>
       <div class="page" id="p-rentabilite"></div>
+      <div class="page" id="p-departements"></div>
       <div class="page" id="p-lettrage"></div>
       <div class="page" id="p-balageee"></div>
       <div class="page" id="p-rappro"></div>
@@ -347,11 +348,11 @@ tbody tr:hover{background:#fbfcfe}
    SANIX ComptaPro — moteur comptable SYSCOHADA (partie double)
    Stockage IndexedDB · offline-first
 ============================================================ */
-const DB_BASE='sanix_comptapro', DB_VER=15;
+const DB_BASE='sanix_comptapro', DB_VER=16;
 let ACTIVE_ENT=localStorage.getItem('sanix_active_ent')||null;
 let DB_NAME=ACTIVE_ENT?DB_BASE+'__'+ACTIVE_ENT:DB_BASE;
 let DB=null;
-const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements','catalogue','depots','stock_mvt'];
+const STORES=['comptes','tiers','ecritures','exercices','journaux','factures','achats','immos','centres','budgets','pieces','audit','users','meta','tombstones','staging','caisses','caisse_sessions','caisse_mouvements','releve_bancaire','cutoff','msg_conv','msg_msg','chantier_offres','chantier_encaissements','catalogue','depots','stock_mvt','departements'];
 /* Magasins soumis à la synchro Supabase (hors meta/audit/tombstones qui ont un traitement dédié). */
 const SYNC_STORES=STORES.filter(s=>!['meta','audit','tombstones'].includes(s));
 
@@ -581,7 +582,7 @@ async function hydrateSociete(ent){
 }
 
 /* ---- état ---- */
-let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],catalogue:[],depots:[],stock_mvt:[],user:null,exId:null};
+let ST={comptes:[],tiers:[],ecritures:[],exercices:[],journaux:[],factures:[],achats:[],immos:[],centres:[],budgets:[],pieces:[],audit:[],users:[],staging:[],caisses:[],caisse_sessions:[],caisse_mouvements:[],releve_bancaire:[],msg_conv:[],msg_msg:[],chantier_offres:[],chantier_encaissements:[],catalogue:[],depots:[],stock_mvt:[],departements:[],user:null,exId:null};
 
 /* ---- format ---- */
 const F=n=>{n=Math.round(n||0);const s=n<0?'-':'';n=Math.abs(n);return s+n.toLocaleString('fr-FR').replace(/\u202f/g,' ')+' F';};
@@ -700,6 +701,13 @@ async function loadAll(){
   ST.catalogue=await all('catalogue');
   ST.depots=await all('depots');
   ST.stock_mvt=await all('stock_mvt');
+  ST.departements=await all('departements');
+  if(!ST.departements.length){
+    const seed=[{id:uid('dept'),nom:'Aluminium / Vitrerie',specialite:'Menuiserie aluminium, vitrage, miroiterie',actif:true},
+      {id:uid('dept'),nom:'Inox',specialite:'Métallerie, serrurerie, ouvrages inox',actif:true}];
+    for(const d of seed)await put('departements',d);
+    ST.departements=seed;
+  }
   ST.caisses=await all('caisses');
   ST.caisse_sessions=await all('caisse_sessions');
   ST.caisse_mouvements=await all('caisse_mouvements');
@@ -834,7 +842,7 @@ const GROUPES_TABS={
     {id:'ph-etats',label:'États de synthèse',icon:'∑',subs:[['periodique','📅'],['resultat','∑'],['bilan','▤'],['flux','≈'],['annexes','▣'],['liasse','▦']]},
     {id:'ph-cloture',label:'Clôture',icon:'◷',subs:[['exercices','◷']]}
   ]},
-  pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩'],['rentabilite','🏗']]}
+  pilotage:{label:'Pilotage',subs:[['dash','▚'],['analyse360','◎'],['consolidation','▩'],['rentabilite','🏗'],['departements','🏭']]}
 };
 const SUB_TO_GROUP={};
 Object.entries(GROUPES_TABS).forEach(([g,def])=>{
@@ -850,7 +858,7 @@ const TITLES={
   fiscalite:['Fiscalité','TVA · Échéancier · Télédéclarations · Liasse fiscale'],
   pilotage:['Pilotage','Tableau de bord · Analyse 360° · Consolidation · Rentabilité chantiers'],
   auxiliaire:['Comptabilité auxiliaire','Immobilisations · Analytique · Devises · Budget'],
-  balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
+  balageee:['Balance âgée','Créances et dettes par ancienneté — 0-30 / 31-60 / 61-90 / +90 jours'],rentabilite:['Rentabilité chantiers','Encaissé client (acompte/solde) − coût fournisseurs = marge, par chantier'],departements:['Départements de production','Aluminium/Vitrerie et Inox — commandes, consommation matière, marge par département'],messagerie:['Messagerie interne','Conversations directes · Groupes · Pièces jointes'],periodique:['État périodique','Caisse & Trésorerie · Balance · période libre'],cockpit:['Cockpit','Ce qu\'il y a à faire, pas des chiffres à contempler'],staging:['Import Chantiers/Caisse','Fiches chantier & brouillard de caisse — staging avant comptabilisation'],caisse:['Caisse','Sessions · bons E/S · écarts · ventilation'],dash:['Tableau de bord','Vue d\'ensemble de l\'exercice'],analyse360:['Analyse 360°','Pilotage stratégique · tactique · opérationnel'],consolidation:['Consolidation','Multi-sociétés · agrégation · éliminations'],passerelle:['Passerelle ERP','Import écritures des logiciels SANIX'],ecritures:['Écritures / Journaux','Saisie en partie double'],workflow:['Validation & visa','Circuit brouillard → validé'],
 facturation:['Facturation','Facture normalisée électronique (FNE) & facture simple'],
 achats:['Achats fournisseurs','Factures d\'achat · TVA déductible · dettes 401'],
 prixArticles:['Prix articles/fournisseurs','Comparatif des prix d\'achat par désignation et par fournisseur'],
@@ -890,6 +898,7 @@ function expandGrpFor(p){
   }
 }
 const MODULE_NOTES={
+  departements:"Deux départements de production réalisent les commandes des clients : Aluminium/Vitrerie et Inox. Chaque chantier peut être rattaché à un département (fiche « Infos chantier »). Le coût matière vient des sorties de stock taguées par département ; les achats fournisseurs liés au chantier s'y ajoutent.",
   comptabilite:"Vue transversale de la comptabilité SYSCOHADA : ouverture, plan comptable, écritures, tous les états financiers, TVA, fiscalité, comptes tiers, immobilisations, analytique, budget, clôture et visa — regroupés en un seul module, navigable par onglet.",
   controle:"Trois outils de contrôle regroupés : Lettrage (rapprocher factures/règlements), Rapprochement bancaire (relevé vs comptabilité), IA Anomalies (détection automatique d'incohérences).",
   tiersrenta:"Vue tiers regroupée : solde détaillé par client/fournisseur, créances/dettes par ancienneté, et rentabilité par chantier (encaissé − dépensé).",
@@ -4075,7 +4084,7 @@ async function stockSortieChantier(articleId,depotId,qte,chantier,opts={}){
   if(qte>s.qte&&!opts.force)throw new Error('STOCK_INSUFFISANT');
   return mvtCreate('sortie',{articleId,depotId,qte:+qte,pu:s.cmup,date:opts.date,piece:opts.piece||'',
     motif:'Mise à disposition chantier'+(chantier?' — '+chantier:'')+(opts.motif?' · '+opts.motif:''),
-    chantier:chantier||'',clientNom:opts.clientNom||'',refType:'chantier',refId:null});
+    chantier:chantier||'',clientNom:opts.clientNom||'',departementId:opts.departementId||'',refType:'chantier',refId:null});
 }
 /* ---- Dépôts CRUD ---- */
 function editDepot(id){
@@ -4119,7 +4128,8 @@ function openMvtModal(type){
   const chantierField=type==='sortie'?`<div class="frow c2">
       <div><label>Chantier / client *</label><input id="mvtChantier" list="dl-mvtChantier" placeholder="Nom / repère du chantier"><datalist id="dl-mvtChantier">${chantiersConnusStock().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
       <div><label>Client</label><input id="mvtClient" list="dl-mvtClient" placeholder="Optionnel"><datalist id="dl-mvtClient">${clientsConnusStock().map(c=>`<option value="${esc(c)}">`).join('')}</datalist></div>
-    </div>`:'';
+    </div>
+    <div class="frow"><div><label>Département de production</label><select id="mvtDept"><option value="">— Non affecté —</option>${ST.departements.filter(d=>d.actif!==false).map(d=>`<option value="${d.id}">${esc(d.nom)}</option>`).join('')}</select></div></div>`:'';
   const entreeNote=type==='entree'?`<div class="hl" style="background:#e9f1fb;border-left:3px solid #3B82F6;padding:9px 12px;border-radius:0 8px 8px 0;font-size:12px;margin-bottom:10px">ℹ Le flux normal d'entrée est la réception d'un achat (bouton 📦 dans le module Achats). Utilisez ce formulaire uniquement pour un stock initial ou une correction ponctuelle.</div>`:'';
   openModal(`<div class="mh"><h3>${titles[type]}</h3><button class="x" onclick="closeModal()">×</button></div>
   <div class="mb">
@@ -4164,8 +4174,9 @@ async function saveMvtModal(type){
     }else if(type==='sortie'){
       const chantier=document.getElementById('mvtChantier').value.trim();
       const clientNom=document.getElementById('mvtClient').value.trim();
+      const departementId=document.getElementById('mvtDept').value;
       if(!chantier){toast('Chantier obligatoire pour une sortie.');return;}
-      await stockSortieChantier(articleId,depotId,qte,chantier,{date,piece,motif,clientNom});
+      await stockSortieChantier(articleId,depotId,qte,chantier,{date,piece,motif,clientNom,departementId});
     }else if(type==='transfert'){
       const depotDestId=document.getElementById('mvtDepotDest').value;
       if(depotDestId===depotId){toast('Le dépôt destination doit être différent du dépôt source.');return;}
@@ -5943,8 +5954,10 @@ async function rentaListeChantiers(){
     const marge=encaisse-coutHT;
     const margePct=encaisse>0?Math.round(marge/encaisse*100):null;
     const duree=rentaDuree(c,offre);
+    const departementId=offre?offre.departementId:'';
+    const dept=departementId?ST.departements.find(d=>d.id===departementId):null;
     return{...c,coutHT,coutTTC,regleFourn,resteFourn,encaisse,montantOffre,resteEncaisser,marge,margePct,
-      localisation:offre?offre.localisation:'',duree};
+      localisation:offre?offre.localisation:'',duree,departementId,departementNom:dept?dept.nom:''};
   }).sort((a,b)=>b.encaisse-a.encaisse||b.coutTTC-a.coutTTC);
 }
 RENDER.rentabilite=async()=>{
@@ -5982,7 +5995,7 @@ RENDER.rentabilite=async()=>{
       <div style="padding:12px 16px;background:${c.marge>=0?'var(--noir)':'#7a2e2e'};color:#fff;display:flex;justify-content:space-between;align-items:center">
         <div style="cursor:pointer;flex:1" onclick="window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}']=!window._rentaExpanded['${c.chantier.replace(/'/g,"\\'")}'];RENDER.rentabilite()">
           <b>${ouvert?'▾':'▸'} ${esc(c.chantier)}</b> <span style="font-size:11px;opacity:.85">— ${esc(c.clientNom||'(client non identifié)')}</span>
-          <div style="font-size:10.5px;opacity:.75;margin-top:2px">${c.localisation?'📍 '+esc(c.localisation)+' · ':''}${c.duree?'⏱ '+esc(c.duree.lib)+(c.duree.enCours?' (en cours)':' (terminé)'):''}</div>
+          <div style="font-size:10.5px;opacity:.75;margin-top:2px">${c.departementNom?'🏭 '+esc(c.departementNom)+' · ':''}${c.localisation?'📍 '+esc(c.localisation)+' · ':''}${c.duree?'⏱ '+esc(c.duree.lib)+(c.duree.enCours?' (en cours)':' (terminé)'):''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
           <button class="btn sm gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="event.stopPropagation();rentaEncaissementModal('${c.chantier.replace(/'/g,"\\'")}','${(c.clientNom||'').replace(/'/g,"\\'")}','${c.clientId||''}')">+ Encaissement</button>
@@ -6051,6 +6064,7 @@ function rentaOffreModal(chantier,montantActuel){
       <div><label>Date de début des travaux</label><input type="date" id="roffre-debut" value="${existant.dateDebut||''}"></div>
       <div><label>Date de fin (si terminé — sinon laisser vide)</label><input type="date" id="roffre-fin" value="${existant.dateFin||''}"></div>
     </div>
+    <div class="frow"><label>Département de production</label><select id="roffre-dept"><option value="">— Non affecté —</option>${ST.departements.filter(d=>d.actif!==false).map(d=>`<option value="${d.id}" ${existant.departementId===d.id?'selected':''}>${esc(d.nom)}</option>`).join('')}</select></div>
     <div style="font-size:11px;color:var(--mut);margin-top:2px">Si la date de début n'est pas renseignée, la durée est estimée depuis la première facture d'achat du chantier.</div>
   </div>
   <div class="mf"><button class="btn gh sm" onclick="closeModal()">Annuler</button><button class="btn sm" onclick="rentaSaveOffre('${chantier.replace(/'/g,"\\'")}')">Enregistrer</button></div>`,true);
@@ -6060,8 +6074,9 @@ async function rentaSaveOffre(chantier){
   const localisation=document.getElementById('roffre-localisation').value.trim();
   const dateDebut=document.getElementById('roffre-debut').value||'';
   const dateFin=document.getElementById('roffre-fin').value||'';
+  const departementId=document.getElementById('roffre-dept').value||'';
   const existant=ST.chantier_offres.find(o=>o.chantier===chantier);
-  await put('chantier_offres',{id:existant?existant.id:uid('roffre'),chantier,montantOffre:Math.round(montant),localisation,dateDebut,dateFin,updatedAt:Date.now()});
+  await put('chantier_offres',{id:existant?existant.id:uid('roffre'),chantier,montantOffre:Math.round(montant),localisation,dateDebut,dateFin,departementId,updatedAt:Date.now()});
   await loadAll();closeModal();RENDER.rentabilite();toast('Infos chantier enregistrées.');
 }
 function rentaDuree(c,offre){
@@ -6085,6 +6100,79 @@ function rentaExportCSV(){
   liste.forEach(x=>{c+=`"${x.chantier.replace(/"/g,"'")}";"${(x.clientNom||'').replace(/"/g,"'")}";"${(x.localisation||'').replace(/"/g,"'")}";"${x.duree?x.duree.lib+(x.duree.enCours?' (en cours)':' (terminé)'):''}";${x.montantOffre||''};${x.encaisse};${x.resteEncaisser!==null?x.resteEncaisser:''};${x.coutHT};${x.regleFourn};${x.resteFourn};${x.marge};${x.margePct!==null?x.margePct:''}\n`;});
   dl('rentabilite_chantiers.csv',c);
 }
+
+/* ============ DÉPARTEMENTS DE PRODUCTION (Aluminium/Vitrerie · Inox) ============ */
+window._deptExpanded={};
+async function deptRollup(){
+  const chantiers=await rentaListeChantiers();
+  const stockSource=window._rentaFiltreEx==='tous'?ST.stock_mvt:ST.stock_mvt.filter(m=>m.exId===(window._rentaFiltreEx||ST.exId));
+  return ST.departements.filter(d=>d.actif!==false).map(d=>{
+    const chantiersDept=chantiers.filter(c=>c.departementId===d.id);
+    const sorties=stockSource.filter(m=>m.type==='sortie'&&m.departementId===d.id);
+    const coutMatiere=sorties.reduce((s,m)=>s+(m.qte*m.pu),0);
+    const coutFournisseurs=chantiersDept.reduce((s,c)=>s+c.coutHT,0);
+    const encaisse=chantiersDept.reduce((s,c)=>s+c.encaisse,0);
+    const marge=encaisse-coutMatiere-coutFournisseurs;
+    const enCours=chantiersDept.filter(c=>c.duree&&c.duree.enCours).length;
+    const termines=chantiersDept.filter(c=>c.duree&&!c.duree.enCours).length;
+    return{dept:d,chantiers:chantiersDept,nbChantiers:chantiersDept.length,enCours,termines,sorties,coutMatiere,coutFournisseurs,encaisse,marge,
+      margePct:encaisse>0?Math.round(marge/encaisse*100):null};
+  });
+}
+RENDER.departements=async()=>{
+  document.getElementById('pgActions').innerHTML=`<button class="btn sm gh" onclick="printReport('p-departements','Départements de production')">⎙ Imprimer</button>`;
+  window._rentaFiltreEx=window._rentaFiltreEx||ST.exId;
+  const rollup=await deptRollup();
+  const totEncaisse=rollup.reduce((s,r)=>s+r.encaisse,0);
+  const totCout=rollup.reduce((s,r)=>s+r.coutMatiere+r.coutFournisseurs,0);
+  const totMarge=totEncaisse-totCout;
+  const selecteurEx=`<div style="margin-bottom:12px"><label style="font-size:12px;margin-right:8px">Exercice</label><select onchange="window._rentaFiltreEx=this.value;RENDER.departements()" style="max-width:260px">
+    <option value="${ST.exId}" ${window._rentaFiltreEx===ST.exId?'selected':''}>Exercice courant (${curEx().libelle||''})</option>
+    <option value="tous" ${window._rentaFiltreEx==='tous'?'selected':''}>Tous les exercices (cumulé)</option>
+  </select></div>`;
+  document.getElementById('p-departements').innerHTML=`
+  ${selecteurEx}
+  <div class="grid kpis" style="margin-bottom:14px">
+    <div class="card kpi g"><div class="lb">Total encaissé (2 départements)</div><div class="v mono">${F0(totEncaisse)}</div></div>
+    <div class="card kpi o"><div class="lb">Total coût (matière + fournisseurs)</div><div class="v mono">${F0(totCout)}</div></div>
+    <div class="card kpi ${totMarge>=0?'g':'r'}"><div class="lb">Marge globale</div><div class="v mono">${F0(totMarge)}</div></div>
+  </div>
+  ${rollup.map(r=>{
+    const ouvert=!!window._deptExpanded[r.dept.id];
+    const chantierRows=r.chantiers.slice().sort((a,b)=>b.encaisse-a.encaisse).map(c=>
+      `<tr><td>${esc(c.chantier)}</td><td>${esc(c.clientNom||'—')}</td><td class="ta-c">${c.duree?(c.duree.enCours?'<span class="badge b-cuivre">en cours</span>':'<span class="badge b-green">terminé</span>'):'—'}</td>
+      <td class="ta-r mono">${F0(c.encaisse)}</td><td class="ta-r mono">${F0(c.coutHT)}</td><td class="ta-r mono" style="font-weight:700">${F0(c.marge)}</td>
+      <td class="ta-c"><button class="linkbtn" onclick="go('rentabilite');window._achClientExpanded=window._achClientExpanded||{}">👁</button></td></tr>`).join('');
+    const sortieRows=r.sorties.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,15).map(m=>{
+      const art=ST.catalogue.find(a=>a.id===m.articleId);
+      return`<tr><td class="mono">${dfr(m.date)}</td><td>${esc(art?art.designation:m.articleId)}</td><td class="ta-r mono">${m.qte}</td><td class="ta-r mono">${F0(m.pu)}</td><td class="ta-r mono">${F0(m.qte*m.pu)}</td><td style="font-size:11px;color:var(--mut)">${esc(m.chantier||'')}</td></tr>`;
+    }).join('');
+    return`<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">
+      <div style="padding:14px 18px;background:${r.marge>=0?'var(--noir)':'#7a2e2e'};color:#fff;display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="window._deptExpanded['${r.dept.id}']=!window._deptExpanded['${r.dept.id}'];RENDER.departements()">
+        <div>
+          <b style="font-size:15px">${ouvert?'▾':'▸'} 🏭 ${esc(r.dept.nom)}</b>
+          <div style="font-size:11px;opacity:.8;margin-top:2px">${esc(r.dept.specialite||'')} — ${r.nbChantiers} commande(s) : ${r.enCours} en cours, ${r.termines} terminée(s)</div>
+        </div>
+        <div style="text-align:right"><b style="font-size:16px">${F0(r.marge)} FCFA</b><div style="font-size:10.5px;opacity:.8">marge${r.margePct!==null?' '+r.margePct+'%':''}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--line);font-size:11.5px">
+        <div style="padding:8px 14px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Encaissé clients</div><div class="mono" style="font-weight:700;color:var(--green)">${F0(r.encaisse)}</div></div>
+        <div style="padding:8px 14px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Coût matière (stock)</div><div class="mono" style="font-weight:700;color:var(--red)">${F0(r.coutMatiere)}</div></div>
+        <div style="padding:8px 14px;border-right:1px solid var(--line)"><div style="color:var(--mut)">Coût fournisseurs</div><div class="mono" style="font-weight:700;color:var(--red)">${F0(r.coutFournisseurs)}</div></div>
+        <div style="padding:8px 14px"><div style="color:var(--mut)">Commandes rattachées</div><div class="mono" style="font-weight:700">${r.nbChantiers}</div></div>
+      </div>
+      ${ouvert?`<div style="padding:14px 18px">
+        <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Commandes / chantiers</div>
+        <table style="width:100%;font-size:12px;margin-bottom:16px"><thead><tr><th>Chantier</th><th>Client</th><th class="ta-c">Statut</th><th class="ta-r">Encaissé</th><th class="ta-r">Coût fourn.</th><th class="ta-r">Marge</th><th></th></tr></thead>
+        <tbody>${chantierRows||'<tr><td colspan=7 class="empty">Aucune commande rattachée à ce département.</td></tr>'}</tbody></table>
+        <div style="font-size:11px;font-weight:800;color:var(--cuivre-d);text-transform:uppercase;margin-bottom:6px">Dernières sorties de matière (stock)</div>
+        <table style="width:100%;font-size:12px"><thead><tr><th>Date</th><th>Article</th><th class="ta-r">Qté</th><th class="ta-r">PU (CMUP)</th><th class="ta-r">Valeur</th><th>Chantier</th></tr></thead>
+        <tbody>${sortieRows||'<tr><td colspan=6 class="empty">Aucune sortie de stock taguée pour ce département.</td></tr>'}</tbody></table>
+      </div>`:''}
+    </div>`;
+  }).join('')}
+  <p style="margin-top:6px;color:var(--mut);font-size:12px">Rattacher un chantier à un département : Rentabilité chantiers → ℹ️ Infos. Taguer une sortie de stock : Stock → Sortie chantier → champ « Département de production ».</p>`;
+};
 
 /* ============ MESSAGERIE INTERNE (style ImmoSuite) ============ */
 window._msgTab='direct';window._msgConvActive=null;window._msgSearch='';
